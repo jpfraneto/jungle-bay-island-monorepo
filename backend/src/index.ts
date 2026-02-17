@@ -168,21 +168,47 @@ app.get('/:chain/:ca', async (c, next) => {
 // In dev, Vite handles this via its proxy config.
 const STATIC_ROOT = path.resolve(import.meta.dir, '../../frontend/dist')
 
+const MIME_TYPES: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.mjs': 'application/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.webp': 'image/webp',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
+  '.map': 'application/json',
+}
+
+function getMimeType(filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase()
+  return MIME_TYPES[ext] ?? 'application/octet-stream'
+}
+
 app.get('/*', async (c, next) => {
   const reqPath = new URL(c.req.url).pathname
   const filePath = path.join(STATIC_ROOT, reqPath === '/' ? 'index.html' : reqPath)
 
   const file = Bun.file(filePath)
   if (await file.exists()) {
-    return new Response(file)
+    const contentType = getMimeType(filePath)
+    c.header('Content-Type', contentType)
+    c.header('Cache-Control', reqPath.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'public, max-age=300')
+    return c.body(await file.arrayBuffer())
   }
 
   // SPA fallback: serve index.html for any non-file route
   const indexFile = Bun.file(path.join(STATIC_ROOT, 'index.html'))
   if (await indexFile.exists()) {
-    return new Response(indexFile, {
-      headers: { 'Content-Type': 'text/html; charset=utf-8' },
-    })
+    c.header('Content-Type', 'text/html; charset=utf-8')
+    return c.body(await indexFile.arrayBuffer())
   }
 
   return next()

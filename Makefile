@@ -5,7 +5,7 @@
 # make setup     → first-time: init git, create GitHub repo, link Railway
 # ─────────────────────────────────────────────────────────────
 
-REPO     := jpfraneto/jungle-bay-island
+REPO     := jpfraneto/jungle-bay-island-v2
 BRANCH   := main
 SERVICE  := jungle-bay-backend
 

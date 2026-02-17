@@ -1,0 +1,19 @@
+{
+  "name": "backend",
+  "scripts": {
+    "dev": "bun --env-file=.env.local --hot src/index.ts",
+    "start": "bun --env-file=.env.local src/index.ts",
+    "start:3000": "PORT=3000 bun --env-file=.env.local src/index.ts",
+    "typecheck": "bunx tsc --noEmit"
+  },
+  "dependencies": {
+    "hono": "^4.11.9",
+    "jose": "^5.9.6",
+    "postgres": "^3.4.7",
+    "viem": "^2.38.3"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.9.2"
+  }
+}

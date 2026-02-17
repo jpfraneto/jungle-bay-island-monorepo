@@ -1,0 +1,6 @@
+{
+  "siteId": "6e14469a-a892-4ee3-9cbb-c26ba435089b",
+  "domain": "memetics-v4",
+  "buildCommand": "bun run build",
+  "buildDir": "dist"
+}

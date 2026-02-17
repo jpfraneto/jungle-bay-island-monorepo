@@ -1,6 +1,6 @@
+import path from 'node:path'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { serveStatic } from 'hono/bun'
 import { CONFIG, db, publicClients, normalizeAddress, toSupportedChain } from './config'
 import { requestLogMiddleware } from './middleware/requestLog'
 import { requestIdMiddleware } from './middleware/requestId'
@@ -94,7 +94,6 @@ app.route('/api', agentRoute)
 // --- skill.md for AI agents ---
 app.get('/skill.md', async (c) => {
   const fs = await import('node:fs/promises')
-  const path = await import('node:path')
   const filePath = path.resolve(import.meta.dir, '../skill.md')
   try {
     const content = await fs.readFile(filePath, 'utf-8')
@@ -167,13 +166,27 @@ app.get('/:chain/:ca', async (c, next) => {
 // --- Static file serving (production) ---
 // Serves the built frontend SPA from ../frontend/dist/
 // In dev, Vite handles this via its proxy config.
-const STATIC_ROOT = '../frontend/dist'
+const STATIC_ROOT = path.resolve(import.meta.dir, '../../frontend/dist')
 
-app.get('/', serveStatic({ root: STATIC_ROOT, path: '/index.html' }))
-app.use('/*', serveStatic({ root: STATIC_ROOT }))
+app.get('/*', async (c, next) => {
+  const reqPath = new URL(c.req.url).pathname
+  const filePath = path.join(STATIC_ROOT, reqPath === '/' ? 'index.html' : reqPath)
 
-// SPA fallback: any route not matched above serves index.html
-app.get('*', serveStatic({ root: STATIC_ROOT, path: '/index.html' }))
+  const file = Bun.file(filePath)
+  if (await file.exists()) {
+    return new Response(file)
+  }
+
+  // SPA fallback: serve index.html for any non-file route
+  const indexFile = Bun.file(path.join(STATIC_ROOT, 'index.html'))
+  if (await indexFile.exists()) {
+    return new Response(indexFile, {
+      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+    })
+  }
+
+  return next()
+})
 
 app.notFound((c) => c.json({
   error: 'Route not found',

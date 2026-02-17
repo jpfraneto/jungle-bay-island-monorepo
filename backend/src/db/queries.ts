@@ -672,6 +672,37 @@ export async function getUserByWallet(wallet: string): Promise<{
   }
 }
 
+export async function upsertWalletFarcasterProfile(
+  wallet: string,
+  fid: number,
+  username: string,
+  displayName: string,
+  pfpUrl: string,
+): Promise<void> {
+  await db`
+    INSERT INTO ${db(CONFIG.SCHEMA)}.wallet_farcaster_profiles
+      (wallet, fid, username, display_name, pfp_url, resolved_at)
+    VALUES
+      (${wallet.toLowerCase()}, ${fid}, ${username}, ${displayName}, ${pfpUrl}, NOW())
+    ON CONFLICT (wallet) DO UPDATE SET
+      fid = EXCLUDED.fid,
+      username = EXCLUDED.username,
+      display_name = EXCLUDED.display_name,
+      pfp_url = EXCLUDED.pfp_url,
+      resolved_at = NOW()
+  `
+}
+
+export async function getWalletsByFid(fid: number): Promise<string[]> {
+  const rows = await db<Array<{ wallet: string }>>`
+    SELECT wallet
+    FROM ${db(CONFIG.SCHEMA)}.wallet_farcaster_profiles
+    WHERE fid = ${fid}
+    ORDER BY resolved_at ASC
+  `
+  return rows.map((r) => r.wallet)
+}
+
 export async function getTokenSummary(tokenAddress: string): Promise<{
   address: string
   name: string | null

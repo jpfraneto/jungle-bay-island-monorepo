@@ -1,23 +1,19 @@
-import { useMemo } from 'react';
-import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { usePrivy } from '@privy-io/react-auth';
 import { Palmtree, House } from 'lucide-react';
 import { Link, NavLink } from 'react-router-dom';
+import { useProfile } from '../../contexts/ProfileContext';
 
 const links = [
   { to: '/', label: 'Home', icon: House },
 ];
 
-function shortAddress(address: string): string {
-  return `${address.slice(0, 6)}...${address.slice(-4)}`;
-}
-
 export function Header() {
   return (
     <header className="sticky top-0 z-30 border-b border-jungle-700/60 bg-jungle-950/85 backdrop-blur">
-      <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-3 md:px-6">
-        <Link to="/" className="flex items-center gap-2 font-display text-lg font-semibold text-zinc-100">
-          <Palmtree className="h-5 w-5 text-heat-observer" />
-          Jungle Bay Island
+      <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-2 px-3 py-2.5 sm:px-4 sm:py-3 md:px-6">
+        <Link to="/" className="flex items-center gap-1.5 font-display font-semibold text-zinc-100 sm:gap-2">
+          <Palmtree className="h-5 w-5 shrink-0 text-heat-observer" />
+          <span className="text-base sm:text-lg">Jungle Bay</span>
         </Link>
         <nav className="hidden items-center gap-2 md:flex">
           {links.map(({ to, label, icon: Icon }) => (
@@ -36,41 +32,55 @@ export function Header() {
             </NavLink>
           ))}
         </nav>
-        <WalletConnectButton />
+        <ProfileButton />
       </div>
     </header>
   );
 }
 
-export function WalletConnectButton() {
-  const { ready, authenticated, login, logout } = usePrivy();
-  const { wallets } = useWallets();
+function ProfileButton() {
+  const { ready, authenticated, login } = usePrivy();
+  const { profile, isLoading, isReady } = useProfile();
 
-  const primaryWallet = useMemo(
-    () => wallets.find((wallet: { address?: string }) => !!wallet.address),
-    [wallets],
-  );
-
-  if (authenticated) {
+  if (!authenticated) {
     return (
       <button
         type="button"
-        onClick={logout}
-        className="rounded-lg border border-jungle-600 px-3 py-2 text-sm text-zinc-100 hover:bg-jungle-800"
+        onClick={login}
+        disabled={!ready}
+        className="shrink-0 rounded-lg bg-heat-observer px-3 py-2 text-sm font-medium text-jungle-950 disabled:opacity-60"
       >
-        {primaryWallet?.address ? shortAddress(primaryWallet.address) : 'Disconnect'}
+        Sign in
       </button>
     );
   }
 
+  // Loading state
+  if (isLoading || !isReady) {
+    return (
+      <div className="flex items-center gap-2">
+        <div className="h-8 w-8 animate-pulse rounded-full bg-jungle-700" />
+      </div>
+    );
+  }
+
+  // Profile ready
+  const pfpUrl = profile?.farcaster?.pfp_url;
+  const username = profile?.farcaster?.username;
+
   return (
-    <button
-      type="button"
-      onClick={login}
-      disabled={!ready}
-      className="rounded-lg bg-heat-observer px-3 py-2 text-sm font-medium text-jungle-950 disabled:opacity-60"
+    <Link
+      to="/profile"
+      className="flex shrink-0 items-center gap-2 rounded-lg border border-jungle-600 p-1 pr-1 text-sm text-zinc-100 transition-colors hover:bg-jungle-800 sm:px-2 sm:py-1.5 sm:pr-3"
     >
-      Sign in with X
-    </button>
+      <img
+        src={pfpUrl || 'https://placehold.co/32x32/0d2118/ffffff?text=?'}
+        alt={username || 'Profile'}
+        className="h-8 w-8 rounded-full border border-jungle-600 object-cover"
+      />
+      <span className="hidden text-zinc-200 sm:inline">
+        {username ? `@${username}` : 'Profile'}
+      </span>
+    </Link>
   );
 }

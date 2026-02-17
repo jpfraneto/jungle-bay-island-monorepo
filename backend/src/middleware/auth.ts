@@ -5,6 +5,7 @@ import { CONFIG, normalizeAddress } from '../config'
 import { getAgentByKeyHash } from '../db/queries'
 import type { AppEnv } from '../types'
 import { ApiError } from '../services/errors'
+import { getPrivyLinkedAccounts } from '../services/privyClaims'
 
 type VerificationKey = KeyLike | Uint8Array
 
@@ -74,11 +75,16 @@ function walletFromClaims(payload: JWTPayload): string | null {
     return normalizeAddress(directAddress)
   }
 
-  const linkedAccounts = Array.isArray(payload.linked_accounts) ? payload.linked_accounts : []
+  const linkedAccounts = getPrivyLinkedAccounts(payload)
   for (const account of linkedAccounts) {
-    if (!account || typeof account !== 'object') continue
     const candidate = account as Record<string, unknown>
-    if (candidate.type !== 'wallet') continue
+    if (
+      typeof candidate.type === 'string' &&
+      candidate.type !== 'wallet' &&
+      candidate.type !== 'smart_wallet'
+    ) {
+      continue
+    }
     if (typeof candidate.address !== 'string') continue
     const wallet = normalizeAddress(candidate.address)
     if (wallet) return wallet
@@ -87,11 +93,12 @@ function walletFromClaims(payload: JWTPayload): string | null {
   return null
 }
 
-async function verifyPrivyAccessToken(token: string): Promise<{ walletAddress: string; payload: JWTPayload }> {
+async function verifyPrivyToken(token: string): Promise<{ walletAddress: string; payload: JWTPayload }> {
   const verificationKey = await getVerificationKey()
   const { payload } = await jwtVerify(token, verificationKey, {
     algorithms: ['ES256'],
     audience: CONFIG.PRIVY_APP_ID,
+    issuer: 'privy.io',
   })
 
   const walletAddress = walletFromClaims(payload)
@@ -112,7 +119,7 @@ export const optionalWalletContext: MiddlewareHandler<AppEnv> = async (c, next) 
 
   if (token) {
     try {
-      const { walletAddress, payload } = await verifyPrivyAccessToken(token)
+      const { walletAddress, payload } = await verifyPrivyToken(token)
       c.set('walletAddress', walletAddress)
       c.set('privyClaims', payload)
     } catch {
@@ -137,9 +144,12 @@ export const requireWalletAuth: MiddlewareHandler<AppEnv> = async (c, next) => {
 
   let verified
   try {
-    verified = await verifyPrivyAccessToken(token)
-  } catch {
-    throw new ApiError(401, 'invalid_token', 'Privy access token verification failed')
+    verified = await verifyPrivyToken(token)
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error
+    }
+    throw new ApiError(401, 'invalid_token', 'Privy token verification failed')
   }
 
   c.set('walletAddress', verified.walletAddress)

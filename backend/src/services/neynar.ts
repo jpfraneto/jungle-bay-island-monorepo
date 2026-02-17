@@ -1,6 +1,7 @@
 import { CONFIG } from '../config'
 import { getCached, setCached } from './cache'
 import { logError, logInfo } from './logger'
+import { getPrivyLinkedAccounts } from './privyClaims'
 
 const NEYNAR_BASE = 'https://api.neynar.com/v2/farcaster'
 const CACHE_MS = 10 * 60 * 1000 // 10 minutes
@@ -152,12 +153,9 @@ function toProfile(user: NeynarUserResponse['users'][0]): NeynarProfile {
  * Privy stores linked accounts in the JWT payload.
  */
 export function extractXUsername(privyClaims: Record<string, unknown>): string | null {
-  const linkedAccounts = Array.isArray(privyClaims.linked_accounts)
-    ? privyClaims.linked_accounts
-    : []
+  const linkedAccounts = getPrivyLinkedAccounts(privyClaims)
 
   for (const account of linkedAccounts) {
-    if (!account || typeof account !== 'object') continue
     const candidate = account as Record<string, unknown>
     if (candidate.type === 'twitter_oauth' || candidate.type === 'twitter') {
       if (typeof candidate.username === 'string') return candidate.username

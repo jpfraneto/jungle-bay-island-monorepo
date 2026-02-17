@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import type { ReactNode } from 'react';
-import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { useIdentityToken, usePrivy, useWallets } from '@privy-io/react-auth';
 import { apiFetch } from '../lib/api';
 import type { Tier } from '../lib/types';
 
@@ -43,7 +43,8 @@ export function useProfile() {
 }
 
 export function ProfileProvider({ children }: { children: ReactNode }) {
-  const { authenticated, getAccessToken } = usePrivy();
+  const { authenticated } = usePrivy();
+  const { identityToken } = useIdentityToken();
   const { wallets } = useWallets();
   const walletAddress = wallets.find((w: { address?: string }) => !!w.address)?.address;
 
@@ -55,7 +56,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   // Fresh fetch of profile data (no setup, just read)
   const refetch = useCallback(async () => {
     if (!authenticated) return;
-    const token = await getAccessToken();
+    const token = identityToken;
     if (!token) return;
 
     setIsLoading(true);
@@ -70,12 +71,12 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [authenticated, getAccessToken, walletAddress]);
+  }, [authenticated, identityToken, walletAddress]);
 
   // Initial setup on first login — idempotent, always call setup
   const initialize = useCallback(async () => {
     if (!authenticated) return;
-    const token = await getAccessToken();
+    const token = identityToken;
     if (!token) return;
 
     setIsSettingUp(true);
@@ -101,17 +102,28 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       setIsSettingUp(false);
       setHasInitialized(true);
     }
-  }, [authenticated, getAccessToken, walletAddress]);
+  }, [authenticated, identityToken, walletAddress]);
 
   useEffect(() => {
     if (authenticated && walletAddress && !hasInitialized) {
-      initialize();
+      if (identityToken) {
+        initialize();
+      } else {
+        // Keep profile UI accessible while waiting for token propagation.
+        setHasInitialized(true);
+      }
     }
     if (!authenticated) {
       setProfile(null);
       setHasInitialized(false);
     }
-  }, [authenticated, walletAddress, hasInitialized, initialize]);
+  }, [authenticated, walletAddress, identityToken, hasInitialized, initialize]);
+
+  useEffect(() => {
+    if (authenticated && walletAddress && identityToken && hasInitialized && !profile) {
+      void refetch();
+    }
+  }, [authenticated, walletAddress, identityToken, hasInitialized, profile, refetch]);
 
   const value = useMemo<ProfileContextValue>(
     () => ({

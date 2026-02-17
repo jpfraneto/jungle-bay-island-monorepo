@@ -1,24 +1,25 @@
 import { useCallback, useMemo } from 'react';
-import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { useIdentityToken, usePrivy, useWallets } from '@privy-io/react-auth';
 import { apiFetch } from '../lib/api';
 
 export function useApi() {
-  const { authenticated, getAccessToken } = usePrivy();
+  const { authenticated } = usePrivy();
+  const { identityToken } = useIdentityToken();
   const { wallets } = useWallets();
   const walletAddress = wallets.find((wallet: { address?: string }) => !!wallet.address)?.address;
 
-  const loadAccessToken = useCallback(async () => {
+  const loadAuthToken = useCallback(async () => {
     if (!authenticated) return undefined;
-    return (await getAccessToken()) ?? undefined;
-  }, [authenticated, getAccessToken]);
+    return identityToken ?? undefined;
+  }, [authenticated, identityToken]);
 
   const get = useCallback(
     async <T,>(path: string) =>
       apiFetch<T>(path, {
-        accessToken: await loadAccessToken(),
+        accessToken: await loadAuthToken(),
         walletAddress,
       }),
-    [loadAccessToken, walletAddress],
+    [loadAuthToken, walletAddress],
   );
 
   const post = useCallback(
@@ -26,10 +27,10 @@ export function useApi() {
       apiFetch<T>(path, {
         method: 'POST',
         body: body === undefined ? undefined : JSON.stringify(body),
-        accessToken: await loadAccessToken(),
+        accessToken: await loadAuthToken(),
         walletAddress,
       }),
-    [loadAccessToken, walletAddress],
+    [loadAuthToken, walletAddress],
   );
 
   const put = useCallback(
@@ -37,10 +38,10 @@ export function useApi() {
       apiFetch<T>(path, {
         method: 'PUT',
         body: body === undefined ? undefined : JSON.stringify(body),
-        accessToken: await loadAccessToken(),
+        accessToken: await loadAuthToken(),
         walletAddress,
       }),
-    [loadAccessToken, walletAddress],
+    [loadAuthToken, walletAddress],
   );
 
   return useMemo(

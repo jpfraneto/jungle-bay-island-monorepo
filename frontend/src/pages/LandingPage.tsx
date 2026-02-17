@@ -1,21 +1,21 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useBungalows } from '../hooks/useBungalows';
-import { useFeed } from '../hooks/useFeed';
-import { LoadingSpinner } from '../components/common/LoadingSpinner';
-import { ActivityFeed } from '../components/common/ActivityFeed';
-import { truncateAddress } from '../lib/format';
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useBungalows } from "../hooks/useBungalows";
+import { useFeed } from "../hooks/useFeed";
+import { LoadingSpinner } from "../components/common/LoadingSpinner";
+import { ActivityFeed } from "../components/common/ActivityFeed";
+import { truncateAddress } from "../lib/format";
 
-function detectChain(address: string): 'base' | 'solana' {
+function detectChain(address: string): "base" | "solana" {
   const trimmed = address.trim();
-  if (trimmed.startsWith('0x') || trimmed.startsWith('0X')) return 'base';
-  if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(trimmed)) return 'solana';
-  return 'base';
+  if (trimmed.startsWith("0x") || trimmed.startsWith("0X")) return "base";
+  if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(trimmed)) return "solana";
+  return "base";
 }
 
 export function LandingPage() {
   const navigate = useNavigate();
-  const [addressInput, setAddressInput] = useState('');
+  const [addressInput, setAddressInput] = useState("");
   const { data: bungalowData } = useBungalows(50, 0);
   const { data: feedData, isLoading: feedLoading } = useFeed(15);
 
@@ -36,10 +36,11 @@ export function LandingPage() {
       {/* Hero */}
       <section className="space-y-6 py-12 text-center">
         <h1 className="text-4xl font-bold tracking-tight text-zinc-100 sm:text-5xl">
-          Jungle Bay Island
+          Memetics
         </h1>
         <p className="mx-auto max-w-lg text-lg text-zinc-400">
-          Like Linktree, but for tokens. Claim a homepage for any token — curate it, let the community gather around it.
+          Like Linktree, but for tokens. Claim a homepage for any token — curate
+          it, let the community gather around it.
         </p>
 
         {/* CA Input */}
@@ -74,7 +75,7 @@ export function LandingPage() {
           </h2>
           {feedData && (
             <span className="text-xs text-zinc-500">
-              {feedData.total} post{feedData.total !== 1 ? 's' : ''}
+              {feedData.total} post{feedData.total !== 1 ? "s" : ""}
             </span>
           )}
         </div>
@@ -115,7 +116,7 @@ export function LandingPage() {
               >
                 <div className="flex items-center gap-3">
                   <div className="flex h-10 w-10 items-center justify-center rounded-full border border-jungle-600 bg-jungle-800 text-sm font-bold text-jungle-300">
-                    {(item.token_symbol || '?').slice(0, 3)}
+                    {(item.token_symbol || "?").slice(0, 3)}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="truncate text-sm font-medium text-zinc-100 group-hover:text-jungle-300">

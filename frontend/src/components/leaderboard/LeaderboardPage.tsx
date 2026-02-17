@@ -1,21 +1,26 @@
-import { useState } from 'react';
-import { useLeaderboard } from '../../hooks/useLeaderboard';
-import type { Tier } from '../../lib/types';
-import { LoadingSpinner } from '../common/LoadingSpinner';
-import { EmptyState } from '../common/EmptyState';
-import { TierFilter } from './TierFilter';
-import { LeaderboardRow } from './LeaderboardRow';
-import { sortTiers, tierEmoji, tierLabel } from '../../lib/heat';
-import { formatNumber } from '../../lib/format';
+import { useState } from "react";
+import { useLeaderboard } from "../../hooks/useLeaderboard";
+import type { Tier } from "../../lib/types";
+import { LoadingSpinner } from "../common/LoadingSpinner";
+import { EmptyState } from "../common/EmptyState";
+import { TierFilter } from "./TierFilter";
+import { LeaderboardRow } from "./LeaderboardRow";
+import { sortTiers, tierEmoji, tierLabel } from "../../lib/heat";
+import { formatNumber } from "../../lib/format";
 
 export function LeaderboardPage() {
-  const [tier, setTier] = useState<Tier | 'all'>('all');
+  const [tier, setTier] = useState<Tier | "all">("all");
   const [page, setPage] = useState(1);
   const { data, isLoading, isError } = useLeaderboard({ page, tier });
 
   if (isLoading) return <LoadingSpinner label="Loading census..." />;
   if (isError || !data) {
-    return <EmptyState title="Census unavailable" description="Unable to load leaderboard right now." />;
+    return (
+      <EmptyState
+        title="Census unavailable"
+        description="Unable to load leaderboard right now."
+      />
+    );
   }
 
   const rows = Array.isArray(data.rows) ? data.rows : [];
@@ -26,9 +31,11 @@ export function LeaderboardPage() {
       <section className="card space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="font-display text-3xl">Jungle Bay Island</h1>
+            <h1 className="font-display text-3xl">Memetics</h1>
             <p className="text-sm text-zinc-400">
-              {formatNumber(data.total)} personas, {formatNumber(data.total_wallets)} wallets, {formatNumber(data.tokens_scanned)} tokens scanned
+              {formatNumber(data.total)} personas,{" "}
+              {formatNumber(data.total_wallets)} wallets,{" "}
+              {formatNumber(data.tokens_scanned)} tokens scanned
             </p>
           </div>
           <TierFilter
@@ -41,11 +48,16 @@ export function LeaderboardPage() {
         </div>
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
           {sortTiers(data.tier_distribution).map((item) => (
-            <div key={item.tier} className="rounded-lg border border-jungle-700 px-3 py-2 text-sm">
+            <div
+              key={item.tier}
+              className="rounded-lg border border-jungle-700 px-3 py-2 text-sm"
+            >
               <p className="text-zinc-300">
                 {tierEmoji(item.tier)} {tierLabel(item.tier)}
               </p>
-              <p className="font-mono text-zinc-100">{formatNumber(item.count)}</p>
+              <p className="font-mono text-zinc-100">
+                {formatNumber(item.count)}
+              </p>
             </div>
           ))}
         </div>

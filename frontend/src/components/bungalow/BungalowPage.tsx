@@ -13,6 +13,7 @@ import { BulletinBoard } from './BulletinBoard';
 import { Shelf } from './Shelf';
 import { Hearth } from './Hearth';
 import { Lagoon } from './Lagoon';
+import { WidgetInstaller } from './WidgetInstaller';
 import { WalletAddress } from '../common/WalletAddress';
 import { formatApiError } from '../../lib/apiError';
 
@@ -107,6 +108,7 @@ export function BungalowPage() {
       <Hearth bungalow={bungalow} />
       <Wall bungalow={bungalow} canEdit={isOwner} onSaveOriginStory={onSaveOriginStory} />
       <Shelf links={bungalow.links} canEdit={isOwner} onSaveLinks={onSaveLinks} />
+      <WidgetInstaller chain={chain} ca={ca} canInstall={isOwner} />
 
       {/* DMT Lagoon — only for Base tokens */}
       {chain === 'base' && bungalow.claimed && (

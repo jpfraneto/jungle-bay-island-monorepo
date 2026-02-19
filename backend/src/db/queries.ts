@@ -4,6 +4,7 @@ import type { ScanResult } from '../services/scanner'
 import type {
   AssetPurchaseRow,
   BungalowSceneRow,
+  BungalowWidgetInstallRow,
   BulletinPostRow,
   BungalowRow,
   FidIslandProfileRow,
@@ -204,6 +205,26 @@ export async function getWalletTokenHeat(tokenAddress: string, wallet: string): 
   `
   if (!rows[0]) return null
   return Number(rows[0].heat_degrees)
+}
+
+export async function getWalletTokenHeats(
+  tokenAddress: string,
+  wallets: string[],
+): Promise<Array<{ wallet: string; heat_degrees: number }>> {
+  const uniqueWallets = [...new Set(wallets.map((wallet) => wallet.toLowerCase()))]
+  if (uniqueWallets.length === 0) return []
+
+  const rows = await db<Array<{ wallet: string; heat_degrees: string }>>`
+    SELECT wallet, heat_degrees::text AS heat_degrees
+    FROM ${db(CONFIG.SCHEMA)}.token_holder_heat
+    WHERE token_address = ${tokenAddress}
+      AND wallet IN ${db(uniqueWallets)}
+  `
+
+  return rows.map((row) => ({
+    wallet: row.wallet,
+    heat_degrees: Number(row.heat_degrees),
+  }))
 }
 
 export async function getDailyAllowanceUsed(wallet: string, date: string): Promise<number> {
@@ -1087,6 +1108,112 @@ export async function createAssetPurchase(input: {
       wallet,
       tx_hash,
       purchased_at::text AS purchased_at
+  `
+
+  return rows[0]
+}
+
+let widgetTablesPromise: Promise<void> | null = null
+
+async function ensureWidgetTables(): Promise<void> {
+  if (!widgetTablesPromise) {
+    widgetTablesPromise = (async () => {
+      await db`
+        CREATE TABLE IF NOT EXISTS ${db(CONFIG.SCHEMA)}.bungalow_widget_installs (
+          id BIGSERIAL PRIMARY KEY,
+          chain TEXT NOT NULL,
+          token_address TEXT NOT NULL,
+          widget_id TEXT NOT NULL,
+          package_name TEXT NOT NULL,
+          version TEXT NOT NULL,
+          repo_url TEXT,
+          installed_by TEXT NOT NULL,
+          installed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          UNIQUE(chain, token_address, widget_id)
+        )
+      `
+
+      await db`
+        CREATE INDEX IF NOT EXISTS idx_widget_installs_bungalow
+        ON ${db(CONFIG.SCHEMA)}.bungalow_widget_installs (chain, token_address, installed_at DESC)
+      `
+    })()
+  }
+
+  await widgetTablesPromise
+}
+
+export async function getInstalledWidgets(
+  chain: string,
+  tokenAddress: string,
+): Promise<BungalowWidgetInstallRow[]> {
+  await ensureWidgetTables()
+
+  return db<BungalowWidgetInstallRow[]>`
+    SELECT
+      id::text AS id,
+      chain,
+      token_address,
+      widget_id,
+      package_name,
+      version,
+      repo_url,
+      installed_by,
+      installed_at::text AS installed_at
+    FROM ${db(CONFIG.SCHEMA)}.bungalow_widget_installs
+    WHERE chain = ${chain}
+      AND token_address = ${tokenAddress}
+    ORDER BY installed_at DESC
+  `
+}
+
+export async function installWidget(input: {
+  chain: string
+  tokenAddress: string
+  widgetId: string
+  packageName: string
+  version: string
+  repoUrl?: string | null
+  installedBy: string
+}): Promise<BungalowWidgetInstallRow> {
+  await ensureWidgetTables()
+
+  const rows = await db<BungalowWidgetInstallRow[]>`
+    INSERT INTO ${db(CONFIG.SCHEMA)}.bungalow_widget_installs (
+      chain,
+      token_address,
+      widget_id,
+      package_name,
+      version,
+      repo_url,
+      installed_by
+    )
+    VALUES (
+      ${input.chain},
+      ${input.tokenAddress},
+      ${input.widgetId},
+      ${input.packageName},
+      ${input.version},
+      ${input.repoUrl ?? null},
+      ${input.installedBy}
+    )
+    ON CONFLICT (chain, token_address, widget_id)
+    DO UPDATE SET
+      package_name = EXCLUDED.package_name,
+      version = EXCLUDED.version,
+      repo_url = EXCLUDED.repo_url,
+      installed_by = EXCLUDED.installed_by,
+      installed_at = NOW()
+    RETURNING
+      id::text AS id,
+      chain,
+      token_address,
+      widget_id,
+      package_name,
+      version,
+      repo_url,
+      installed_by,
+      installed_at::text AS installed_at
   `
 
   return rows[0]

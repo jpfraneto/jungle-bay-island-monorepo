@@ -124,3 +124,15 @@ export interface AssetPurchaseRow {
   tx_hash: string | null
   purchased_at: string
 }
+
+export interface BungalowWidgetInstallRow {
+  id: string
+  chain: string
+  token_address: string
+  widget_id: string
+  package_name: string
+  version: string
+  repo_url: string | null
+  installed_by: string
+  installed_at: string
+}

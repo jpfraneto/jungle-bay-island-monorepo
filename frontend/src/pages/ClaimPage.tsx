@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { usePrivy } from '@privy-io/react-auth';
+import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { useWriteContract, useWaitForTransactionReceipt, useAccount, useReadContract } from 'wagmi';
 import { parseUnits, type Address } from 'viem';
 import { useClaimPrice } from '../hooks/useClaimPrice';
@@ -20,6 +20,7 @@ export function ClaimPage() {
   const { chain = 'base', ca = '' } = useParams();
   const navigate = useNavigate();
   const { authenticated, login } = usePrivy();
+  const { wallets: privyWallets } = useWallets();
   const { address: walletAddress } = useAccount();
   const api = useApi();
 
@@ -36,6 +37,7 @@ export function ClaimPage() {
   const minimumHeat = eligibility.data?.minimum_heat ?? 10;
   const farcaster = eligibility.data?.farcaster;
   const walletsChecked = eligibility.data?.wallets_checked ?? 0;
+  const scanPending = eligibility.data?.scan_pending ?? false;
 
   // Read user's USDC balance
   const { data: usdcBalance } = useReadContract({
@@ -122,8 +124,36 @@ export function ClaimPage() {
     }
   }, [api, chain, ca, tokenData, navigate, writeV7]);
 
+  const usdcBalanceValue = usdcBalance != null ? Number(usdcBalance) / 1e6 : null;
+  const formattedUsdcBalance = usdcBalanceValue != null ? usdcBalanceValue.toFixed(2) : null;
+  const connectedWalletSet = new Set(
+    privyWallets
+      .map((entry) => entry.address?.toLowerCase())
+      .filter((address): address is string => Boolean(address)),
+  );
+  const isPrivyWalletConnected = walletAddress ? connectedWalletSet.has(walletAddress.toLowerCase()) : false;
+  const hasEnoughUsdc = tokenData ? (usdcBalanceValue ?? 0) >= tokenData.price_usdc : false;
+  const busy = claimStep !== 'idle' && claimStep !== 'done';
+  const canSubmitPayment = Boolean(
+    isEligible &&
+    !scanPending &&
+    walletAddress &&
+    isPrivyWalletConnected &&
+    hasEnoughUsdc &&
+    !busy &&
+    claimStep !== 'done',
+  );
+
   const handlePayDirect = useCallback(() => {
     if (!tokenData || !walletAddress) return;
+    if (!isPrivyWalletConnected) {
+      setClaimError('Use a Privy-connected Base wallet to complete this claim payment.');
+      return;
+    }
+    if ((usdcBalanceValue ?? 0) < tokenData.price_usdc) {
+      setClaimError('Insufficient USDC balance on your connected Base wallet.');
+      return;
+    }
     setClaimError(null);
     setClaimStep('paying');
 
@@ -143,11 +173,7 @@ export function ClaimPage() {
       functionName: 'transfer',
       args: [TREASURY, amount],
     });
-  }, [tokenData, walletAddress, writeTransfer]);
-
-  const formattedUsdcBalance = usdcBalance != null
-    ? (Number(usdcBalance) / 1e6).toFixed(2)
-    : null;
+  }, [tokenData, walletAddress, isPrivyWalletConnected, usdcBalanceValue, writeTransfer]);
 
   const stepLabel: Record<ClaimStep, string> = {
     idle: '',
@@ -156,8 +182,6 @@ export function ClaimPage() {
     registering: 'Registering on-chain...',
     done: 'Bungalow claimed!',
   };
-
-  const busy = claimStep !== 'idle' && claimStep !== 'done';
 
   return (
     <div className="space-y-8">
@@ -276,79 +300,96 @@ export function ClaimPage() {
 
                 {eligibility.data && (
                   <div className="space-y-3">
-                    {/* Farcaster status */}
-                    {farcaster ? (
-                      <div className="flex items-center gap-3">
-                        <img
-                          src={farcaster.pfp_url}
-                          alt={farcaster.username}
-                          className="h-10 w-10 rounded-full border border-jungle-600"
-                        />
-                        <div>
-                          <p className="text-sm font-medium text-zinc-100">
-                            @{farcaster.username}
-                          </p>
-                          <p className="text-xs text-zinc-500">
-                            {farcaster.wallets_found} verified wallets found via Farcaster
-                          </p>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="rounded-lg border border-amber-800/50 bg-amber-950/20 p-3">
-                        <p className="text-xs text-amber-400">
-                          No Farcaster account linked to your X. We can only check your embedded wallet.
-                          Link your X on Farcaster to get credit for all your wallets.
+                    {scanPending ? (
+                      <div className="rounded-lg border border-jungle-700/80 bg-jungle-950/40 p-4 space-y-2">
+                        <p className="text-sm text-jungle-300">
+                          Running token heat scan for this bungalow...
                         </p>
-                      </div>
-                    )}
-
-                    {/* Heat score */}
-                    <div className="grid grid-cols-3 gap-3">
-                      <div className="rounded-lg border border-jungle-700 p-3 text-center">
-                        <p className="text-xs text-zinc-500">Your Heat</p>
-                        <p className={`mt-1 font-mono text-lg font-bold ${
-                          isEligible ? 'text-green-400' : 'text-red-400'
-                        }`}>
-                          {formatHeat(userHeat)}
+                        <p className="text-xs text-zinc-500">
+                          We scan once, cache it, and reuse results to keep RPC credit usage low.
                         </p>
-                      </div>
-                      <div className="rounded-lg border border-jungle-700 p-3 text-center">
-                        <p className="text-xs text-zinc-500">Required</p>
-                        <p className="mt-1 font-mono text-lg font-bold text-zinc-300">
-                          {formatHeat(minimumHeat)}
-                        </p>
-                      </div>
-                      <div className="rounded-lg border border-jungle-700 p-3 text-center">
-                        <p className="text-xs text-zinc-500">Wallets Checked</p>
-                        <p className="mt-1 font-mono text-lg font-bold text-zinc-300">
-                          {walletsChecked}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Eligible / Not eligible */}
-                    {isEligible ? (
-                      <p className="text-sm text-green-400 text-center">
-                        You're eligible to claim this bungalow
-                      </p>
-                    ) : (
-                      <div className="text-center space-y-2">
-                        <p className="text-sm text-red-400">
-                          You need at least {formatHeat(minimumHeat)} heat to claim. Hold more of this token to increase your heat score.
-                        </p>
-                        {!farcaster && (
-                          <p className="text-xs text-zinc-500">
-                            Tip: Link your X to Farcaster to include all your verified wallets in the heat calculation.
+                        {eligibility.data.scan_id && (
+                          <p className="text-xs font-mono text-zinc-500">
+                            Scan ID: {eligibility.data.scan_id}
                           </p>
                         )}
                       </div>
+                    ) : (
+                      <>
+                        {/* Farcaster status */}
+                        {farcaster ? (
+                          <div className="flex items-center gap-3">
+                            <img
+                              src={farcaster.pfp_url}
+                              alt={farcaster.username}
+                              className="h-10 w-10 rounded-full border border-jungle-600"
+                            />
+                            <div>
+                              <p className="text-sm font-medium text-zinc-100">
+                                @{farcaster.username}
+                              </p>
+                              <p className="text-xs text-zinc-500">
+                                {farcaster.wallets_found} verified wallets found via Farcaster
+                              </p>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="rounded-lg border border-amber-800/50 bg-amber-950/20 p-3">
+                            <p className="text-xs text-amber-400">
+                              No Farcaster account linked to your X. We can only check your embedded wallet.
+                              Link your X on Farcaster to include all connected wallets.
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Heat score */}
+                        <div className="grid grid-cols-3 gap-3">
+                          <div className="rounded-lg border border-jungle-700 p-3 text-center">
+                            <p className="text-xs text-zinc-500">Your Heat</p>
+                            <p className={`mt-1 font-mono text-lg font-bold ${
+                              isEligible ? 'text-green-400' : 'text-red-400'
+                            }`}>
+                              {formatHeat(userHeat)}
+                            </p>
+                          </div>
+                          <div className="rounded-lg border border-jungle-700 p-3 text-center">
+                            <p className="text-xs text-zinc-500">Required</p>
+                            <p className="mt-1 font-mono text-lg font-bold text-zinc-300">
+                              {formatHeat(minimumHeat)}
+                            </p>
+                          </div>
+                          <div className="rounded-lg border border-jungle-700 p-3 text-center">
+                            <p className="text-xs text-zinc-500">Wallets Checked</p>
+                            <p className="mt-1 font-mono text-lg font-bold text-zinc-300">
+                              {walletsChecked}
+                            </p>
+                          </div>
+                        </div>
+
+                        {isEligible ? (
+                          <p className="text-sm text-green-400 text-center">
+                            You're eligible to claim this bungalow
+                          </p>
+                        ) : (
+                          <div className="text-center space-y-2">
+                            <p className="text-sm text-red-400">
+                              You need at least {formatHeat(minimumHeat)} heat to claim. Hold more of this token to increase your heat score.
+                            </p>
+                            {!farcaster && (
+                              <p className="text-xs text-zinc-500">
+                                Tip: Link your X to Farcaster to include all your verified wallets in the heat calculation.
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 )}
               </div>
 
               {/* Payment section — only if eligible */}
-              {isEligible && tokenData && (
+              {isEligible && tokenData && !scanPending && (
                 <div className="rounded-lg border border-jungle-600/50 bg-jungle-900/60 p-5 text-center space-y-4">
                   <div>
                     <p className="text-xs uppercase tracking-wider text-zinc-400">Claim Price</p>
@@ -361,12 +402,20 @@ export function ClaimPage() {
                   </div>
 
                   <div className="space-y-3">
+                    <p className="text-xs text-zinc-500">
+                      Payment must be sent from your connected Privy Base wallet.
+                    </p>
                     {walletAddress && formattedUsdcBalance !== null && (
                       <p className="text-xs text-zinc-500">
                         Your USDC balance: <span className="font-mono text-zinc-300">${formattedUsdcBalance}</span>
                       </p>
                     )}
-                    {walletAddress && formattedUsdcBalance !== null && Number(formattedUsdcBalance) < tokenData.price_usdc && (
+                    {walletAddress && !isPrivyWalletConnected && (
+                      <p className="text-xs text-amber-400">
+                        Current wallet is not linked in Privy. Switch to a connected wallet to continue.
+                      </p>
+                    )}
+                    {walletAddress && formattedUsdcBalance !== null && !hasEnoughUsdc && (
                       <p className="text-xs text-amber-400">
                         Insufficient USDC. Send USDC on Base to your wallet: <span className="font-mono">{walletAddress}</span>
                       </p>
@@ -374,7 +423,7 @@ export function ClaimPage() {
                     <button
                       type="button"
                       onClick={handlePayDirect}
-                      disabled={busy || claimStep === 'done'}
+                      disabled={!canSubmitPayment}
                       className="mx-auto rounded-lg bg-jungle-600 px-6 py-3 text-sm font-medium text-white hover:bg-jungle-500 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {claimStep === 'done' ? 'Claimed!' : `Pay $${tokenData.price_usdc.toFixed(2)} USDC`}

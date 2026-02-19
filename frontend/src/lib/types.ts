@@ -164,3 +164,38 @@ export interface ScanStatusResponse {
   error?: string;
 }
 
+export interface WidgetCatalogItem {
+  id: string;
+  name: string;
+  description: string;
+  package_name: string;
+  version: string;
+  repo_url: string;
+  category: 'analytics' | 'social' | 'governance' | 'commerce';
+  install_command: string;
+}
+
+export interface WidgetInstallRecord {
+  id: string;
+  chain: string;
+  token_address: string;
+  widget_id: string;
+  package_name: string;
+  version: string;
+  repo_url: string | null;
+  installed_by: string;
+  installed_at: string;
+}
+
+export interface WidgetCatalogResponse {
+  chain: string;
+  token_address: string;
+  items: WidgetCatalogItem[];
+}
+
+export interface InstalledWidgetsResponse {
+  chain: string;
+  token_address: string;
+  items: WidgetInstallRecord[];
+  total: number;
+}

@@ -18,6 +18,7 @@ import leaderboardRoute from './routes/leaderboard'
 import personaRoute from './routes/persona'
 import ogRoute from './routes/og'
 import agentRoute from './routes/agent'
+import widgetRoute from './routes/widget'
 import { isApiError } from './services/errors'
 import { logError, logInfo, logSuccess, logWarn } from './services/logger'
 import type { AppEnv } from './types'
@@ -90,6 +91,7 @@ app.route('/api', leaderboardRoute)
 app.route('/api', personaRoute)
 app.route('/api', ogRoute)
 app.route('/api', agentRoute)
+app.route('/api', widgetRoute)
 
 // --- skill.md for AI agents ---
 app.get('/skill.md', async (c) => {

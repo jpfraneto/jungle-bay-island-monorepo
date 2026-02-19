@@ -2,8 +2,8 @@ import { Hono } from 'hono'
 import { normalizeAddress, toSupportedChain } from '../config'
 import { getBungalowOwnerRecord } from '../db/queries'
 import { requireWalletAuth } from '../middleware/auth'
+import { ensureClaimHeatScan, getClaimWalletHeat, isClaimHeatScannableChain } from '../services/claimHeat'
 import { fetchDexScreenerData } from '../services/dexscreener'
-import { calculateUserHeat } from '../services/holdings'
 import { extractXUsername, lookupByXUsername } from '../services/neynar'
 import { ApiError } from '../services/errors'
 import { logInfo } from '../services/logger'
@@ -108,43 +108,75 @@ claimPriceRoute.get('/claim-eligibility/:chain/:ca', requireWalletAuth, async (c
   }
 
   const solWallets = farcaster?.solAddresses ?? []
+  const walletList = [...ethWallets]
+  if (!isClaimHeatScannableChain(chain)) {
+    throw new ApiError(400, 'unsupported_chain', 'Claim heat scanning is currently available for Base and Ethereum tokens')
+  }
 
-  // Calculate heat from on-chain holdings
-  const { heat, totalBalance, holdings } = await calculateUserHeat(
-    tokenAddress,
+  const scanState = await ensureClaimHeatScan({
     chain,
-    [...ethWallets],
-    solWallets,
-  )
+    tokenAddress,
+    requesterWallet: wallet,
+    requesterFid: farcaster?.fid ?? null,
+    requesterTier: null,
+  })
+
+  if (scanState.status === 'scanning') {
+    return c.json({
+      eligible: false,
+      heat: 0,
+      minimum_heat: MINIMUM_HEAT_TO_CLAIM,
+      wallets_checked: walletList.length,
+      farcaster: farcaster
+        ? {
+            fid: farcaster.fid,
+            username: farcaster.username,
+            display_name: farcaster.displayName,
+            pfp_url: farcaster.pfpUrl,
+            wallets_found: farcaster.ethAddresses.length + solWallets.length,
+          }
+        : null,
+      x_username: xUsername,
+      holdings: [],
+      scan_pending: true,
+      scan_status: 'scanning',
+      scan_id: scanState.scanId,
+      estimated_seconds: 120,
+    }, 202 as any)
+  }
+
+  const { heat, breakdown } = await getClaimWalletHeat(tokenAddress, walletList)
 
   const eligible = heat >= MINIMUM_HEAT_TO_CLAIM
 
   logInfo(
     'CLAIM ELIGIBILITY',
     `wallet=${wallet} x=${xUsername ?? 'none'} fid=${farcaster?.fid ?? 'none'} ` +
-    `token=${tokenAddress} heat=${heat} eligible=${eligible} wallets_checked=${ethWallets.size}`,
+    `token=${tokenAddress} heat=${heat} eligible=${eligible} wallets_checked=${walletList.length}`,
   )
 
   return c.json({
     eligible,
     heat,
     minimum_heat: MINIMUM_HEAT_TO_CLAIM,
-    total_balance: totalBalance.toString(),
-    wallets_checked: ethWallets.size,
+    wallets_checked: walletList.length,
     farcaster: farcaster
       ? {
           fid: farcaster.fid,
           username: farcaster.username,
           display_name: farcaster.displayName,
           pfp_url: farcaster.pfpUrl,
-          wallets_found: farcaster.ethAddresses.length + farcaster.solAddresses.length,
+          wallets_found: farcaster.ethAddresses.length + solWallets.length,
         }
       : null,
     x_username: xUsername,
-    holdings: holdings.map((h) => ({
-      address: h.address,
-      balance: h.balance.toString(),
+    holdings: breakdown.map((h) => ({
+      address: h.wallet,
+      heat_degrees: h.heat_degrees,
     })),
+    scan_pending: false,
+    scan_status: 'complete',
+    scan_id: null,
   })
 })
 

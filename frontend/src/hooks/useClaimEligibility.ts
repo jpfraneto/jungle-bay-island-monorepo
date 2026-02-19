@@ -5,7 +5,6 @@ export interface ClaimEligibility {
   eligible: boolean;
   heat: number;
   minimum_heat: number;
-  total_balance: string;
   wallets_checked: number;
   farcaster: {
     fid: number;
@@ -17,8 +16,12 @@ export interface ClaimEligibility {
   x_username: string | null;
   holdings: Array<{
     address: string;
-    balance: string;
+    heat_degrees: number;
   }>;
+  scan_pending: boolean;
+  scan_status: 'scanning' | 'complete';
+  scan_id: number | null;
+  estimated_seconds?: number;
 }
 
 export function useClaimEligibility(chain: string, ca: string) {
@@ -30,5 +33,6 @@ export function useClaimEligibility(chain: string, ca: string) {
     queryFn: () => api.get<ClaimEligibility>(`/api/claim-eligibility/${chain}/${ca}`),
     retry: false,
     staleTime: 60_000, // 1 minute
+    refetchInterval: (query) => (query.state.data?.scan_pending ? 3000 : false),
   });
 }

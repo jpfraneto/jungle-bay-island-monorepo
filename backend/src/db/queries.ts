@@ -246,6 +246,26 @@ export async function incrementDailyAllowance(wallet: string, date: string): Pro
   `
 }
 
+let scanLogProgressColumnsPromise: Promise<void> | null = null
+
+async function ensureScanLogProgressColumns(): Promise<void> {
+  if (!scanLogProgressColumnsPromise) {
+    scanLogProgressColumnsPromise = (async () => {
+      await db`
+        ALTER TABLE ${db(CONFIG.SCHEMA)}.scan_log
+        ADD COLUMN IF NOT EXISTS progress_phase TEXT
+      `
+
+      await db`
+        ALTER TABLE ${db(CONFIG.SCHEMA)}.scan_log
+        ADD COLUMN IF NOT EXISTS progress_pct NUMERIC
+      `
+    })()
+  }
+
+  await scanLogProgressColumnsPromise
+}
+
 export async function setTokenStatus(tokenAddress: string, chain: string, status: string): Promise<void> {
   await db`
     INSERT INTO ${db(CONFIG.SCHEMA)}.token_registry (token_address, chain, scan_status)
@@ -275,6 +295,8 @@ export async function createScanLog(input: {
   paymentMethod: 'free_resident' | 'x402_usdc' | 'admin'
   paymentAmount: number
 }): Promise<number> {
+  await ensureScanLogProgressColumns()
+
   const rows = await db<{ id: number }[]>`
     INSERT INTO ${db(CONFIG.SCHEMA)}.scan_log (
       token_address,
@@ -302,6 +324,8 @@ export async function createScanLog(input: {
 }
 
 export async function getScanLog(scanId: number): Promise<ScanLogRow | null> {
+  await ensureScanLogProgressColumns()
+
   const rows = await db<ScanLogRow[]>`
     SELECT *
     FROM ${db(CONFIG.SCHEMA)}.scan_log
@@ -312,9 +336,16 @@ export async function getScanLog(scanId: number): Promise<ScanLogRow | null> {
 }
 
 export async function markScanFailed(scanId: number, tokenAddress: string, message: string): Promise<void> {
+  await ensureScanLogProgressColumns()
+
   await db`
     UPDATE ${db(CONFIG.SCHEMA)}.scan_log
-    SET scan_status = 'failed', completed_at = NOW(), error_message = ${message}
+    SET
+      scan_status = 'failed',
+      progress_phase = 'failed',
+      progress_pct = 100,
+      completed_at = NOW(),
+      error_message = ${message}
     WHERE id = ${scanId}
   `
 
@@ -325,7 +356,25 @@ export async function markScanFailed(scanId: number, tokenAddress: string, messa
   `
 }
 
+export async function updateScanProgress(
+  scanId: number,
+  progress: { phase: string; pct: number },
+): Promise<void> {
+  await ensureScanLogProgressColumns()
+
+  await db`
+    UPDATE ${db(CONFIG.SCHEMA)}.scan_log
+    SET
+      progress_phase = ${progress.phase},
+      progress_pct = ${Math.max(0, Math.min(100, progress.pct))},
+      completed_at = CASE WHEN ${progress.pct >= 100} THEN NOW() ELSE completed_at END
+    WHERE id = ${scanId}
+  `
+}
+
 export async function writeScanResult(scanId: number, result: ScanResult): Promise<void> {
+  await ensureScanLogProgressColumns()
+
   await db`
     INSERT INTO ${db(CONFIG.SCHEMA)}.token_registry (
       token_address, chain, name, symbol, decimals, total_supply,
@@ -404,6 +453,8 @@ export async function writeScanResult(scanId: number, result: ScanResult): Promi
         events_fetched = ${result.eventsFetched},
         holders_found = ${result.holderCount},
         rpc_calls_made = ${result.rpcCallsMade},
+        progress_phase = 'complete',
+        progress_pct = 100,
         completed_at = NOW(),
         error_message = NULL
     WHERE id = ${scanId}

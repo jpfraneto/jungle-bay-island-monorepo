@@ -6,6 +6,7 @@ import { parseUnits, type Address } from 'viem';
 import { useClaimPrice } from '../hooks/useClaimPrice';
 import { useClaimEligibility } from '../hooks/useClaimEligibility';
 import { useApi } from '../hooks/useApi';
+import { useScan } from '../hooks/useScan';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import { formatApiError } from '../lib/apiError';
 import { formatCompact, formatUsd, formatHeat } from '../lib/format';
@@ -16,6 +17,29 @@ const TREASURY: Address = '0xe91B8920Ef5DBf6e1289991F1CE4eeF3671A610E';
 
 type ClaimStep = 'idle' | 'paying' | 'verifying' | 'registering' | 'done';
 
+function phaseLabel(phase?: string | null): string {
+  switch (phase) {
+    case 'metadata':
+      return 'Reading token metadata';
+    case 'deploy_block':
+      return 'Locating first transfer block';
+    case 'transfer_logs':
+      return 'Indexing transfer history';
+    case 'timestamps':
+      return 'Resolving timestamps';
+    case 'balances':
+      return 'Reconstructing balances';
+    case 'heat':
+      return 'Calculating heat scores';
+    case 'complete':
+      return 'Scan complete';
+    case 'failed':
+      return 'Scan failed';
+    default:
+      return 'Preparing scan';
+  }
+}
+
 export function ClaimPage() {
   const { chain = 'base', ca = '' } = useParams();
   const navigate = useNavigate();
@@ -23,10 +47,12 @@ export function ClaimPage() {
   const { wallets: privyWallets } = useWallets();
   const { address: walletAddress } = useAccount();
   const api = useApi();
-  const authReady = api.hasAuthToken;
+  const authReady = api.authTokenReady;
+  const hasAuthToken = api.hasAuthToken;
 
   const [claimError, setClaimError] = useState<string | null>(null);
   const [claimStep, setClaimStep] = useState<ClaimStep>('idle');
+  const [authWaitSeconds, setAuthWaitSeconds] = useState(0);
 
   const priceQuery = useClaimPrice(chain, ca);
   const tokenData = priceQuery.data;
@@ -39,6 +65,20 @@ export function ClaimPage() {
   const farcaster = eligibility.data?.farcaster;
   const walletsChecked = eligibility.data?.wallets_checked ?? 0;
   const scanPending = eligibility.data?.scan_pending ?? false;
+  const scanId = eligibility.data?.scan_id ?? undefined;
+  const scanStatus = useScan(chain, ca, scanId).statusQuery;
+  const liveScan = scanStatus.data;
+  const walletSummary = eligibility.data?.wallet_map_summary ?? null;
+  const scanProgress = eligibility.data?.scan_progress ?? null;
+  const progressPhase = scanProgress?.phase ?? liveScan?.progress_phase ?? null;
+  const progressPct = scanProgress?.pct ?? liveScan?.progress_pct ?? null;
+  const progressEvents = scanProgress?.eventsFetched ?? liveScan?.events_fetched ?? 0;
+  const progressHolders = scanProgress?.holdersFound ?? liveScan?.holders_found ?? 0;
+  const progressRpcCalls = scanProgress?.rpcCallsMade ?? liveScan?.rpc_calls_made ?? 0;
+  const progressStartedAt = scanProgress?.startedAt ?? liveScan?.started_at ?? null;
+  const elapsedSeconds = progressStartedAt
+    ? Math.max(0, Math.floor((Date.now() - new Date(progressStartedAt).getTime()) / 1000))
+    : null;
 
   // Read user's USDC balance
   const { data: usdcBalance } = useReadContract({
@@ -84,6 +124,19 @@ export function ClaimPage() {
       setClaimStep('idle');
     }
   }, [transferError]);
+
+  useEffect(() => {
+    if (!authenticated || authReady) {
+      setAuthWaitSeconds(0);
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setAuthWaitSeconds((value) => value + 1);
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [authenticated, authReady]);
 
   const verifyClaim = useCallback(async (txHash: string) => {
     setClaimStep('verifying');
@@ -290,29 +343,125 @@ export function ClaimPage() {
                 <div className="text-xs uppercase tracking-wider text-zinc-400">Your Eligibility</div>
 
                 {!authReady && (
-                  <LoadingSpinner label="Finalizing your session..." />
+                  <div className="space-y-3">
+                    <LoadingSpinner label="Finalizing your session..." />
+                    {authWaitSeconds >= 12 && (
+                      <div className="rounded-lg border border-amber-800/50 bg-amber-950/20 p-3 space-y-2">
+                        <p className="text-xs text-amber-300">
+                          Session bootstrap is taking longer than expected ({authWaitSeconds}s).
+                        </p>
+                        <button
+                          type="button"
+                          onClick={login}
+                          className="rounded-lg border border-amber-700 px-3 py-1.5 text-xs text-amber-200 hover:bg-amber-900/30"
+                        >
+                          Refresh session
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 )}
 
-                {authReady && eligibility.isLoading && (
+                {authReady && hasAuthToken && eligibility.isLoading && (
                   <LoadingSpinner label="Checking your token holdings..." />
                 )}
 
-                {authReady && eligibility.isError && (
-                  <p className="text-sm text-red-400">
-                    {formatApiError(eligibility.error, 'Could not check eligibility.')}
-                  </p>
+                {authReady && !hasAuthToken && (
+                  <div className="rounded-lg border border-amber-800/50 bg-amber-950/20 p-3 space-y-2">
+                    <p className="text-xs text-amber-300">
+                      We could not obtain your auth token yet. Reopen login and try again.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={login}
+                      className="rounded-lg border border-amber-700 px-3 py-1.5 text-xs text-amber-200 hover:bg-amber-900/30"
+                    >
+                      Reconnect
+                    </button>
+                  </div>
                 )}
 
-                {authReady && eligibility.data && (
+                {authReady && hasAuthToken && eligibility.isError && (
+                  <div className="rounded-lg border border-red-800/50 bg-red-950/20 p-3 space-y-2">
+                    <p className="text-sm text-red-400">
+                      {formatApiError(eligibility.error, 'Could not check eligibility.')}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => void eligibility.refetch()}
+                      className="rounded-lg border border-red-700 px-3 py-1.5 text-xs text-red-200 hover:bg-red-900/30"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                )}
+
+                {authReady && hasAuthToken && eligibility.data && (
                   <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+                      <div className="rounded-lg border border-jungle-700/80 bg-jungle-950/40 px-3 py-2">
+                        <p className="text-zinc-500">Session</p>
+                        <p className="font-mono text-zinc-200">ready</p>
+                      </div>
+                      <div className="rounded-lg border border-jungle-700/80 bg-jungle-950/40 px-3 py-2">
+                        <p className="text-zinc-500">Identity Map</p>
+                        <p className="font-mono text-zinc-200">
+                          {walletSummary?.total_wallets ?? walletsChecked} wallets
+                        </p>
+                        {walletSummary && (
+                          <p className="text-[11px] text-zinc-500">
+                            {walletSummary.farcaster_verified_wallets} FC verified
+                          </p>
+                        )}
+                      </div>
+                      <div className="rounded-lg border border-jungle-700/80 bg-jungle-950/40 px-3 py-2">
+                        <p className="text-zinc-500">Farcaster</p>
+                        <p className="font-mono text-zinc-200">{farcaster ? 'linked' : 'not linked'}</p>
+                      </div>
+                      <div className="rounded-lg border border-jungle-700/80 bg-jungle-950/40 px-3 py-2">
+                        <p className="text-zinc-500">Scan</p>
+                        <p className="font-mono text-zinc-200">
+                          {scanPending ? `${Math.max(1, Math.min(100, Math.round(progressPct ?? 5)))}%` : 'ready'}
+                        </p>
+                      </div>
+                    </div>
+
                     {scanPending ? (
-                      <div className="rounded-lg border border-jungle-700/80 bg-jungle-950/40 p-4 space-y-2">
+                      <div className="rounded-lg border border-jungle-700/80 bg-jungle-950/40 p-4 space-y-3">
                         <p className="text-sm text-jungle-300">
                           Running token heat scan for this bungalow...
                         </p>
                         <p className="text-xs text-zinc-500">
                           We scan once, cache it, and reuse results to keep RPC credit usage low.
                         </p>
+                        <div className="h-2 overflow-hidden rounded-full bg-jungle-800/80">
+                          <div
+                            className="h-full bg-jungle-500 transition-all duration-500"
+                            style={{ width: `${Math.max(5, Math.min(100, Math.round(progressPct ?? 5)))}%` }}
+                          />
+                        </div>
+                        <p className="text-xs text-zinc-400">
+                          {phaseLabel(progressPhase)}
+                          {elapsedSeconds !== null ? ` · ${elapsedSeconds}s elapsed` : ''}
+                        </p>
+                        <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+                          <div className="rounded-lg border border-jungle-700/80 bg-jungle-900/40 px-3 py-2">
+                            <p className="text-zinc-500">Wallets</p>
+                            <p className="font-mono text-zinc-200">{walletSummary?.total_wallets ?? walletsChecked}</p>
+                          </div>
+                          <div className="rounded-lg border border-jungle-700/80 bg-jungle-900/40 px-3 py-2">
+                            <p className="text-zinc-500">Events</p>
+                            <p className="font-mono text-zinc-200">{progressEvents}</p>
+                          </div>
+                          <div className="rounded-lg border border-jungle-700/80 bg-jungle-900/40 px-3 py-2">
+                            <p className="text-zinc-500">Holders</p>
+                            <p className="font-mono text-zinc-200">{progressHolders}</p>
+                          </div>
+                          <div className="rounded-lg border border-jungle-700/80 bg-jungle-900/40 px-3 py-2">
+                            <p className="text-zinc-500">RPC Calls</p>
+                            <p className="font-mono text-zinc-200">{progressRpcCalls}</p>
+                          </div>
+                        </div>
                         {eligibility.data.scan_id && (
                           <p className="text-xs font-mono text-zinc-500">
                             Scan ID: {eligibility.data.scan_id}

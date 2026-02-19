@@ -10,6 +10,7 @@ import {
   incrementDailyAllowance,
   markScanFailed,
   setTokenStatus,
+  updateScanProgress,
   updateBungalowMetadata,
   writeScanResult,
 } from '../db/queries'
@@ -95,6 +96,7 @@ scanRoute.post('/scan/:chain/:ca', requireWalletAuth, scanBurstLimit, async (c) 
   void (async () => {
     try {
       const result = await scanToken(chain, tokenAddress, (progress) => {
+        void updateScanProgress(scanId, progress).catch(() => undefined)
         logInfo('SCAN PROGRESS', `scan_id=${scanId} token=${tokenAddress} phase=${progress.phase} pct=${progress.pct}`)
       })
       await writeScanResult(scanId, result)
@@ -141,9 +143,12 @@ scanRoute.get('/scan/:scanId/status', async (c) => {
 
   return c.json({
     id: scan.id,
+    scan_id: scan.id,
     token_address: scan.token_address,
     chain: scan.chain,
     status: scan.scan_status,
+    progress_phase: scan.progress_phase ?? null,
+    progress_pct: scan.progress_pct === null ? null : Number(scan.progress_pct),
     events_fetched: scan.events_fetched,
     holders_found: scan.holders_found,
     rpc_calls_made: scan.rpc_calls_made,

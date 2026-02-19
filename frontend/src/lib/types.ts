@@ -152,16 +152,23 @@ export interface LeaderboardResponse {
 }
 
 export interface ScanCreateResponse {
-  scan_id: string;
+  scan_id: number;
 }
 
 export interface ScanStatusResponse {
-  scan_id: string;
-  status: 'queued' | 'running' | 'completed' | 'failed';
-  phase?: string;
-  events_fetched?: number;
-  holders_found?: number;
-  error?: string;
+  id: number;
+  scan_id?: number;
+  token_address: string;
+  chain: 'base' | 'ethereum';
+  status: 'running' | 'complete' | 'failed' | 'pending';
+  progress_phase?: string | null;
+  progress_pct?: number | null;
+  events_fetched: number;
+  holders_found: number;
+  rpc_calls_made: number;
+  started_at: string;
+  completed_at: string | null;
+  error_message: string | null;
 }
 
 export interface WidgetCatalogItem {

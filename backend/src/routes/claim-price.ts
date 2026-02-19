@@ -112,6 +112,7 @@ claimPriceRoute.get('/claim-eligibility/:chain/:ca', requireWalletAuth, async (c
       scan_pending: true,
       scan_status: 'scanning',
       scan_id: scanState.scanId,
+      scan_progress: scanState.progress,
       estimated_seconds: 120,
     }, 202 as any)
   }
@@ -150,6 +151,7 @@ claimPriceRoute.get('/claim-eligibility/:chain/:ca', requireWalletAuth, async (c
     scan_pending: false,
     scan_status: 'complete',
     scan_id: null,
+    scan_progress: null,
   })
 })
 

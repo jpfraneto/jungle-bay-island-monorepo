@@ -89,6 +89,8 @@ export interface ScanLogRow {
   events_fetched: number
   holders_found: number
   rpc_calls_made: number
+  progress_phase: string | null
+  progress_pct: string | null
   started_at: string
   completed_at: string | null
   error_message: string | null

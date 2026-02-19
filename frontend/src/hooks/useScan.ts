@@ -2,7 +2,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { useApi } from './useApi';
 import type { ScanCreateResponse, ScanStatusResponse } from '../lib/types';
 
-export function useScan(chain: string, ca: string, scanId?: string) {
+export function useScan(chain: string, ca: string, scanId?: number) {
   const api = useApi();
 
   const createScan = useMutation({
@@ -11,10 +11,10 @@ export function useScan(chain: string, ca: string, scanId?: string) {
 
   const statusQuery = useQuery({
     queryKey: ['scan-status', scanId, api.walletAddress],
-    enabled: Boolean(scanId),
+    enabled: Number.isFinite(scanId),
     queryFn: () => api.get<ScanStatusResponse>(`/api/scan/${scanId}/status`),
     refetchInterval: (query) =>
-      query.state.data?.status === 'completed' || query.state.data?.status === 'failed' ? false : 2000,
+      query.state.data?.status === 'complete' || query.state.data?.status === 'failed' ? false : 2000,
   });
 
   return {

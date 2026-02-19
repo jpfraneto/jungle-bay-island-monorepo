@@ -35,6 +35,15 @@ export interface ClaimEligibility {
   scan_pending: boolean;
   scan_status: 'scanning' | 'complete';
   scan_id: number | null;
+  scan_progress: {
+    phase: string | null;
+    pct: number | null;
+    scanStatus: string | null;
+    startedAt: string | null;
+    eventsFetched: number;
+    holdersFound: number;
+    rpcCallsMade: number;
+  } | null;
   estimated_seconds?: number;
 }
 
@@ -43,9 +52,17 @@ export function useClaimEligibility(chain: string, ca: string) {
 
   return useQuery({
     queryKey: ['claim-eligibility', chain, ca, api.walletAddress],
-    enabled: Boolean(chain && ca && ca.length > 5 && api.authenticated && api.hasAuthToken),
+    enabled: Boolean(chain && ca && ca.length > 5 && api.authenticated && api.authTokenReady),
     queryFn: () => api.get<ClaimEligibility>(`/api/claim-eligibility/${chain}/${ca}`),
-    retry: false,
+    retry: (failureCount, error: unknown) => {
+      if (failureCount >= 4) return false;
+      if (typeof error === 'object' && error !== null && 'code' in error) {
+        const code = (error as { code?: string }).code;
+        if (code === 'auth_required' || code === 'invalid_token') return true;
+      }
+      return failureCount < 2;
+    },
+    retryDelay: 1200,
     staleTime: 60_000, // 1 minute
     refetchInterval: (query) => (query.state.data?.scan_pending ? 3000 : false),
   });

@@ -2,10 +2,12 @@ import type { SupportedChain } from '../config'
 import {
   createScanLog,
   getLatestScanByToken,
+  getScanLog,
   getTokenRegistry,
   getWalletTokenHeats,
   markScanFailed,
   setTokenStatus,
+  updateScanProgress,
   updateBungalowMetadata,
   writeScanResult,
 } from '../db/queries'
@@ -16,6 +18,15 @@ import { scanToken } from './scanner'
 export interface ClaimHeatScanState {
   status: 'ready' | 'scanning'
   scanId: number | null
+  progress: {
+    phase: string | null
+    pct: number | null
+    scanStatus: string | null
+    startedAt: string | null
+    eventsFetched: number
+    holdersFound: number
+    rpcCallsMade: number
+  } | null
 }
 
 export interface ClaimWalletHeatResult {
@@ -36,12 +47,26 @@ export async function ensureClaimHeatScan(input: {
 }): Promise<ClaimHeatScanState> {
   const registry = await getTokenRegistry(input.tokenAddress, input.chain)
   if (registry?.scan_status === 'complete') {
-    return { status: 'ready', scanId: null }
+    return { status: 'ready', scanId: null, progress: null }
   }
 
   if (registry?.scan_status === 'scanning') {
     const latest = await getLatestScanByToken(input.tokenAddress)
-    return { status: 'scanning', scanId: latest?.id ?? null }
+    return {
+      status: 'scanning',
+      scanId: latest?.id ?? null,
+      progress: latest
+        ? {
+            phase: latest.progress_phase ?? null,
+            pct: latest.progress_pct === null ? null : Number(latest.progress_pct),
+            scanStatus: latest.scan_status ?? null,
+            startedAt: latest.started_at ?? null,
+            eventsFetched: latest.events_fetched ?? 0,
+            holdersFound: latest.holders_found ?? 0,
+            rpcCallsMade: latest.rpc_calls_made ?? 0,
+          }
+        : null,
+    }
   }
 
   await setTokenStatus(input.tokenAddress, input.chain, 'scanning')
@@ -64,6 +89,7 @@ export async function ensureClaimHeatScan(input: {
   void (async () => {
     try {
       const result = await scanToken(input.chain, input.tokenAddress, (progress) => {
+        void updateScanProgress(scanId, progress).catch(() => undefined)
         logInfo(
           'CLAIM SCAN PROGRESS',
           `scan_id=${scanId} token=${input.tokenAddress} phase=${progress.phase} pct=${progress.pct}`,
@@ -92,7 +118,22 @@ export async function ensureClaimHeatScan(input: {
     }
   })()
 
-  return { status: 'scanning', scanId }
+  const freshLog = await getScanLog(scanId)
+  return {
+    status: 'scanning',
+    scanId,
+    progress: freshLog
+      ? {
+          phase: freshLog.progress_phase ?? null,
+          pct: freshLog.progress_pct === null ? null : Number(freshLog.progress_pct),
+          scanStatus: freshLog.scan_status ?? null,
+          startedAt: freshLog.started_at ?? null,
+          eventsFetched: freshLog.events_fetched ?? 0,
+          holdersFound: freshLog.holders_found ?? 0,
+          rpcCallsMade: freshLog.rpc_calls_made ?? 0,
+        }
+      : null,
+  }
 }
 
 export async function getClaimWalletHeat(

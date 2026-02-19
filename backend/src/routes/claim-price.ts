@@ -4,8 +4,8 @@ import { getBungalowOwnerRecord } from '../db/queries'
 import { requireWalletAuth } from '../middleware/auth'
 import { ensureClaimHeatScan, getClaimWalletHeat, isClaimHeatScannableChain } from '../services/claimHeat'
 import { fetchDexScreenerData } from '../services/dexscreener'
-import { extractXUsername, lookupByXUsername } from '../services/neynar'
 import { ApiError } from '../services/errors'
+import { resolveUserWalletMap } from '../services/identityMap'
 import { logInfo } from '../services/logger'
 import type { AppEnv } from '../types'
 
@@ -71,44 +71,13 @@ claimPriceRoute.get('/claim-eligibility/:chain/:ca', requireWalletAuth, async (c
   const wallet = c.get('walletAddress')!
   const claims = c.get('privyClaims') as Record<string, unknown> | undefined
 
-  // Extract X username from Privy JWT
-  const xUsername = claims ? extractXUsername(claims) : null
-
-  // Lookup Farcaster profile via Neynar
-  let farcaster: {
-    fid: number
-    username: string
-    displayName: string
-    pfpUrl: string
-    ethAddresses: string[]
-    solAddresses: string[]
-  } | null = null
-
-  if (xUsername) {
-    const profile = await lookupByXUsername(xUsername)
-    if (profile) {
-      farcaster = {
-        fid: profile.fid,
-        username: profile.username,
-        displayName: profile.displayName,
-        pfpUrl: profile.pfpUrl,
-        ethAddresses: profile.ethAddresses,
-        solAddresses: profile.solAddresses,
-      }
-    }
-  }
-
-  // Collect all wallets to check (Farcaster verified + Privy embedded)
-  const ethWallets = new Set<string>()
-  ethWallets.add(wallet.toLowerCase())
-  if (farcaster) {
-    for (const addr of farcaster.ethAddresses) {
-      ethWallets.add(addr.toLowerCase())
-    }
-  }
-
-  const solWallets = farcaster?.solAddresses ?? []
-  const walletList = [...ethWallets]
+  const identity = await resolveUserWalletMap({
+    requesterWallet: wallet,
+    claims,
+    persist: true,
+  })
+  const farcaster = identity.farcaster
+  const walletList = identity.evm_wallets
   if (!isClaimHeatScannableChain(chain)) {
     throw new ApiError(400, 'unsupported_chain', 'Claim heat scanning is currently available for Base and Ethereum tokens')
   }
@@ -131,12 +100,14 @@ claimPriceRoute.get('/claim-eligibility/:chain/:ca', requireWalletAuth, async (c
         ? {
             fid: farcaster.fid,
             username: farcaster.username,
-            display_name: farcaster.displayName,
-            pfp_url: farcaster.pfpUrl,
-            wallets_found: farcaster.ethAddresses.length + solWallets.length,
+            display_name: farcaster.display_name,
+            pfp_url: farcaster.pfp_url,
+            wallets_found: farcaster.wallets_found,
           }
         : null,
-      x_username: xUsername,
+      x_username: identity.x_username,
+      wallet_map: identity.wallets,
+      wallet_map_summary: identity.summary,
       holdings: [],
       scan_pending: true,
       scan_status: 'scanning',
@@ -151,7 +122,7 @@ claimPriceRoute.get('/claim-eligibility/:chain/:ca', requireWalletAuth, async (c
 
   logInfo(
     'CLAIM ELIGIBILITY',
-    `wallet=${wallet} x=${xUsername ?? 'none'} fid=${farcaster?.fid ?? 'none'} ` +
+    `wallet=${wallet} x=${identity.x_username ?? 'none'} fid=${farcaster?.fid ?? 'none'} ` +
     `token=${tokenAddress} heat=${heat} eligible=${eligible} wallets_checked=${walletList.length}`,
   )
 
@@ -164,12 +135,14 @@ claimPriceRoute.get('/claim-eligibility/:chain/:ca', requireWalletAuth, async (c
       ? {
           fid: farcaster.fid,
           username: farcaster.username,
-          display_name: farcaster.displayName,
-          pfp_url: farcaster.pfpUrl,
-          wallets_found: farcaster.ethAddresses.length + solWallets.length,
+          display_name: farcaster.display_name,
+          pfp_url: farcaster.pfp_url,
+          wallets_found: farcaster.wallets_found,
         }
       : null,
-    x_username: xUsername,
+    x_username: identity.x_username,
+    wallet_map: identity.wallets,
+    wallet_map_summary: identity.summary,
     holdings: breakdown.map((h) => ({
       address: h.wallet,
       heat_degrees: h.heat_degrees,

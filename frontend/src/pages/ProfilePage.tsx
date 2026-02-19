@@ -10,7 +10,7 @@ import { formatHeat, truncateAddress } from '../lib/format';
 import type { Tier } from '../lib/types';
 
 export function ProfilePage() {
-  const { authenticated, logout } = usePrivy();
+  const { authenticated, logout, linkWallet, linkFarcaster } = usePrivy();
   const { profile, isLoading, isReady, isSettingUp, refetch } = useProfile();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -34,6 +34,17 @@ export function ProfilePage() {
 
   const farcaster = profile?.farcaster;
   const hasFarcaster = Boolean(farcaster?.fid);
+  const walletEntries = (profile?.wallet_map?.length
+    ? profile.wallet_map
+    : (profile?.connected_wallets ?? [profile?.wallet].filter((address): address is string => Boolean(address))).map((address) => ({
+        address,
+        wallet_kind: address.toLowerCase().startsWith('0x') ? 'evm' as const : 'solana' as const,
+        linked_via_privy: true,
+        linked_via_farcaster: false,
+        farcaster_verified: false,
+        is_requester_wallet: address.toLowerCase() === profile?.wallet?.toLowerCase(),
+      }))
+  );
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -89,9 +100,46 @@ export function ProfilePage() {
         <p className="mb-3 text-xs text-zinc-500">
           Deposit tokens to any of these addresses to build heat.
         </p>
+        <div className="mb-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => linkWallet({ walletChainType: 'ethereum-only' })}
+            className="rounded-lg border border-jungle-600 px-3 py-1.5 text-xs text-zinc-300 transition-colors hover:bg-jungle-800 active:bg-jungle-700"
+          >
+            Link EVM wallet
+          </button>
+          <button
+            type="button"
+            onClick={() => linkWallet({ walletChainType: 'solana-only' })}
+            className="rounded-lg border border-jungle-600 px-3 py-1.5 text-xs text-zinc-300 transition-colors hover:bg-jungle-800 active:bg-jungle-700"
+          >
+            Link Solana wallet
+          </button>
+          <button
+            type="button"
+            onClick={linkFarcaster}
+            className="rounded-lg border border-jungle-600 px-3 py-1.5 text-xs text-zinc-300 transition-colors hover:bg-jungle-800 active:bg-jungle-700"
+          >
+            Link Farcaster
+          </button>
+        </div>
+        {profile?.wallet_map_summary && (
+          <p className="mb-3 text-xs text-zinc-500">
+            {profile.wallet_map_summary.total_wallets} total wallets · {profile.wallet_map_summary.evm_wallets} EVM · {profile.wallet_map_summary.solana_wallets} Solana
+          </p>
+        )}
         <div className="space-y-2">
-          {(profile?.connected_wallets ?? [profile?.wallet].filter(Boolean)).map((addr) => (
-            <CopyableWallet key={addr} address={addr!} />
+          {walletEntries.map((entry) => (
+            <CopyableWallet
+              key={entry.address}
+              address={entry.address}
+              subtitle={[
+                entry.wallet_kind.toUpperCase(),
+                entry.is_requester_wallet ? 'active wallet' : null,
+                entry.linked_via_privy ? 'privy linked' : null,
+                entry.farcaster_verified ? 'farcaster verified' : null,
+              ].filter(Boolean).join(' · ')}
+            />
           ))}
         </div>
       </section>
@@ -154,7 +202,7 @@ export function ProfilePage() {
   );
 }
 
-function CopyableWallet({ address }: { address: string }) {
+function CopyableWallet({ address, subtitle }: { address: string; subtitle?: string }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -169,8 +217,15 @@ function CopyableWallet({ address }: { address: string }) {
       onClick={handleCopy}
       className="flex w-full items-center justify-between gap-2 rounded-lg border border-jungle-700 bg-jungle-900/50 px-3 py-3 text-left transition-colors active:bg-jungle-800 sm:py-2.5"
     >
-      <span className="min-w-0 truncate font-mono text-xs text-zinc-200 sm:text-sm">
-        {address}
+      <span className="min-w-0">
+        <span className="block truncate font-mono text-xs text-zinc-200 sm:text-sm">
+          {address}
+        </span>
+        {subtitle && (
+          <span className="mt-1 block truncate text-[11px] text-zinc-500">
+            {subtitle}
+          </span>
+        )}
       </span>
       <span className="flex shrink-0 items-center gap-1 text-xs text-zinc-400">
         {copied ? (

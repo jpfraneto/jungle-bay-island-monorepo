@@ -1,4 +1,4 @@
-import { CONFIG, db } from '../config'
+import { CONFIG, db, normalizeAddress } from '../config'
 import { addHeatToDistribution, emptyTierDistribution, getTierFromHeat } from '../services/heat'
 import type { ScanResult } from '../services/scanner'
 import type {
@@ -700,11 +700,13 @@ export async function upsertWalletFarcasterProfile(
   displayName: string,
   pfpUrl: string,
 ): Promise<void> {
+  const normalizedWallet = normalizeAddress(wallet) ?? normalizeAddress(wallet, 'solana') ?? wallet.trim()
+
   await db`
     INSERT INTO ${db(CONFIG.SCHEMA)}.wallet_farcaster_profiles
       (wallet, fid, username, display_name, pfp_url, resolved_at)
     VALUES
-      (${wallet.toLowerCase()}, ${fid}, ${username}, ${displayName}, ${pfpUrl}, NOW())
+      (${normalizedWallet}, ${fid}, ${username}, ${displayName}, ${pfpUrl}, NOW())
     ON CONFLICT (wallet) DO UPDATE SET
       fid = EXCLUDED.fid,
       username = EXCLUDED.username,
@@ -722,6 +724,101 @@ export async function getWalletsByFid(fid: number): Promise<string[]> {
     ORDER BY resolved_at ASC
   `
   return rows.map((r) => r.wallet)
+}
+
+let userWalletLinksTablePromise: Promise<void> | null = null
+
+async function ensureUserWalletLinksTable(): Promise<void> {
+  if (!userWalletLinksTablePromise) {
+    userWalletLinksTablePromise = (async () => {
+      await db`
+        CREATE TABLE IF NOT EXISTS ${db(CONFIG.SCHEMA)}.user_wallet_links (
+          wallet TEXT NOT NULL,
+          wallet_kind TEXT NOT NULL,
+          privy_user_id TEXT,
+          fid BIGINT,
+          x_username TEXT,
+          seen_via_privy BOOLEAN NOT NULL DEFAULT FALSE,
+          seen_via_farcaster BOOLEAN NOT NULL DEFAULT FALSE,
+          farcaster_verified BOOLEAN NOT NULL DEFAULT FALSE,
+          last_seen_requester_wallet BOOLEAN NOT NULL DEFAULT FALSE,
+          first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (wallet, wallet_kind),
+          CHECK (wallet_kind IN ('evm', 'solana'))
+        )
+      `
+
+      await db`
+        CREATE INDEX IF NOT EXISTS idx_user_wallet_links_privy
+        ON ${db(CONFIG.SCHEMA)}.user_wallet_links (privy_user_id, last_seen_at DESC)
+      `
+
+      await db`
+        CREATE INDEX IF NOT EXISTS idx_user_wallet_links_fid
+        ON ${db(CONFIG.SCHEMA)}.user_wallet_links (fid, last_seen_at DESC)
+      `
+    })()
+  }
+
+  await userWalletLinksTablePromise
+}
+
+export interface UserWalletLinkUpsertRow {
+  wallet: string
+  wallet_kind: 'evm' | 'solana'
+  seen_via_privy: boolean
+  seen_via_farcaster: boolean
+  farcaster_verified: boolean
+  last_seen_requester_wallet: boolean
+}
+
+export async function upsertUserWalletLinks(input: {
+  privyUserId: string | null
+  fid: number | null
+  xUsername: string | null
+  rows: UserWalletLinkUpsertRow[]
+}): Promise<void> {
+  await ensureUserWalletLinksTable()
+
+  if (input.rows.length === 0) return
+
+  const rows = input.rows.map((row) => ({
+    wallet: row.wallet,
+    wallet_kind: row.wallet_kind,
+    privy_user_id: input.privyUserId,
+    fid: input.fid,
+    x_username: input.xUsername,
+    seen_via_privy: row.seen_via_privy,
+    seen_via_farcaster: row.seen_via_farcaster,
+    farcaster_verified: row.farcaster_verified,
+    last_seen_requester_wallet: row.last_seen_requester_wallet,
+  }))
+
+  await db`
+    INSERT INTO ${db(CONFIG.SCHEMA)}.user_wallet_links
+      ${db(
+        rows,
+        'wallet',
+        'wallet_kind',
+        'privy_user_id',
+        'fid',
+        'x_username',
+        'seen_via_privy',
+        'seen_via_farcaster',
+        'farcaster_verified',
+        'last_seen_requester_wallet',
+      )}
+    ON CONFLICT (wallet, wallet_kind) DO UPDATE SET
+      privy_user_id = COALESCE(EXCLUDED.privy_user_id, ${db(CONFIG.SCHEMA)}.user_wallet_links.privy_user_id),
+      fid = COALESCE(EXCLUDED.fid, ${db(CONFIG.SCHEMA)}.user_wallet_links.fid),
+      x_username = COALESCE(EXCLUDED.x_username, ${db(CONFIG.SCHEMA)}.user_wallet_links.x_username),
+      seen_via_privy = ${db(CONFIG.SCHEMA)}.user_wallet_links.seen_via_privy OR EXCLUDED.seen_via_privy,
+      seen_via_farcaster = ${db(CONFIG.SCHEMA)}.user_wallet_links.seen_via_farcaster OR EXCLUDED.seen_via_farcaster,
+      farcaster_verified = ${db(CONFIG.SCHEMA)}.user_wallet_links.farcaster_verified OR EXCLUDED.farcaster_verified,
+      last_seen_requester_wallet = EXCLUDED.last_seen_requester_wallet,
+      last_seen_at = NOW()
+  `
 }
 
 export async function getTokenSummary(tokenAddress: string): Promise<{

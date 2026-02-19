@@ -7,6 +7,7 @@ export function useApi() {
   const { identityToken } = useIdentityToken();
   const { wallets } = useWallets();
   const walletAddress = wallets.find((wallet: { address?: string }) => !!wallet.address)?.address;
+  const hasAuthToken = Boolean(identityToken);
 
   const loadAuthToken = useCallback(async () => {
     if (!authenticated) return undefined;
@@ -48,10 +49,11 @@ export function useApi() {
     () => ({
       walletAddress,
       authenticated,
+      hasAuthToken,
       get,
       post,
       put,
     }),
-    [authenticated, get, post, put, walletAddress],
+    [authenticated, get, hasAuthToken, post, put, walletAddress],
   );
 }

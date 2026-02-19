@@ -23,6 +23,7 @@ export function ClaimPage() {
   const { wallets: privyWallets } = useWallets();
   const { address: walletAddress } = useAccount();
   const api = useApi();
+  const authReady = api.hasAuthToken;
 
   const [claimError, setClaimError] = useState<string | null>(null);
   const [claimStep, setClaimStep] = useState<ClaimStep>('idle');
@@ -288,17 +289,21 @@ export function ClaimPage() {
               <div className="rounded-lg border border-jungle-700 bg-jungle-900/40 p-5 space-y-4">
                 <div className="text-xs uppercase tracking-wider text-zinc-400">Your Eligibility</div>
 
-                {eligibility.isLoading && (
+                {!authReady && (
+                  <LoadingSpinner label="Finalizing your session..." />
+                )}
+
+                {authReady && eligibility.isLoading && (
                   <LoadingSpinner label="Checking your token holdings..." />
                 )}
 
-                {eligibility.isError && (
+                {authReady && eligibility.isError && (
                   <p className="text-sm text-red-400">
                     {formatApiError(eligibility.error, 'Could not check eligibility.')}
                   </p>
                 )}
 
-                {eligibility.data && (
+                {authReady && eligibility.data && (
                   <div className="space-y-3">
                     {scanPending ? (
                       <div className="rounded-lg border border-jungle-700/80 bg-jungle-950/40 p-4 space-y-2">

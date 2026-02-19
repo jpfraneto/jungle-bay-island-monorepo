@@ -17,6 +17,20 @@ export interface UserProfile {
   token_breakdown: Array<{ token: string; token_name: string; heat_degrees: number }>;
   scans: Array<{ chain: string; token_address: string; scanned_at: string }>;
   connected_wallets: string[];
+  wallet_map?: Array<{
+    address: string;
+    wallet_kind: 'evm' | 'solana';
+    linked_via_privy: boolean;
+    linked_via_farcaster: boolean;
+    farcaster_verified: boolean;
+    is_requester_wallet: boolean;
+  }>;
+  wallet_map_summary?: {
+    total_wallets: number;
+    evm_wallets: number;
+    solana_wallets: number;
+    farcaster_verified_wallets: number;
+  };
   // Only present on setup response
   farcaster_found?: boolean;
   x_username?: string | null;

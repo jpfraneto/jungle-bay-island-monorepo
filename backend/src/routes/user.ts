@@ -1,13 +1,51 @@
 import { Hono } from 'hono'
 import { normalizeAddress } from '../config'
-import { getUserByWallet, getWalletsByFid, upsertWalletFarcasterProfile } from '../db/queries'
+import { getUserByWallet } from '../db/queries'
 import { requireWalletAuth } from '../middleware/auth'
 import { ApiError } from '../services/errors'
+import { resolveUserWalletMap } from '../services/identityMap'
 import { logInfo } from '../services/logger'
-import { extractXUsername, lookupByXUsername } from '../services/neynar'
 import type { AppEnv } from '../types'
 
 const userRoute = new Hono<AppEnv>()
+
+async function buildCurrentUserResponse(
+  wallet: string,
+  claims?: Record<string, unknown>,
+  identityOverride?: Awaited<ReturnType<typeof resolveUserWalletMap>>,
+) {
+  const [user, identity] = await Promise.all([
+    getUserByWallet(wallet),
+    identityOverride
+      ? Promise.resolve(identityOverride)
+      : resolveUserWalletMap({
+          requesterWallet: wallet,
+          claims,
+          persist: true,
+        }),
+  ])
+
+  return {
+    wallet,
+    island_heat: user?.island_heat ?? 0,
+    tier: user?.tier ?? 'drifter',
+    farcaster: identity.farcaster
+      ? {
+          fid: identity.farcaster.fid,
+          username: identity.farcaster.username,
+          display_name: identity.farcaster.display_name,
+          pfp_url: identity.farcaster.pfp_url,
+        }
+      : user?.farcaster ?? null,
+    token_breakdown: user?.token_breakdown ?? [],
+    scans: user?.scans ?? [],
+    connected_wallets: identity.wallets.map((entry) => entry.address),
+    wallet_map: identity.wallets,
+    wallet_map_summary: identity.summary,
+    x_username: identity.x_username,
+    farcaster_found: identity.farcaster !== null,
+  }
+}
 
 userRoute.get('/user/:wallet', async (c) => {
   const wallet = normalizeAddress(c.req.param('wallet'))
@@ -32,109 +70,30 @@ userRoute.get('/user/:wallet', async (c) => {
 // Always returns something for an authed user — never 404s
 userRoute.get('/me', requireWalletAuth, async (c) => {
   const wallet = c.get('walletAddress')!
+  const claims = c.get('privyClaims') as Record<string, unknown> | undefined
 
-  const user = await getUserByWallet(wallet)
-
-  // Get all connected wallets if user has a FID
-  let connectedWallets: string[] = [wallet.toLowerCase()]
-  if (user?.farcaster?.fid) {
-    const fidWallets = await getWalletsByFid(user.farcaster.fid)
-    const walletSet = new Set(fidWallets)
-    walletSet.add(wallet.toLowerCase())
-    connectedWallets = [...walletSet]
-  }
-
-  return c.json({
-    wallet,
-    island_heat: user?.island_heat ?? 0,
-    tier: user?.tier ?? 'drifter',
-    farcaster: user?.farcaster ?? null,
-    token_breakdown: user?.token_breakdown ?? [],
-    scans: user?.scans ?? [],
-    connected_wallets: connectedWallets,
-  })
+  return c.json(await buildCurrentUserResponse(wallet, claims))
 })
 
-// Auto-setup profile: X → Farcaster → upsert wallet_farcaster_profiles
+// Auto-setup profile: Privy-linked accounts + X/Farcaster wallet map
 // Idempotent — safe to call on every login
 userRoute.post('/me/setup', requireWalletAuth, async (c) => {
   const wallet = c.get('walletAddress')!
   const claims = c.get('privyClaims') as Record<string, unknown> | undefined
 
-  // Extract X username from Privy JWT
-  const xUsername = claims ? extractXUsername(claims) : null
-
-  let farcaster: {
-    fid: number
-    username: string
-    displayName: string
-    pfpUrl: string
-    ethAddresses: string[]
-    solAddresses: string[]
-  } | null = null
-
-  if (xUsername) {
-    const profile = await lookupByXUsername(xUsername)
-    if (profile) {
-      farcaster = {
-        fid: profile.fid,
-        username: profile.username,
-        displayName: profile.displayName,
-        pfpUrl: profile.pfpUrl,
-        ethAddresses: profile.ethAddresses,
-        solAddresses: profile.solAddresses,
-      }
-    }
-  }
-
-  // Collect all ETH wallets (Privy embedded + Farcaster verified)
-  const ethWallets = new Set<string>()
-  ethWallets.add(wallet.toLowerCase())
-  if (farcaster) {
-    for (const addr of farcaster.ethAddresses) {
-      ethWallets.add(addr.toLowerCase())
-    }
-  }
-
-  // Upsert wallet_farcaster_profiles for each wallet
-  if (farcaster) {
-    for (const w of ethWallets) {
-      await upsertWalletFarcasterProfile(
-        w,
-        farcaster.fid,
-        farcaster.username,
-        farcaster.displayName,
-        farcaster.pfpUrl,
-      )
-    }
-  }
+  const identity = await resolveUserWalletMap({
+    requesterWallet: wallet,
+    claims,
+    persist: true,
+  })
 
   logInfo(
     'PROFILE SETUP',
-    `wallet=${wallet} x=${xUsername ?? 'none'} fid=${farcaster?.fid ?? 'none'} wallets=${ethWallets.size}`,
+    `wallet=${wallet} x=${identity.x_username ?? 'none'} fid=${identity.farcaster?.fid ?? 'none'} ` +
+    `wallets=${identity.summary.total_wallets} evm=${identity.summary.evm_wallets} sol=${identity.summary.solana_wallets}`,
   )
 
-  // Return the full profile
-  const user = await getUserByWallet(wallet)
-
-  return c.json({
-    wallet,
-    island_heat: user?.island_heat ?? 0,
-    tier: user?.tier ?? 'drifter',
-    farcaster: farcaster
-      ? {
-          fid: farcaster.fid,
-          username: farcaster.username,
-          display_name: farcaster.displayName,
-          pfp_url: farcaster.pfpUrl,
-        }
-      : null,
-    token_breakdown: user?.token_breakdown ?? [],
-    scans: user?.scans ?? [],
-    connected_wallets: [...ethWallets],
-    x_username: xUsername,
-    farcaster_found: farcaster !== null,
-  })
+  return c.json(await buildCurrentUserResponse(wallet, claims, identity))
 })
 
 export default userRoute

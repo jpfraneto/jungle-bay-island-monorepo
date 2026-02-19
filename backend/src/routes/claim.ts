@@ -10,8 +10,8 @@ import { isBaylaConfigured, signClaimBungalow } from '../services/bayla'
 import { ensureClaimHeatScan, getClaimWalletHeat, isClaimHeatScannableChain } from '../services/claimHeat'
 import { fetchDexScreenerData } from '../services/dexscreener'
 import { ApiError } from '../services/errors'
+import { resolveUserWalletMap } from '../services/identityMap'
 import { logError, logInfo, logSuccess } from '../services/logger'
-import { extractXUsername, lookupByXUsername } from '../services/neynar'
 import type { AppEnv } from '../types'
 
 const MINIMUM_HEAT_TO_CLAIM = 10
@@ -65,20 +65,23 @@ claimRoute.post('/bungalow/claim', requireWalletAuth, async (c) => {
   logInfo('CLAIM', `wallet=${wallet} chain=${chain} token=${tokenAddress} tx=${txHash}`)
 
   const claims = c.get('privyClaims') as Record<string, unknown> | undefined
-  const xUsername = claims ? extractXUsername(claims) : null
+  const identity = await resolveUserWalletMap({
+    requesterWallet: wallet,
+    claims,
+    persist: true,
+  })
 
-  const ethWallets = new Set<string>()
-  ethWallets.add(wallet.toLowerCase())
-
-  let requesterFid: number | null = null
-  if (xUsername) {
-    const fcProfile = await lookupByXUsername(xUsername)
-    if (fcProfile) {
-      requesterFid = fcProfile.fid
-      for (const addr of fcProfile.ethAddresses) {
-        ethWallets.add(addr.toLowerCase())
-      }
-    }
+  const evmWallets = new Set(identity.evm_wallets.map((address) => address.toLowerCase()))
+  const walletEvm = normalizeAddress(wallet)
+  if (walletEvm) {
+    evmWallets.add(walletEvm)
+  }
+  if (evmWallets.size === 0) {
+    throw new ApiError(
+      400,
+      'no_evm_wallet',
+      'No EVM wallet linked to this account. Link a Base/Ethereum wallet in Privy before claiming.',
+    )
   }
 
   if (!isClaimHeatScannableChain(chain)) {
@@ -89,7 +92,7 @@ claimRoute.post('/bungalow/claim', requireWalletAuth, async (c) => {
     chain,
     tokenAddress,
     requesterWallet: wallet,
-    requesterFid,
+    requesterFid: identity.farcaster?.fid ?? null,
     requesterTier: null,
   })
 
@@ -102,7 +105,7 @@ claimRoute.post('/bungalow/claim', requireWalletAuth, async (c) => {
     )
   }
 
-  const { heat } = await getClaimWalletHeat(tokenAddress, [...ethWallets])
+  const { heat } = await getClaimWalletHeat(tokenAddress, [...evmWallets])
   if (heat < MINIMUM_HEAT_TO_CLAIM) {
     logInfo('CLAIM REJECTED', `wallet=${wallet} token=${tokenAddress} heat=${heat} minimum=${MINIMUM_HEAT_TO_CLAIM}`)
     throw new ApiError(403, 'insufficient_heat', `You need at least ${MINIMUM_HEAT_TO_CLAIM} heat degrees to claim. Current heat: ${heat}`)
@@ -136,7 +139,7 @@ claimRoute.post('/bungalow/claim', requireWalletAuth, async (c) => {
         return { from, amount }
       })
       .filter((row): row is { from: string; amount: bigint } => row !== null)
-      .filter((row) => ethWallets.has(row.from))
+      .filter((row) => evmWallets.has(row.from))
 
     if (matchingTransfers.length === 0) {
       throw new ApiError(

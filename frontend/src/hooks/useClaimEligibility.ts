@@ -18,6 +18,20 @@ export interface ClaimEligibility {
     address: string;
     heat_degrees: number;
   }>;
+  wallet_map?: Array<{
+    address: string;
+    wallet_kind: 'evm' | 'solana';
+    linked_via_privy: boolean;
+    linked_via_farcaster: boolean;
+    farcaster_verified: boolean;
+    is_requester_wallet: boolean;
+  }>;
+  wallet_map_summary?: {
+    total_wallets: number;
+    evm_wallets: number;
+    solana_wallets: number;
+    farcaster_verified_wallets: number;
+  };
   scan_pending: boolean;
   scan_status: 'scanning' | 'complete';
   scan_id: number | null;
@@ -29,7 +43,7 @@ export function useClaimEligibility(chain: string, ca: string) {
 
   return useQuery({
     queryKey: ['claim-eligibility', chain, ca, api.walletAddress],
-    enabled: Boolean(chain && ca && ca.length > 5 && api.authenticated),
+    enabled: Boolean(chain && ca && ca.length > 5 && api.authenticated && api.hasAuthToken),
     queryFn: () => api.get<ClaimEligibility>(`/api/claim-eligibility/${chain}/${ca}`),
     retry: false,
     staleTime: 60_000, // 1 minute

@@ -1,9 +1,9 @@
 import { Hono } from 'hono'
-import { getBungalow } from '../db/queries'
 import { normalizeAddress, toSupportedChain } from '../config'
 import { getCached, setCached } from '../services/cache'
 import { ApiError } from '../services/errors'
 import { logError, logInfo } from '../services/logger'
+import { resolveTokenMetadata } from '../services/tokenMetadata'
 import type { AppEnv } from '../types'
 
 const ogRoute = new Hono<AppEnv>()
@@ -105,19 +105,19 @@ ogRoute.get('/og-page/:chain/:ca', async (c) => {
     return c.text('Invalid address', 400)
   }
 
-  const bungalow = await getBungalow(tokenAddress, chain)
+  const tokenMeta = await resolveTokenMetadata(tokenAddress, chain)
 
-  const title = bungalow?.name
-    ? `${bungalow.name} (${bungalow.symbol ?? ''}) — Jungle Bay Island`
-    : 'Jungle Bay Island'
-  const description = bungalow?.description
-    ?? `View the bungalow for ${bungalow?.name ?? tokenAddress} on Jungle Bay Island.`
-  const image = bungalow?.image_url ?? ''
+  const title = tokenMeta.name
+    ? `${tokenMeta.name}${tokenMeta.symbol ? ` (${tokenMeta.symbol})` : ''} — Jungle Bay Island`
+    : `Token ${tokenAddress.slice(0, 8)}... — Jungle Bay Island`
+  const description = tokenMeta.description
+    ?? `View the bungalow for ${tokenMeta.name ?? tokenAddress} on Jungle Bay Island.`
+  const image = tokenMeta.image_url ?? ''
   // SPA URL — derive from CORS_ORIGIN or fallback
   const spaOrigin = (process.env.CORS_ORIGIN ?? 'https://junglebay.island').split(',')[0].trim()
   const canonicalUrl = `${spaOrigin}/${chain}/${tokenAddress}`
 
-  logInfo('OG PAGE', `chain=${chain} token=${tokenAddress} name=${bungalow?.name ?? 'unknown'}`)
+  logInfo('OG PAGE', `chain=${chain} token=${tokenAddress} name=${tokenMeta.name ?? 'unknown'}`)
 
   const html = `<!DOCTYPE html>
 <html lang="en">

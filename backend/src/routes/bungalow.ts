@@ -15,6 +15,7 @@ import { optionalWalletContext, requireWalletAuth } from "../middleware/auth";
 import { clearCache, getCached, setCached } from "../services/cache";
 import { ApiError } from "../services/errors";
 import { logDebug, logInfo } from "../services/logger";
+import { resolveTokenMetadata } from "../services/tokenMetadata";
 import type { AppEnv } from "../types";
 
 const bungalowRoute = new Hono<AppEnv>();
@@ -49,24 +50,25 @@ bungalowRoute.get("/bungalow/:chain/:ca", async (c) => {
   const bungalow = await getBungalow(tokenAddress, chain);
 
   if (!bungalow) {
+    const fallback = await resolveTokenMetadata(tokenAddress, chain);
     const notFound = {
       token_address: tokenAddress,
       chain,
-      name: null,
-      symbol: null,
+      name: fallback.name,
+      symbol: fallback.symbol,
       exists: false,
       is_claimed: false,
       is_verified: false,
-      description: null,
+      description: fallback.description,
       origin_story: null,
-      image_url: null,
-      market_data: null,
+      image_url: fallback.image_url,
+      market_data: fallback.market_data,
       links: {
-        x: null,
-        farcaster: null,
-        telegram: null,
-        website: null,
-        dexscreener: null,
+        x: fallback.links.x,
+        farcaster: fallback.links.farcaster,
+        telegram: fallback.links.telegram,
+        website: fallback.links.website,
+        dexscreener: fallback.links.dexscreener,
       },
     };
     setCached(cacheKey, notFound, CONFIG.BUNGALOW_CACHE_MS);

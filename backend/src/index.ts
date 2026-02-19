@@ -5,7 +5,6 @@ import { CONFIG, db, publicClients, normalizeAddress, toSupportedChain } from '.
 import { requestLogMiddleware } from './middleware/requestLog'
 import { requestIdMiddleware } from './middleware/requestId'
 import { createRateLimit } from './middleware/rateLimit'
-import { getBungalow } from './db/queries'
 import bungalowRoute from './routes/bungalow'
 import healthRoute from './routes/health'
 import tokenRoute from './routes/token'
@@ -21,6 +20,7 @@ import agentRoute from './routes/agent'
 import widgetRoute from './routes/widget'
 import { isApiError } from './services/errors'
 import { logError, logInfo, logSuccess, logWarn } from './services/logger'
+import { resolveTokenMetadata } from './services/tokenMetadata'
 import type { AppEnv } from './types'
 
 // Bot user-agent patterns for social media crawlers
@@ -130,16 +130,16 @@ app.get('/:chain/:ca', async (c, next) => {
   const tokenAddress = normalizeAddress(ca, supported)
   if (!tokenAddress) return next()
 
-  const bungalow = await getBungalow(tokenAddress, supported)
+  const tokenMeta = await resolveTokenMetadata(tokenAddress, supported)
 
   const spaOrigin = (process.env.CORS_ORIGIN ?? 'https://memetics.lat').split(',')[0].trim()
   const canonicalUrl = `${spaOrigin}/${chain}/${tokenAddress}`
-  const title = bungalow?.name
-    ? `${bungalow.name} (${bungalow.symbol ?? ''}) — Jungle Bay Island`
-    : 'Jungle Bay Island'
-  const description = bungalow?.description
-    ?? `View the bungalow for ${bungalow?.name ?? tokenAddress} on Jungle Bay Island.`
-  const image = bungalow?.image_url ?? `${spaOrigin}/jungle-bay.jpg`
+  const title = tokenMeta.name
+    ? `${tokenMeta.name}${tokenMeta.symbol ? ` (${tokenMeta.symbol})` : ''} — Jungle Bay Island`
+    : `Token ${tokenAddress.slice(0, 8)}... — Jungle Bay Island`
+  const description = tokenMeta.description
+    ?? `View the bungalow for ${tokenMeta.name ?? tokenAddress} on Jungle Bay Island.`
+  const image = tokenMeta.image_url ?? `${spaOrigin}/jungle-bay.jpg`
 
   logInfo('OG BOT', `ua="${userAgent?.slice(0, 40)}" chain=${chain} token=${tokenAddress}`)
 

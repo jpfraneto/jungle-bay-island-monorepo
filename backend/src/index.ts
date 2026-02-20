@@ -248,6 +248,7 @@ app.get('/*', async (c, next) => {
   const indexFile = Bun.file(path.join(STATIC_ROOT, 'index.html'))
   if (await indexFile.exists()) {
     c.header('Content-Type', 'text/html; charset=utf-8')
+    c.header('Cache-Control', 'no-cache')
     return c.body(await indexFile.arrayBuffer())
   }
 

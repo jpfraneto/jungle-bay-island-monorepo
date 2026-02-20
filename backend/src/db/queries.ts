@@ -1459,6 +1459,15 @@ export async function getAgentByKeyHash(apiKeyHash: string): Promise<AgentRow | 
   return rows[0]
 }
 
+export async function getCustomBungalow(tokenAddress: string, chain: string): Promise<{ html: string } | null> {
+  const rows = await db<{ html: string }[]>`
+    SELECT html FROM ${db(CONFIG.SCHEMA)}.custom_bungalows
+    WHERE token_address = ${tokenAddress} AND chain = ${chain} AND is_active = TRUE
+    LIMIT 1
+  `
+  return rows[0] ?? null
+}
+
 export async function updateAgentProfile(agentName: string, fields: {
   description?: string | null
   wallet?: string | null

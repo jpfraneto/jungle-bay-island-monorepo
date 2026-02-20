@@ -311,6 +311,24 @@ async function main() {
 
   console.log("   done");
 
+  // ── 10. Custom Bungalows (founder-built static sites) ──
+  console.log("   Creating custom_bungalows...");
+  await sql`
+    CREATE TABLE IF NOT EXISTS ${sql(SCHEMA)}.custom_bungalows (
+      id SERIAL PRIMARY KEY,
+      token_address TEXT NOT NULL,
+      chain TEXT NOT NULL DEFAULT 'base',
+      html TEXT NOT NULL,
+      claimed_by TEXT,
+      contact_note TEXT,
+      is_active BOOLEAN DEFAULT TRUE,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE(token_address, chain)
+    )
+  `;
+  console.log("   done");
+
   // ── Summary ──
   const elapsed = ((Date.now() - start) / 1000).toFixed(1);
 

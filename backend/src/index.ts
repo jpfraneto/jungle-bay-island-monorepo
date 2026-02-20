@@ -18,6 +18,8 @@ import personaRoute from './routes/persona'
 import ogRoute from './routes/og'
 import agentRoute from './routes/agent'
 import widgetRoute from './routes/widget'
+import { getCustomBungalow } from './db/queries'
+import { getCached, setCached } from './services/cache'
 import { isApiError } from './services/errors'
 import { logError, logInfo, logSuccess, logWarn } from './services/logger'
 import { resolveTokenMetadata } from './services/tokenMetadata'
@@ -163,6 +165,42 @@ app.get('/:chain/:ca', async (c, next) => {
   <p>Redirecting to <a href="${escapeHtml(canonicalUrl)}">${escapeHtml(title)}</a>...</p>
 </body>
 </html>`)
+})
+
+// --- Custom bungalow serving ---
+// If a founder has claimed a bungalow and uploaded a custom static site,
+// serve that HTML directly instead of the SPA.
+const CUSTOM_BUNGALOW_TTL = 10 * 60 * 1000 // 10 minutes
+
+app.get('/:chain/:ca', async (c, next) => {
+  const chain = c.req.param('chain')
+  const ca = c.req.param('ca')
+
+  if (!VALID_CHAINS.has(chain)) return next()
+
+  const supported = toSupportedChain(chain)
+  if (!supported) return next()
+
+  const tokenAddress = normalizeAddress(ca, supported)
+  if (!tokenAddress) return next()
+
+  const cacheKey = `custom_bungalow:${chain}:${tokenAddress}`
+  let html = getCached<string | false>(cacheKey)
+
+  if (html === null) {
+    const row = await getCustomBungalow(tokenAddress, chain)
+    if (row) {
+      html = row.html
+      setCached(cacheKey, html, CUSTOM_BUNGALOW_TTL)
+    } else {
+      setCached(cacheKey, false, CUSTOM_BUNGALOW_TTL)
+      return next()
+    }
+  }
+
+  if (html === false) return next()
+
+  return c.html(html)
 })
 
 // --- Static file serving (production) ---

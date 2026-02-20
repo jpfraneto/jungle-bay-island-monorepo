@@ -42,7 +42,8 @@ if (!DATABASE_URL) {
 }
 
 const SCHEMA = process.env.DB_SCHEMA ?? "prod-v11";
-const tokenAddress = ca.toLowerCase();
+// Only lowercase EVM addresses; Solana addresses are case-sensitive base58
+const tokenAddress = chain === "solana" ? ca.trim() : ca.toLowerCase();
 
 const htmlFile = Bun.file(filePath);
 if (!(await htmlFile.exists())) {

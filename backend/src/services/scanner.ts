@@ -9,7 +9,7 @@ import { calculateHeatDegrees, calculateTWAB, type BalanceSnapshot } from './hea
 
 export interface ScanResult {
   tokenAddress: string
-  chain: 'base' | 'ethereum'
+  chain: 'base' | 'ethereum' | 'solana'
   name: string
   symbol: string
   decimals: number

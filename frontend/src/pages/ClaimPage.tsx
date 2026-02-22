@@ -1,262 +1,34 @@
-import { useState, useCallback, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { usePrivy, useWallets } from '@privy-io/react-auth';
-import { useWriteContract, useWaitForTransactionReceipt, useAccount, useReadContract } from 'wagmi';
-import { parseUnits, type Address } from 'viem';
+import { useParams } from 'react-router-dom';
 import { useClaimPrice } from '../hooks/useClaimPrice';
-import { useClaimEligibility } from '../hooks/useClaimEligibility';
-import { useApi } from '../hooks/useApi';
-import { useScan } from '../hooks/useScan';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import { formatApiError } from '../lib/apiError';
-import { formatCompact, formatUsd, formatHeat } from '../lib/format';
-import { V7_CONTRACT_ADDRESS, V7_ABI, ERC20_ABI } from '../contract';
+import { formatCompact, formatUsd } from '../lib/format';
 
-const USDC_BASE: Address = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
-const TREASURY: Address = '0xe91B8920Ef5DBf6e1289991F1CE4eeF3671A610E';
-
-type ClaimStep = 'idle' | 'paying' | 'verifying' | 'registering' | 'done';
-
-function phaseLabel(phase?: string | null): string {
-  switch (phase) {
-    case 'metadata':
-      return 'Reading token metadata';
-    case 'deploy_block':
-      return 'Locating first transfer block';
-    case 'transfer_logs':
-      return 'Indexing transfer history';
-    case 'timestamps':
-      return 'Resolving timestamps';
-    case 'balances':
-      return 'Reconstructing balances';
-    case 'heat':
-      return 'Calculating heat scores';
-    case 'complete':
-      return 'Scan complete';
-    case 'failed':
-      return 'Scan failed';
-    default:
-      return 'Preparing scan';
-  }
-}
+const DM_URL = 'https://x.com/messages/compose?recipient_id=jpfraneto&text=';
 
 export function ClaimPage() {
   const { chain = 'base', ca = '' } = useParams();
-  const navigate = useNavigate();
-  const { authenticated, login } = usePrivy();
-  const { wallets: privyWallets } = useWallets();
-  const { address: walletAddress } = useAccount();
-  const api = useApi();
-  const authReady = api.authTokenReady;
-  const hasAuthToken = api.hasAuthToken;
-
-  const [claimError, setClaimError] = useState<string | null>(null);
-  const [claimStep, setClaimStep] = useState<ClaimStep>('idle');
-  const [authWaitSeconds, setAuthWaitSeconds] = useState(0);
 
   const priceQuery = useClaimPrice(chain, ca);
   const tokenData = priceQuery.data;
 
-  // Check eligibility (heat score) when authenticated
-  const eligibility = useClaimEligibility(chain, ca);
-  const isEligible = eligibility.data?.eligible ?? false;
-  const userHeat = eligibility.data?.heat ?? 0;
-  const minimumHeat = eligibility.data?.minimum_heat ?? 10;
-  const farcaster = eligibility.data?.farcaster;
-  const walletsChecked = eligibility.data?.wallets_checked ?? 0;
-  const scanPending = eligibility.data?.scan_pending ?? false;
-  const scanId = eligibility.data?.scan_id ?? undefined;
-  const scanStatus = useScan(chain, ca, scanId).statusQuery;
-  const liveScan = scanStatus.data;
-  const walletSummary = eligibility.data?.wallet_map_summary ?? null;
-  const scanProgress = eligibility.data?.scan_progress ?? null;
-  const progressPhase = scanProgress?.phase ?? liveScan?.progress_phase ?? null;
-  const progressPct = scanProgress?.pct ?? liveScan?.progress_pct ?? null;
-  const progressEvents = scanProgress?.eventsFetched ?? liveScan?.events_fetched ?? 0;
-  const progressHolders = scanProgress?.holdersFound ?? liveScan?.holders_found ?? 0;
-  const progressRpcCalls = scanProgress?.rpcCallsMade ?? liveScan?.rpc_calls_made ?? 0;
-  const progressStartedAt = scanProgress?.startedAt ?? liveScan?.started_at ?? null;
-  const elapsedSeconds = progressStartedAt
-    ? Math.max(0, Math.floor((Date.now() - new Date(progressStartedAt).getTime()) / 1000))
-    : null;
-
-  // Read user's USDC balance
-  const { data: usdcBalance } = useReadContract({
-    address: USDC_BASE,
-    abi: ERC20_ABI,
-    functionName: 'balanceOf',
-    args: walletAddress ? [walletAddress] : undefined,
-    query: { enabled: !!walletAddress && chain === 'base' },
-  });
-
-  // USDC transfer to treasury
-  const {
-    writeContract: writeTransfer,
-    data: transferTxHash,
-    error: transferError,
-  } = useWriteContract();
-
-  const { isSuccess: transferConfirmed } = useWaitForTransactionReceipt({
-    hash: transferTxHash,
-  });
-
-  // V7 on-chain registration
-  const {
-    writeContract: writeV7,
-    data: v7TxHash,
-  } = useWriteContract();
-
-  useWaitForTransactionReceipt({
-    hash: v7TxHash,
-  });
-
-  // After USDC transfer confirms, verify on backend and claim
-  useEffect(() => {
-    if (!transferConfirmed || !transferTxHash || claimStep !== 'paying') return;
-    void verifyClaim(transferTxHash);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [transferConfirmed, transferTxHash, claimStep]);
-
-  // Show transfer errors
-  useEffect(() => {
-    if (transferError) {
-      setClaimError(transferError.message.slice(0, 150));
-      setClaimStep('idle');
-    }
-  }, [transferError]);
-
-  useEffect(() => {
-    if (!authenticated || authReady) {
-      setAuthWaitSeconds(0);
-      return;
-    }
-
-    const timer = window.setInterval(() => {
-      setAuthWaitSeconds((value) => value + 1);
-    }, 1000);
-
-    return () => window.clearInterval(timer);
-  }, [authenticated, authReady]);
-
-  const verifyClaim = useCallback(async (txHash: string) => {
-    setClaimStep('verifying');
-    try {
-      const result = await api.post<{
-        bungalow: { chain: string; ca: string };
-        bayla?: { signature: string; deadline: string; mode: string };
-      }>('/api/bungalow/claim', {
-        chain,
-        ca,
-        tx_hash: txHash,
-      });
-
-      // If Bayla signature returned and Base chain, register on V7 contract
-      if (result.bayla?.mode === 'live' && result.bayla.signature && chain === 'base') {
-        setClaimStep('registering');
-        writeV7({
-          address: V7_CONTRACT_ADDRESS,
-          abi: V7_ABI,
-          functionName: 'claimBungalow',
-          args: [
-            ca as `0x${string}`,
-            '',
-            (tokenData?.token_name ?? 'Bungalow').slice(0, 64),
-            0n,
-            0n,
-            txHash,
-            result.bayla.signature as `0x${string}`,
-            BigInt(result.bayla.deadline),
-          ],
-        });
-      }
-
-      setClaimStep('done');
-      setTimeout(() => navigate(`/${chain}/${ca}`), 1500);
-    } catch (err) {
-      setClaimError(formatApiError(err, 'Verification failed. Your payment was sent — contact support.'));
-      setClaimStep('idle');
-    }
-  }, [api, chain, ca, tokenData, navigate, writeV7]);
-
-  const usdcBalanceValue = usdcBalance != null ? Number(usdcBalance) / 1e6 : null;
-  const formattedUsdcBalance = usdcBalanceValue != null ? usdcBalanceValue.toFixed(2) : null;
-  const connectedWalletSet = new Set(
-    privyWallets
-      .map((entry) => entry.address?.toLowerCase())
-      .filter((address): address is string => Boolean(address)),
+  const dmText = encodeURIComponent(
+    `I want to claim the bungalow for ${tokenData?.token_name ?? ca} on ${chain}.\n\nToken: ${ca}`,
   );
-  const isPrivyWalletConnected = walletAddress ? connectedWalletSet.has(walletAddress.toLowerCase()) : false;
-  const hasEnoughUsdc = tokenData ? (usdcBalanceValue ?? 0) >= tokenData.price_usdc : false;
-  const busy = claimStep !== 'idle' && claimStep !== 'done';
-  const canSubmitPayment = Boolean(
-    isEligible &&
-    !scanPending &&
-    walletAddress &&
-    isPrivyWalletConnected &&
-    hasEnoughUsdc &&
-    !busy &&
-    claimStep !== 'done',
-  );
-
-  const handlePayDirect = useCallback(() => {
-    if (!tokenData || !walletAddress) return;
-    if (!isPrivyWalletConnected) {
-      setClaimError('Use a Privy-connected Base wallet to complete this claim payment.');
-      return;
-    }
-    if ((usdcBalanceValue ?? 0) < tokenData.price_usdc) {
-      setClaimError('Insufficient USDC balance on your connected Base wallet.');
-      return;
-    }
-    setClaimError(null);
-    setClaimStep('paying');
-
-    const amount = parseUnits(tokenData.price_usdc.toFixed(2), 6);
-    writeTransfer({
-      address: USDC_BASE,
-      abi: [{
-        inputs: [
-          { name: 'to', type: 'address' },
-          { name: 'amount', type: 'uint256' },
-        ],
-        name: 'transfer',
-        outputs: [{ name: '', type: 'bool' }],
-        stateMutability: 'nonpayable',
-        type: 'function',
-      }],
-      functionName: 'transfer',
-      args: [TREASURY, amount],
-    });
-  }, [tokenData, walletAddress, isPrivyWalletConnected, usdcBalanceValue, writeTransfer]);
-
-  const stepLabel: Record<ClaimStep, string> = {
-    idle: '',
-    paying: 'Confirm the USDC transfer in your wallet...',
-    verifying: 'Verifying payment...',
-    registering: 'Registering on-chain...',
-    done: 'Bungalow claimed!',
-  };
 
   return (
     <div className="space-y-8">
       <div className="space-y-2">
-        <h1 className="text-2xl font-bold text-zinc-100">Claim a Bungalow</h1>
+        <h1 className="text-2xl font-bold text-zinc-100">Claim This Bungalow</h1>
         <p className="text-sm text-zinc-400">
-          You need to hold this token to claim its homepage.
+          The new home of your coin.
         </p>
-        {ca.length > 5 && (
-          <p className="text-xs text-zinc-500">
-            Chain: <span className="text-zinc-300 capitalize">{chain}</span> &middot; Token: <span className="font-mono text-zinc-300">{ca.slice(0, 10)}...{ca.slice(-6)}</span>
-          </p>
-        )}
       </div>
 
-      {/* Loading state */}
       {priceQuery.isLoading && (
         <LoadingSpinner label="Fetching token data..." />
       )}
 
-      {/* Error from price endpoint */}
       {priceQuery.isError && (
         <div className="rounded-lg border border-red-800/50 bg-red-950/30 p-4">
           <p className="text-sm text-red-400">
@@ -265,7 +37,6 @@ export function ClaimPage() {
         </div>
       )}
 
-      {/* Token preview + payment */}
       {tokenData && (
         <div className="space-y-6">
           {/* Token preview card */}
@@ -316,289 +87,43 @@ export function ClaimPage() {
             </div>
           </div>
 
-          {/* Auth gate */}
-          {!authenticated ? (
-            <div className="rounded-lg border border-jungle-600/50 bg-jungle-900/60 p-5 text-center space-y-4">
-              <div>
-                <p className="text-xs uppercase tracking-wider text-zinc-400">Step 1</p>
-                <p className="mt-1 text-lg font-semibold text-zinc-100">
-                  Sign in to check your eligibility
-                </p>
-                <p className="mt-1 text-xs text-zinc-500">
-                  We'll check your token holdings across all your verified wallets
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={login}
-                className="mx-auto rounded-lg bg-jungle-600 px-6 py-3 text-sm font-medium text-white hover:bg-jungle-500"
-              >
-                Sign in with X
-              </button>
-            </div>
-          ) : (
-            <>
-              {/* Eligibility check */}
-              <div className="rounded-lg border border-jungle-700 bg-jungle-900/40 p-5 space-y-4">
-                <div className="text-xs uppercase tracking-wider text-zinc-400">Your Eligibility</div>
+          {/* Claim CTA */}
+          <div className="rounded-lg border border-jungle-600/50 bg-jungle-900/60 p-6 text-center space-y-4">
+            <h2 className="text-xl font-bold text-zinc-100">
+              Claim this bungalow
+            </h2>
+            <p className="text-sm text-zinc-400 max-w-md mx-auto">
+              Be the first to create a homepage for this token's community. DM us on X to get started.
+            </p>
+            <a
+              href={`${DM_URL}${dmText}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block rounded-lg bg-jungle-600 px-6 py-3 text-sm font-medium text-white hover:bg-jungle-500"
+            >
+              DM @jpfraneto on X to claim
+            </a>
+          </div>
+        </div>
+      )}
 
-                {!authReady && (
-                  <div className="space-y-3">
-                    <LoadingSpinner label="Finalizing your session..." />
-                    {authWaitSeconds >= 12 && (
-                      <div className="rounded-lg border border-amber-800/50 bg-amber-950/20 p-3 space-y-2">
-                        <p className="text-xs text-amber-300">
-                          Session bootstrap is taking longer than expected ({authWaitSeconds}s).
-                        </p>
-                        <button
-                          type="button"
-                          onClick={login}
-                          className="rounded-lg border border-amber-700 px-3 py-1.5 text-xs text-amber-200 hover:bg-amber-900/30"
-                        >
-                          Refresh session
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {authReady && hasAuthToken && eligibility.isLoading && (
-                  <LoadingSpinner label="Checking your token holdings..." />
-                )}
-
-                {authReady && !hasAuthToken && (
-                  <div className="rounded-lg border border-amber-800/50 bg-amber-950/20 p-3 space-y-2">
-                    <p className="text-xs text-amber-300">
-                      We could not obtain your auth token yet. Reopen login and try again.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={login}
-                      className="rounded-lg border border-amber-700 px-3 py-1.5 text-xs text-amber-200 hover:bg-amber-900/30"
-                    >
-                      Reconnect
-                    </button>
-                  </div>
-                )}
-
-                {authReady && hasAuthToken && eligibility.isError && (
-                  <div className="rounded-lg border border-red-800/50 bg-red-950/20 p-3 space-y-2">
-                    <p className="text-sm text-red-400">
-                      {formatApiError(eligibility.error, 'Could not check eligibility.')}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => void eligibility.refetch()}
-                      className="rounded-lg border border-red-700 px-3 py-1.5 text-xs text-red-200 hover:bg-red-900/30"
-                    >
-                      Retry
-                    </button>
-                  </div>
-                )}
-
-                {authReady && hasAuthToken && eligibility.data && (
-                  <div className="space-y-3">
-                    <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
-                      <div className="rounded-lg border border-jungle-700/80 bg-jungle-950/40 px-3 py-2">
-                        <p className="text-zinc-500">Session</p>
-                        <p className="font-mono text-zinc-200">ready</p>
-                      </div>
-                      <div className="rounded-lg border border-jungle-700/80 bg-jungle-950/40 px-3 py-2">
-                        <p className="text-zinc-500">Identity Map</p>
-                        <p className="font-mono text-zinc-200">
-                          {walletSummary?.total_wallets ?? walletsChecked} wallets
-                        </p>
-                        {walletSummary && (
-                          <p className="text-[11px] text-zinc-500">
-                            {walletSummary.farcaster_verified_wallets} FC verified
-                          </p>
-                        )}
-                      </div>
-                      <div className="rounded-lg border border-jungle-700/80 bg-jungle-950/40 px-3 py-2">
-                        <p className="text-zinc-500">Farcaster</p>
-                        <p className="font-mono text-zinc-200">{farcaster ? 'linked' : 'not linked'}</p>
-                      </div>
-                      <div className="rounded-lg border border-jungle-700/80 bg-jungle-950/40 px-3 py-2">
-                        <p className="text-zinc-500">Scan</p>
-                        <p className="font-mono text-zinc-200">
-                          {scanPending ? `${Math.max(1, Math.min(100, Math.round(progressPct ?? 5)))}%` : 'ready'}
-                        </p>
-                      </div>
-                    </div>
-
-                    {scanPending ? (
-                      <div className="rounded-lg border border-jungle-700/80 bg-jungle-950/40 p-4 space-y-3">
-                        <p className="text-sm text-jungle-300">
-                          Running token heat scan for this bungalow...
-                        </p>
-                        <p className="text-xs text-zinc-500">
-                          We scan once, cache it, and reuse results to keep RPC credit usage low.
-                        </p>
-                        <div className="h-2 overflow-hidden rounded-full bg-jungle-800/80">
-                          <div
-                            className="h-full bg-jungle-500 transition-all duration-500"
-                            style={{ width: `${Math.max(5, Math.min(100, Math.round(progressPct ?? 5)))}%` }}
-                          />
-                        </div>
-                        <p className="text-xs text-zinc-400">
-                          {phaseLabel(progressPhase)}
-                          {elapsedSeconds !== null ? ` · ${elapsedSeconds}s elapsed` : ''}
-                        </p>
-                        <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
-                          <div className="rounded-lg border border-jungle-700/80 bg-jungle-900/40 px-3 py-2">
-                            <p className="text-zinc-500">Wallets</p>
-                            <p className="font-mono text-zinc-200">{walletSummary?.total_wallets ?? walletsChecked}</p>
-                          </div>
-                          <div className="rounded-lg border border-jungle-700/80 bg-jungle-900/40 px-3 py-2">
-                            <p className="text-zinc-500">Events</p>
-                            <p className="font-mono text-zinc-200">{progressEvents}</p>
-                          </div>
-                          <div className="rounded-lg border border-jungle-700/80 bg-jungle-900/40 px-3 py-2">
-                            <p className="text-zinc-500">Holders</p>
-                            <p className="font-mono text-zinc-200">{progressHolders}</p>
-                          </div>
-                          <div className="rounded-lg border border-jungle-700/80 bg-jungle-900/40 px-3 py-2">
-                            <p className="text-zinc-500">RPC Calls</p>
-                            <p className="font-mono text-zinc-200">{progressRpcCalls}</p>
-                          </div>
-                        </div>
-                        {eligibility.data.scan_id && (
-                          <p className="text-xs font-mono text-zinc-500">
-                            Scan ID: {eligibility.data.scan_id}
-                          </p>
-                        )}
-                      </div>
-                    ) : (
-                      <>
-                        {/* Farcaster status */}
-                        {farcaster ? (
-                          <div className="flex items-center gap-3">
-                            <img
-                              src={farcaster.pfp_url}
-                              alt={farcaster.username}
-                              className="h-10 w-10 rounded-full border border-jungle-600"
-                            />
-                            <div>
-                              <p className="text-sm font-medium text-zinc-100">
-                                @{farcaster.username}
-                              </p>
-                              <p className="text-xs text-zinc-500">
-                                {farcaster.wallets_found} verified wallets found via Farcaster
-                              </p>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="rounded-lg border border-amber-800/50 bg-amber-950/20 p-3">
-                            <p className="text-xs text-amber-400">
-                              No Farcaster account linked to your X. We can only check your embedded wallet.
-                              Link your X on Farcaster to include all connected wallets.
-                            </p>
-                          </div>
-                        )}
-
-                        {/* Heat score */}
-                        <div className="grid grid-cols-3 gap-3">
-                          <div className="rounded-lg border border-jungle-700 p-3 text-center">
-                            <p className="text-xs text-zinc-500">Your Heat</p>
-                            <p className={`mt-1 font-mono text-lg font-bold ${
-                              isEligible ? 'text-green-400' : 'text-red-400'
-                            }`}>
-                              {formatHeat(userHeat)}
-                            </p>
-                          </div>
-                          <div className="rounded-lg border border-jungle-700 p-3 text-center">
-                            <p className="text-xs text-zinc-500">Required</p>
-                            <p className="mt-1 font-mono text-lg font-bold text-zinc-300">
-                              {formatHeat(minimumHeat)}
-                            </p>
-                          </div>
-                          <div className="rounded-lg border border-jungle-700 p-3 text-center">
-                            <p className="text-xs text-zinc-500">Wallets Checked</p>
-                            <p className="mt-1 font-mono text-lg font-bold text-zinc-300">
-                              {walletsChecked}
-                            </p>
-                          </div>
-                        </div>
-
-                        {isEligible ? (
-                          <p className="text-sm text-green-400 text-center">
-                            You're eligible to claim this bungalow
-                          </p>
-                        ) : (
-                          <div className="text-center space-y-2">
-                            <p className="text-sm text-red-400">
-                              You need at least {formatHeat(minimumHeat)} heat to claim. Hold more of this token to increase your heat score.
-                            </p>
-                            {!farcaster && (
-                              <p className="text-xs text-zinc-500">
-                                Tip: Link your X to Farcaster to include all your verified wallets in the heat calculation.
-                              </p>
-                            )}
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Payment section — only if eligible */}
-              {isEligible && tokenData && !scanPending && (
-                <div className="rounded-lg border border-jungle-600/50 bg-jungle-900/60 p-5 text-center space-y-4">
-                  <div>
-                    <p className="text-xs uppercase tracking-wider text-zinc-400">Claim Price</p>
-                    <p className="mt-1 text-3xl font-bold text-jungle-300">
-                      ${tokenData.price_usdc.toFixed(2)} <span className="text-base text-zinc-400">USDC</span>
-                    </p>
-                    <p className="mt-1 text-xs text-zinc-500">
-                      0.1% of market cap (min $1, max $1,000)
-                    </p>
-                  </div>
-
-                  <div className="space-y-3">
-                    <p className="text-xs text-zinc-500">
-                      Payment must be sent from your connected Privy Base wallet.
-                    </p>
-                    {walletAddress && formattedUsdcBalance !== null && (
-                      <p className="text-xs text-zinc-500">
-                        Your USDC balance: <span className="font-mono text-zinc-300">${formattedUsdcBalance}</span>
-                      </p>
-                    )}
-                    {walletAddress && !isPrivyWalletConnected && (
-                      <p className="text-xs text-amber-400">
-                        Current wallet is not linked in Privy. Switch to a connected wallet to continue.
-                      </p>
-                    )}
-                    {walletAddress && formattedUsdcBalance !== null && !hasEnoughUsdc && (
-                      <p className="text-xs text-amber-400">
-                        Insufficient USDC. Send USDC on Base to your wallet: <span className="font-mono">{walletAddress}</span>
-                      </p>
-                    )}
-                    <button
-                      type="button"
-                      onClick={handlePayDirect}
-                      disabled={!canSubmitPayment}
-                      className="mx-auto rounded-lg bg-jungle-600 px-6 py-3 text-sm font-medium text-white hover:bg-jungle-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {claimStep === 'done' ? 'Claimed!' : `Pay $${tokenData.price_usdc.toFixed(2)} USDC`}
-                    </button>
-                  </div>
-
-                  {busy && (
-                    <LoadingSpinner label={stepLabel[claimStep]} />
-                  )}
-
-                  {claimStep === 'done' && (
-                    <p className="text-sm text-green-400">Redirecting to your bungalow...</p>
-                  )}
-
-                  {claimError && (
-                    <p className="text-sm text-red-400">{claimError}</p>
-                  )}
-                </div>
-              )}
-            </>
-          )}
+      {/* Fallback if no token data loaded yet and no error */}
+      {!tokenData && !priceQuery.isLoading && !priceQuery.isError && (
+        <div className="rounded-lg border border-jungle-600/50 bg-jungle-900/60 p-6 text-center space-y-4">
+          <h2 className="text-xl font-bold text-zinc-100">
+            Claim this bungalow
+          </h2>
+          <p className="text-sm text-zinc-400">
+            The new home of your coin. DM us on X to get started.
+          </p>
+          <a
+            href={`${DM_URL}${encodeURIComponent(`I want to claim the bungalow for ${ca} on ${chain}.`)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block rounded-lg bg-jungle-600 px-6 py-3 text-sm font-medium text-white hover:bg-jungle-500"
+          >
+            DM @jpfraneto on X to claim
+          </a>
         </div>
       )}
     </div>

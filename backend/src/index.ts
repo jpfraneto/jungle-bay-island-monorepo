@@ -18,11 +18,19 @@ import personaRoute from './routes/persona'
 import ogRoute from './routes/og'
 import agentRoute from './routes/agent'
 import widgetRoute from './routes/widget'
-import { getCustomBungalow } from './db/queries'
+import v1BungalowRoute from './routes/v1-bungalow'
+import authRoute from './routes/auth'
+import walletLinkRoute from './routes/wallet-link'
+import { getBulletinPosts, getBungalow, getCustomBungalow, getTokenHolders, getTokenHeatDistribution, getUserByWallet } from './db/queries'
 import { getCached, setCached } from './services/cache'
 import { isApiError } from './services/errors'
-import { logError, logInfo, logSuccess, logWarn } from './services/logger'
+import { logError, logInfo, logWarn } from './services/logger'
 import { resolveTokenMetadata } from './services/tokenMetadata'
+import { renderLanding, render404 } from './templates/landing'
+import { renderBungalow } from './templates/bungalow'
+import { renderUserPage } from './templates/user'
+import { renderProfilePage } from './templates/profile'
+import { getSessionFromRequest } from './services/session'
 import type { AppEnv } from './types'
 
 // Bot user-agent patterns for social media crawlers
@@ -73,6 +81,21 @@ app.use('*', cors({
   allowMethods: ['GET', 'POST', 'PUT', 'OPTIONS'],
 }))
 
+// Prevent stale caching on all responses
+app.use('*', async (c, next) => {
+  await next()
+  // HTML pages: always revalidate
+  const ct = c.res.headers.get('content-type') ?? ''
+  if (ct.includes('text/html')) {
+    c.res.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate')
+    c.res.headers.set('Pragma', 'no-cache')
+  }
+  // API JSON: never cache
+  if (c.req.path.startsWith('/api/') && !c.res.headers.has('Cache-Control')) {
+    c.res.headers.set('Cache-Control', 'no-store')
+  }
+})
+
 app.use(
   '/api/*',
   createRateLimit({
@@ -94,9 +117,12 @@ app.route('/api', personaRoute)
 app.route('/api', ogRoute)
 app.route('/api', agentRoute)
 app.route('/api', widgetRoute)
+app.route('/api', v1BungalowRoute)
+app.route('/api', walletLinkRoute)
+app.route('', authRoute)
 
 // --- skill.md for AI agents ---
-app.get('/skill.md', async (c) => {
+async function serveSkillMd(c: any) {
   const fs = await import('node:fs/promises')
   const filePath = path.resolve(import.meta.dir, '../skill.md')
   try {
@@ -107,7 +133,10 @@ app.get('/skill.md', async (c) => {
   } catch {
     return c.text('skill.md not found', 404)
   }
-})
+}
+app.get('/skill.md', serveSkillMd)
+app.get('/skill', serveSkillMd)
+app.get('/api/skill', serveSkillMd)
 
 // --- Bot-detection middleware for OG meta tags ---
 // Intercepts /:chain/:ca requests from social media crawlers
@@ -136,9 +165,9 @@ app.get('/:chain/:ca', async (c, next) => {
 
   const spaOrigin = (process.env.CORS_ORIGIN ?? 'https://memetics.lat').split(',')[0].trim()
   const canonicalUrl = `${spaOrigin}/${chain}/${tokenAddress}`
-  const title = tokenMeta.name
-    ? `${tokenMeta.name}${tokenMeta.symbol ? ` (${tokenMeta.symbol})` : ''} — Jungle Bay Island`
-    : `Token ${tokenAddress.slice(0, 8)}... — Jungle Bay Island`
+  const title = tokenMeta.symbol
+    ? `$${tokenMeta.symbol} ${tokenAddress} — Memetics`
+    : `${tokenAddress} — Memetics`
   const description = tokenMeta.description
     ?? `View the bungalow for ${tokenMeta.name ?? tokenAddress} on Jungle Bay Island.`
   const image = tokenMeta.image_url ?? `${spaOrigin}/jungle-bay.jpg`
@@ -167,9 +196,60 @@ app.get('/:chain/:ca', async (c, next) => {
 </html>`)
 })
 
-// --- Custom bungalow serving ---
-// If a founder has claimed a bungalow and uploaded a custom static site,
-// serve that HTML directly instead of the SPA.
+// --- Profile page (logged-in user) ---
+app.get('/profile', async (c) => {
+  const session = await getSessionFromRequest(c.req.header('cookie'))
+  if (!session) {
+    return c.redirect('/auth/twitter?return=/profile')
+  }
+
+  // Fetch linked wallets
+  let wallets: Array<{ wallet: string; wallet_kind: string; linked_at: string }> = []
+  try {
+    await db`ALTER TABLE ${db(CONFIG.SCHEMA)}.user_wallet_links ADD COLUMN IF NOT EXISTS x_id TEXT`
+    wallets = await db<Array<{ wallet: string; wallet_kind: string; linked_at: string }>>`
+      SELECT wallet, wallet_kind, first_seen_at::text AS linked_at
+      FROM ${db(CONFIG.SCHEMA)}.user_wallet_links
+      WHERE x_id = ${session.x_id}
+      ORDER BY first_seen_at ASC
+    `
+  } catch (err) {
+    logError('PROFILE', `wallet query failed: ${err instanceof Error ? err.message : 'unknown'}`)
+  }
+
+  logInfo('PROFILE PAGE', `x=@${session.x_username} wallets=${wallets.length}`)
+  return c.html(renderProfilePage({ session, wallets }))
+})
+
+// --- User profile page ---
+app.get('/user/:wallet', async (c) => {
+  const rawWallet = c.req.param('wallet')
+  const wallet = normalizeAddress(rawWallet) ?? normalizeAddress(rawWallet, 'solana') ?? rawWallet.trim()
+
+  if (!wallet) {
+    return c.html(render404(), 404 as any)
+  }
+
+  const [userData, userSession] = await Promise.all([
+    getUserByWallet(wallet),
+    getSessionFromRequest(c.req.header('cookie')),
+  ])
+  if (!userData) {
+    return c.html(render404(), 404 as any)
+  }
+
+  logInfo('USER PAGE', `wallet=${wallet} heat=${userData.island_heat} tokens=${userData.token_breakdown.length}`)
+  return c.html(renderUserPage({ ...userData, session: userSession }))
+})
+
+// --- Landing page ---
+app.get('/', async (c) => {
+  const session = await getSessionFromRequest(c.req.header('cookie'))
+  return c.html(renderLanding(session))
+})
+
+// --- Bungalow page (human visitors) ---
+// Fetches all data and renders server-side HTML with Memetics shell.
 const CUSTOM_BUNGALOW_TTL = 10 * 60 * 1000 // 10 minutes
 
 app.get('/:chain/:ca', async (c, next) => {
@@ -184,82 +264,62 @@ app.get('/:chain/:ca', async (c, next) => {
   const tokenAddress = normalizeAddress(ca, supported)
   if (!tokenAddress) return next()
 
-  const cacheKey = `custom_bungalow:${chain}:${tokenAddress}`
-  let html = getCached<string | false>(cacheKey)
+  // Fetch all data in parallel
+  const [bungalow, holdersResult, bulletinResult, customHtml, tokenMeta, heatDistribution, session] = await Promise.all([
+    getBungalow(tokenAddress, supported),
+    getTokenHolders(tokenAddress, 20, 0),
+    getBulletinPosts(tokenAddress, 20, 0),
+    (async () => {
+      const cacheKey = `custom_bungalow:${chain}:${tokenAddress}`
+      let html = getCached<string | false>(cacheKey)
+      if (html === null) {
+        const row = await getCustomBungalow(tokenAddress, chain)
+        if (row) {
+          html = row.html
+          setCached(cacheKey, html, CUSTOM_BUNGALOW_TTL)
+        } else {
+          setCached(cacheKey, false, CUSTOM_BUNGALOW_TTL)
+          html = false
+        }
+      }
+      return html === false ? null : html
+    })(),
+    resolveTokenMetadata(tokenAddress, supported),
+    getTokenHeatDistribution(tokenAddress),
+    getSessionFromRequest(c.req.header('cookie')),
+  ])
 
-  if (html === null) {
-    const row = await getCustomBungalow(tokenAddress, chain)
-    if (row) {
-      html = row.html
-      setCached(cacheKey, html, CUSTOM_BUNGALOW_TTL)
-    } else {
-      setCached(cacheKey, false, CUSTOM_BUNGALOW_TTL)
-      return next()
-    }
-  }
+  logInfo('BUNGALOW PAGE', `chain=${chain} token=${tokenAddress} claimed=${bungalow?.is_claimed ?? false} custom=${!!customHtml}`)
 
-  if (html === false) return next()
-
-  return c.html(html)
+  return c.html(renderBungalow({
+    chain,
+    tokenAddress,
+    bungalow,
+    customHtml,
+    holders: holdersResult.holders,
+    holderTotal: holdersResult.total,
+    bulletinPosts: bulletinResult.posts,
+    bulletinTotal: bulletinResult.total,
+    fallbackName: tokenMeta.name,
+    fallbackSymbol: tokenMeta.symbol,
+    fallbackImage: tokenMeta.image_url,
+    heatDistribution,
+    session,
+  }))
 })
 
-// --- Static file serving (production) ---
-// Serves the built frontend SPA from ../frontend/dist/
-// In dev, Vite handles this via its proxy config.
-const STATIC_ROOT = path.resolve(import.meta.dir, '../../frontend/dist')
-
-const MIME_TYPES: Record<string, string> = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'application/javascript; charset=utf-8',
-  '.mjs': 'application/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.gif': 'image/gif',
-  '.svg': 'image/svg+xml',
-  '.ico': 'image/x-icon',
-  '.webp': 'image/webp',
-  '.woff': 'font/woff',
-  '.woff2': 'font/woff2',
-  '.ttf': 'font/ttf',
-  '.map': 'application/json',
-}
-
-function getMimeType(filePath: string): string {
-  const ext = path.extname(filePath).toLowerCase()
-  return MIME_TYPES[ext] ?? 'application/octet-stream'
-}
-
-app.get('/*', async (c, next) => {
-  const reqPath = new URL(c.req.url).pathname
-  const filePath = path.join(STATIC_ROOT, reqPath === '/' ? 'index.html' : reqPath)
-
-  const file = Bun.file(filePath)
-  if (await file.exists()) {
-    const contentType = getMimeType(filePath)
-    c.header('Content-Type', contentType)
-    c.header('Cache-Control', reqPath.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'public, max-age=300')
-    return c.body(await file.arrayBuffer())
+app.notFound((c) => {
+  // API routes get JSON 404
+  if (c.req.path.startsWith('/api/')) {
+    return c.json({
+      error: 'Route not found',
+      code: 'not_found',
+      request_id: c.get('requestId') ?? null,
+    }, 404 as any)
   }
-
-  // SPA fallback: serve index.html for any non-file route
-  const indexFile = Bun.file(path.join(STATIC_ROOT, 'index.html'))
-  if (await indexFile.exists()) {
-    c.header('Content-Type', 'text/html; charset=utf-8')
-    c.header('Cache-Control', 'no-cache')
-    return c.body(await indexFile.arrayBuffer())
-  }
-
-  return next()
+  // Everything else gets the branded 404 page
+  return c.html(render404(), 404 as any)
 })
-
-app.notFound((c) => c.json({
-  error: 'Route not found',
-  code: 'not_found',
-  request_id: c.get('requestId') ?? null,
-}, 404 as any))
 
 app.onError((error, c) => {
   const requestId = c.get('requestId') ?? 'unknown'
@@ -338,9 +398,11 @@ async function logStartupStatus(): Promise<void> {
   console.log(`  ${statusDot(dbOk)}  PostgreSQL   ${dbOk ? `${G}connected${R}` : `${RE}failed${R}`}`)
   console.log(`  ${statusDot(baseOk)}  Base RPC     ${baseOk ? `${G}block ${baseHead}${R}` : `${RE}failed${R}`}`)
   console.log(`  ${statusDot(ethOk)}  Ethereum RPC ${ethOk ? `${G}block ${ethHead}${R}` : `${RE}failed${R}`}`)
+  console.log(`  ${statusDot(!!CONFIG.TWITTER_CLIENT_ID)}  Twitter OAuth ${CONFIG.TWITTER_CLIENT_ID ? `${G}configured${R}` : `${Y}not set${R}`}`)
   console.log(`  ${statusDot(!!CONFIG.NEYNAR_API_KEY)}  Neynar       ${CONFIG.NEYNAR_API_KEY ? `${G}configured${R}` : `${Y}not set${R}`}`)
   console.log('')
-  console.log(`  ${D}Routes${R}     /api/*  /skill.md  /:chain/:ca`)
+  console.log(`  ${D}Routes${R}     /api/*  /skill.md  /:chain/:ca  /user/:wallet  /profile`)
+  console.log(`  ${D}Auth${R}       /auth/twitter  /auth/callback  /auth/logout  /auth/me`)
   console.log(`  ${D}Agents${R}     POST /api/agents/register`)
   console.log(`  ${D}Health${R}     GET  /api/health`)
   console.log('')

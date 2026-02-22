@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 /**
  * ╔═══════════════════════════════════════════════════════════════════════════════════════════════╗
  * ║                                                                                               ║
- * ║                                    JUNGLE BAY ISLAND V6                                       ║
+ * ║                                    JUNGLE BAY ISLAND V7                                       ║
  * ║                                                                                               ║
  * ║                    "Protocol-level infrastructure for the appcoin ecosystem."                 ║
  * ║                                                                                               ║
@@ -14,24 +14,24 @@ pragma solidity ^0.8.20;
  * ║                                                                                               ║
  * ╚═══════════════════════════════════════════════════════════════════════════════════════════════╝
  *
- * @title JungleBayIslandV6
+ * @title JungleBayIslandV7
  * @author Jungle Bay Island
  * @notice Permissionless bungalow registry with open claiming, admin buyout priority,
- *         DMT Lagoon deposit system, dual-token payments, 12 prime spot auctions with defaults,
+ *         DMT Lagoon community treasury, 12 prime spot auctions with defaults,
  *         and AI-assisted content updates via Bayla signatures.
+ *         Registry + community treasury + prime spot auctions.
  *
- * @dev Key changes from V5:
- *      - Open bungalow claiming: anyone can claim (with Bayla sig), admin gets priority takeover
- *      - Admin buyout: verified admin pays original claimer as compensation
- *      - DMT Lagoon deposit system: per-bungalow token pools for game rewards
- *      - Modified ownership model: currentOwner vs verifiedAdmin
- *      - Modified content updates: two-path logic based on verification status
+ * @dev Key changes from V6: Daimo Pay integration for off-chain payments,
+ *      distributeLagoonRewards for heat-gated community rewards, emergency withdraw
+ *      protects deposited funds, global Pausable, finalizeAuction for permissionless
+ *      settlement, signature replay protection via address(this).
  */
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
@@ -73,7 +73,7 @@ interface INet {
     function getTotalMessagesForAppTopicCount(address app, string calldata topic) external view returns (uint256);
 }
 
-contract JungleBayIslandV6 is ReentrancyGuard, Ownable {
+contract JungleBayIslandV7 is ReentrancyGuard, Ownable, Pausable {
     using SafeERC20 for IERC20;
     using ECDSA for bytes32;
     using MessageHashUtils for bytes32;
@@ -111,6 +111,7 @@ contract JungleBayIslandV6 is ReentrancyGuard, Ownable {
         bool isVerifiedClaimed;        // Locks IPFS control to verified admin
         uint256 jbmPaid;
         uint256 nativeTokenPaid;
+        string daimoPaymentId;     // Cross-references off-chain Daimo Pay receipt
     }
 
     struct PrimeSpot {
@@ -165,6 +166,12 @@ contract JungleBayIslandV6 is ReentrancyGuard, Ownable {
     /// @notice Pending refunds for outbid users
     mapping(address => uint256) public pendingRefunds;
 
+    /// @notice Total sum of all pending refunds (JBM)
+    uint256 public totalPendingRefunds;
+
+    /// @notice Total sum of active auction bids not yet finalized (JBM)
+    uint256 public totalActiveBids;
+
     /// @notice Per-bungalow per-token lagoon deposit balances
     mapping(uint256 => mapping(address => uint256)) public lagoonDeposits;
 
@@ -216,6 +223,13 @@ contract JungleBayIslandV6 is ReentrancyGuard, Ownable {
         uint256 winningBid
     );
 
+    event AuctionFinalized(
+        uint8 indexed spotId,
+        uint256 indexed bungalowId,
+        address indexed winner,
+        uint256 winningBid
+    );
+
     event PrimeSpotDefaultSet(uint8 indexed spotId, uint256 indexed bungalowId);
     event RefundClaimed(address indexed user, uint256 amount);
     event BurnModeToggled(bool burnMode);
@@ -252,6 +266,13 @@ contract JungleBayIslandV6 is ReentrancyGuard, Ownable {
         address indexed newCustodian
     );
 
+    event LagoonRewardsDistributed(
+        uint256 indexed bungalowId,
+        address indexed token,
+        uint256 recipientCount,
+        uint256 totalAmount
+    );
+
     // ═══════════════════════════════════════════════════════════════════════════════════════════
     //                                         ERRORS
     // ═══════════════════════════════════════════════════════════════════════════════════════════
@@ -260,8 +281,6 @@ contract JungleBayIslandV6 is ReentrancyGuard, Ownable {
     error NameTooLong();
     error BungalowNotFound();
     error BungalowAlreadyExists();
-    error InsufficientBalance();
-    error InsufficientAllowance();
     error ZeroAddress();
     error NotBungalowOwner();
     error BungalowNotActive();
@@ -276,6 +295,12 @@ contract JungleBayIslandV6 is ReentrancyGuard, Ownable {
     error NotVerifiedAdmin();
     error InsufficientLagoonBalance();
     error ZeroAmount();
+    error ExceedsWithdrawableBalance();
+    error AuctionNotEnded();
+    error InsufficientHeat();
+    error CannotSelfOutbid();
+    error LimitTooHigh();
+    error ArrayLengthMismatch();
 
     // ═══════════════════════════════════════════════════════════════════════════════════════════
     //                                       CONSTRUCTOR
@@ -310,6 +335,7 @@ contract JungleBayIslandV6 is ReentrancyGuard, Ownable {
      * @param name Display name for the bungalow
      * @param jbmAmount Amount of JBM to pay
      * @param nativeTokenAmount Amount of the native token to pay
+     * @param daimoPaymentId Off-chain Daimo Pay payment ID (empty string if not applicable)
      * @param signature Bayla's signature authorizing this claim
      * @param deadline Signature expiry timestamp
      */
@@ -319,9 +345,10 @@ contract JungleBayIslandV6 is ReentrancyGuard, Ownable {
         string calldata name,
         uint256 jbmAmount,
         uint256 nativeTokenAmount,
+        string calldata daimoPaymentId,
         bytes calldata signature,
         uint256 deadline
-    ) external nonReentrant returns (uint256) {
+    ) external nonReentrant whenNotPaused returns (uint256) {
         if (tokenAddress == address(0)) revert ZeroAddress();
         if (bytes(ipfsHash).length == 0) revert EmptyString();
         if (bytes(name).length == 0) revert EmptyString();
@@ -329,7 +356,7 @@ contract JungleBayIslandV6 is ReentrancyGuard, Ownable {
         if (bungalowByToken[tokenAddress] != 0) revert BungalowAlreadyExists();
         if (block.timestamp > deadline) revert SignatureExpired();
 
-        // Verify Bayla's signature
+        // Verify Bayla's signature (includes address(this) to prevent cross-contract replay)
         bytes32 messageHash = keccak256(abi.encodePacked(
             "claimBungalow",
             msg.sender,
@@ -338,8 +365,10 @@ contract JungleBayIslandV6 is ReentrancyGuard, Ownable {
             name,
             jbmAmount,
             nativeTokenAmount,
+            daimoPaymentId,
             deadline,
-            block.chainid
+            block.chainid,
+            address(this)
         ));
 
         bytes32 ethSignedHash = messageHash.toEthSignedMessageHash();
@@ -349,8 +378,6 @@ contract JungleBayIslandV6 is ReentrancyGuard, Ownable {
 
         // Handle JBM payment -> treasury via _handlePayment (burn/hodl)
         if (jbmAmount > 0) {
-            if (jbmToken.balanceOf(msg.sender) < jbmAmount) revert InsufficientBalance();
-            if (jbmToken.allowance(msg.sender, address(this)) < jbmAmount) revert InsufficientAllowance();
             jbmToken.safeTransferFrom(msg.sender, address(this), jbmAmount);
             _handlePayment(address(jbmToken), jbmAmount);
         }
@@ -359,8 +386,6 @@ contract JungleBayIslandV6 is ReentrancyGuard, Ownable {
         uint256 actualNativeDeposit;
         if (nativeTokenAmount > 0) {
             IERC20 nativeToken = IERC20(tokenAddress);
-            if (nativeToken.balanceOf(msg.sender) < nativeTokenAmount) revert InsufficientBalance();
-            if (nativeToken.allowance(msg.sender, address(this)) < nativeTokenAmount) revert InsufficientAllowance();
 
             uint256 balanceBefore = nativeToken.balanceOf(address(this));
             nativeToken.safeTransferFrom(msg.sender, address(this), nativeTokenAmount);
@@ -397,7 +422,8 @@ contract JungleBayIslandV6 is ReentrancyGuard, Ownable {
             active: true,
             isVerifiedClaimed: senderIsAdmin,
             jbmPaid: jbmAmount,
-            nativeTokenPaid: nativeTokenAmount
+            nativeTokenPaid: actualNativeDeposit,
+            daimoPaymentId: daimoPaymentId
         });
 
         bungalowByToken[tokenAddress] = bungalowId;
@@ -446,7 +472,7 @@ contract JungleBayIslandV6 is ReentrancyGuard, Ownable {
         uint256 nativeTokenAmount,
         bytes calldata signature,
         uint256 deadline
-    ) external nonReentrant {
+    ) external nonReentrant whenNotPaused {
         Bungalow storage b = bungalows[bungalowId];
         if (b.id == 0) revert BungalowNotFound();
         if (b.isVerifiedClaimed) revert AlreadyVerifiedClaimed();
@@ -457,7 +483,7 @@ contract JungleBayIslandV6 is ReentrancyGuard, Ownable {
         address tokenAdmin = IClankerToken(b.tokenAddress).admin();
         if (msg.sender != tokenAdmin) revert NotTokenAdmin();
 
-        // Verify Bayla's signature
+        // Verify Bayla's signature (includes address(this) to prevent cross-contract replay)
         bytes32 messageHash = keccak256(abi.encodePacked(
             "adminClaimBungalow",
             msg.sender,
@@ -466,7 +492,8 @@ contract JungleBayIslandV6 is ReentrancyGuard, Ownable {
             jbmAmount,
             nativeTokenAmount,
             deadline,
-            block.chainid
+            block.chainid,
+            address(this)
         ));
 
         bytes32 ethSignedHash = messageHash.toEthSignedMessageHash();
@@ -478,16 +505,12 @@ contract JungleBayIslandV6 is ReentrancyGuard, Ownable {
 
         // Admin's JBM -> sent directly to original claimer
         if (jbmAmount > 0) {
-            if (jbmToken.balanceOf(msg.sender) < jbmAmount) revert InsufficientBalance();
-            if (jbmToken.allowance(msg.sender, address(this)) < jbmAmount) revert InsufficientAllowance();
             jbmToken.safeTransferFrom(msg.sender, claimer, jbmAmount);
         }
 
         // Admin's native token -> sent directly to original claimer
         if (nativeTokenAmount > 0) {
             IERC20 nativeToken = IERC20(b.tokenAddress);
-            if (nativeToken.balanceOf(msg.sender) < nativeTokenAmount) revert InsufficientBalance();
-            if (nativeToken.allowance(msg.sender, address(this)) < nativeTokenAmount) revert InsufficientAllowance();
             nativeToken.safeTransferFrom(msg.sender, claimer, nativeTokenAmount);
         }
 
@@ -528,9 +551,10 @@ contract JungleBayIslandV6 is ReentrancyGuard, Ownable {
         string calldata newIpfsHash,
         bytes calldata signature,
         uint256 deadline
-    ) external nonReentrant {
+    ) external nonReentrant whenNotPaused {
         Bungalow storage b = bungalows[bungalowId];
         if (b.id == 0) revert BungalowNotFound();
+        if (!b.active) revert BungalowNotActive();
         if (block.timestamp > deadline) revert SignatureExpired();
         if (bytes(newIpfsHash).length == 0) revert EmptyString();
 
@@ -541,6 +565,7 @@ contract JungleBayIslandV6 is ReentrancyGuard, Ownable {
 
         uint256 currentNonce = bungalowNonces[bungalowId];
 
+        // Includes address(this) to prevent cross-contract replay
         bytes32 messageHash = keccak256(abi.encodePacked(
             "updateContent",
             bungalowId,
@@ -548,7 +573,8 @@ contract JungleBayIslandV6 is ReentrancyGuard, Ownable {
             newIpfsHash,
             currentNonce,
             deadline,
-            block.chainid
+            block.chainid,
+            address(this)
         ));
 
         bytes32 ethSignedHash = messageHash.toEthSignedMessageHash();
@@ -577,7 +603,7 @@ contract JungleBayIslandV6 is ReentrancyGuard, Ownable {
      * @dev If verified: only verifiedAdmin can transfer. If not: only currentOwner.
      *      Transfer changes currentOwner but NOT verifiedAdmin.
      */
-    function transferBungalowOwnership(uint256 bungalowId, address newOwner) external {
+    function transferBungalowOwnership(uint256 bungalowId, address newOwner) external whenNotPaused {
         Bungalow storage b = bungalows[bungalowId];
         if (b.id == 0) revert BungalowNotFound();
         if (newOwner == address(0)) revert ZeroAddress();
@@ -609,8 +635,10 @@ contract JungleBayIslandV6 is ReentrancyGuard, Ownable {
         uint256 bungalowId,
         address token,
         uint256 amount
-    ) external nonReentrant {
-        if (bungalows[bungalowId].id == 0) revert BungalowNotFound();
+    ) external nonReentrant whenNotPaused {
+        Bungalow storage b = bungalows[bungalowId];
+        if (b.id == 0) revert BungalowNotFound();
+        if (!b.active) revert BungalowNotActive();
         if (amount == 0) revert ZeroAmount();
         if (token == address(0)) revert ZeroAddress();
 
@@ -627,7 +655,8 @@ contract JungleBayIslandV6 is ReentrancyGuard, Ownable {
 
     /**
      * @notice Withdraw ERC20 tokens from a bungalow's lagoon pool.
-     * @dev Owner-only. CEI pattern: state updates before transfer.
+     * @dev Access control: if verified, only verifiedAdmin; else only currentOwner.
+     *      CEI pattern: state updates before transfer.
      * @param bungalowId The bungalow to withdraw from
      * @param token The ERC20 token to withdraw
      * @param amount The amount to withdraw
@@ -643,7 +672,14 @@ contract JungleBayIslandV6 is ReentrancyGuard, Ownable {
         if (b.id == 0) revert BungalowNotFound();
         if (amount == 0) revert ZeroAmount();
         if (recipient == address(0)) revert ZeroAddress();
-        if (msg.sender != b.currentOwner) revert NotBungalowOwner();
+
+        // Access control: matches verified/unverified pattern
+        if (b.isVerifiedClaimed) {
+            if (msg.sender != b.verifiedAdmin) revert NotVerifiedAdmin();
+        } else {
+            if (msg.sender != b.currentOwner) revert NotBungalowOwner();
+        }
+
         if (lagoonDeposits[bungalowId][token] < amount) revert InsufficientLagoonBalance();
 
         // CEI: decrement balance before transfer
@@ -653,6 +689,56 @@ contract JungleBayIslandV6 is ReentrancyGuard, Ownable {
         IERC20(token).safeTransfer(recipient, amount);
 
         emit LagoonWithdrawal(bungalowId, token, recipient, amount);
+    }
+
+    /**
+     * @notice Distribute lagoon rewards to multiple recipients in a single call.
+     * @dev Access control: matches verified/unverified pattern. Gas-capped at 200 recipients.
+     * @param bungalowId The bungalow whose lagoon pool to distribute from
+     * @param token The ERC20 token to distribute
+     * @param recipients Array of recipient addresses
+     * @param amounts Array of amounts corresponding to each recipient
+     */
+    function distributeLagoonRewards(
+        uint256 bungalowId,
+        address token,
+        address[] calldata recipients,
+        uint256[] calldata amounts
+    ) external nonReentrant whenNotPaused {
+        Bungalow storage b = bungalows[bungalowId];
+        if (b.id == 0) revert BungalowNotFound();
+
+        // Access control: matches verified/unverified pattern
+        if (b.isVerifiedClaimed) {
+            if (msg.sender != b.verifiedAdmin) revert NotVerifiedAdmin();
+        } else {
+            if (msg.sender != b.currentOwner) revert NotBungalowOwner();
+        }
+
+        if (recipients.length != amounts.length) revert ArrayLengthMismatch();
+        if (recipients.length == 0) revert ZeroAmount();
+        if (recipients.length > 200) revert LimitTooHigh(); // gas safety cap
+
+        uint256 totalAmount;
+        for (uint256 i = 0; i < amounts.length; i++) {
+            totalAmount += amounts[i];
+        }
+
+        if (lagoonDeposits[bungalowId][token] < totalAmount) revert InsufficientLagoonBalance();
+
+        // CEI: decrement total before transfers
+        lagoonDeposits[bungalowId][token] -= totalAmount;
+        totalLagoonDeposits[token] -= totalAmount;
+
+        IERC20 rewardToken = IERC20(token);
+        for (uint256 i = 0; i < recipients.length; i++) {
+            if (recipients[i] == address(0)) revert ZeroAddress();
+            if (amounts[i] > 0) {
+                rewardToken.safeTransfer(recipients[i], amounts[i]);
+            }
+        }
+
+        emit LagoonRewardsDistributed(bungalowId, token, recipients.length, totalAmount);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════════════════
@@ -666,7 +752,7 @@ contract JungleBayIslandV6 is ReentrancyGuard, Ownable {
         uint8 spotId,
         uint256 bungalowId,
         uint256 bidAmount
-    ) external nonReentrant {
+    ) external nonReentrant whenNotPaused {
         if (spotId >= PRIME_SPOTS_COUNT) revert InvalidSpotId();
 
         Bungalow storage b = bungalows[bungalowId];
@@ -680,6 +766,7 @@ contract JungleBayIslandV6 is ReentrancyGuard, Ownable {
         if (spot.auctionStart == 0 || block.timestamp > spot.auctionStart + AUCTION_DURATION) {
             if (spot.bungalowId != 0 && spot.bidAmount > 0) {
                 // Finalize previous auction
+                totalActiveBids -= spot.bidAmount;
                 _handlePayment(address(jbmToken), spot.bidAmount);
                 emit PrimeSpotWon(spotId, spot.bungalowId, spot.bidder, spot.bidAmount);
             }
@@ -690,17 +777,18 @@ contract JungleBayIslandV6 is ReentrancyGuard, Ownable {
         }
 
         if (bidAmount <= spot.bidAmount) revert BidTooLow();
+        if (msg.sender == spot.bidder) revert CannotSelfOutbid();
 
-        // Refund previous bidder
+        // Refund previous bidder — moves from active bids to pending refunds
         if (spot.bidder != address(0) && spot.bidAmount > 0) {
+            totalActiveBids -= spot.bidAmount;
             pendingRefunds[spot.bidder] += spot.bidAmount;
+            totalPendingRefunds += spot.bidAmount;
         }
 
         // Transfer new bid
-        if (jbmToken.balanceOf(msg.sender) < bidAmount) revert InsufficientBalance();
-        if (jbmToken.allowance(msg.sender, address(this)) < bidAmount) revert InsufficientAllowance();
-
         jbmToken.safeTransferFrom(msg.sender, address(this), bidAmount);
+        totalActiveBids += bidAmount;
 
         spot.bungalowId = bungalowId;
         spot.bidder = msg.sender;
@@ -716,6 +804,34 @@ contract JungleBayIslandV6 is ReentrancyGuard, Ownable {
     }
 
     /**
+     * @notice Finalize an auction after the auction period has ended.
+     * @dev Anyone can call. Processes the winning bid payment and resets for next cycle.
+     * @param spotId The prime spot to finalize
+     */
+    function finalizeAuction(uint8 spotId) external nonReentrant whenNotPaused {
+        if (spotId >= PRIME_SPOTS_COUNT) revert InvalidSpotId();
+
+        PrimeSpot storage spot = primeSpots[spotId];
+        if (spot.auctionStart == 0) revert AuctionNotEnded();
+        if (block.timestamp <= spot.auctionStart + AUCTION_DURATION) revert AuctionNotEnded();
+
+        if (spot.bungalowId != 0 && spot.bidAmount > 0) {
+            totalActiveBids -= spot.bidAmount;
+            _handlePayment(address(jbmToken), spot.bidAmount);
+
+            emit AuctionFinalized(spotId, spot.bungalowId, spot.bidder, spot.bidAmount);
+            emit PrimeSpotWon(spotId, spot.bungalowId, spot.bidder, spot.bidAmount);
+        }
+
+        // Reset auction state for next cycle (winner's bungalowId persists)
+        uint256 winnerBungalowId = spot.bungalowId;
+        spot.auctionStart = 0;
+        spot.bidAmount = 0;
+        spot.bidder = address(0);
+        spot.bungalowId = winnerBungalowId;
+    }
+
+    /**
      * @notice Claim refund from being outbid
      */
     function claimRefund() external nonReentrant {
@@ -723,6 +839,8 @@ contract JungleBayIslandV6 is ReentrancyGuard, Ownable {
         if (refundAmount == 0) revert NoRefundAvailable();
 
         pendingRefunds[msg.sender] = 0;
+        totalPendingRefunds -= refundAmount;
+
         jbmToken.safeTransfer(msg.sender, refundAmount);
 
         emit RefundClaimed(msg.sender, refundAmount);
@@ -765,12 +883,12 @@ contract JungleBayIslandV6 is ReentrancyGuard, Ownable {
             }
 
             if (displayBungalowId != 0) {
-                Bungalow memory b = bungalows[displayBungalowId];
+                Bungalow memory bung = bungalows[displayBungalowId];
                 displayData[i] = PrimeDisplayInfo({
                     bungalowId: displayBungalowId,
-                    tokenAddress: b.tokenAddress,
-                    ipfsHash: b.ipfsHash,
-                    name: b.name,
+                    tokenAddress: bung.tokenAddress,
+                    ipfsHash: bung.ipfsHash,
+                    name: bung.name,
                     isAuctionWinner: isWinner,
                     currentBid: spot.bidAmount,
                     auctionEnds: spot.auctionStart > 0 ? spot.auctionStart + AUCTION_DURATION : 0
@@ -812,6 +930,27 @@ contract JungleBayIslandV6 is ReentrancyGuard, Ownable {
 
     function getBungalowIdByToken(address tokenAddress) external view returns (uint256) {
         return bungalowByToken[tokenAddress];
+    }
+
+    /**
+     * @notice Get multiple bungalows in a single call.
+     * @param offset Starting index (0-indexed, maps to bungalow ID offset+1)
+     * @param limit Maximum number of bungalows to return (capped at 100)
+     * @return result Array of Bungalow structs
+     */
+    function getBungalows(uint256 offset, uint256 limit) external view returns (Bungalow[] memory result) {
+        if (limit > 100) revert LimitTooHigh();
+        if (offset >= bungalowCount) {
+            return new Bungalow[](0);
+        }
+
+        uint256 remaining = bungalowCount - offset;
+        uint256 count = limit < remaining ? limit : remaining;
+
+        result = new Bungalow[](count);
+        for (uint256 i = 0; i < count; i++) {
+            result[i] = bungalows[offset + 1 + i];
+        }
     }
 
     function getPrimeSpot(uint8 spotId) external view returns (PrimeSpot memory) {
@@ -859,16 +998,18 @@ contract JungleBayIslandV6 is ReentrancyGuard, Ownable {
 
     /**
      * @notice Send a message to a bungalow's chat
+     * @dev Requires sender to have non-zero heat
      */
     function sendMessage(
         uint256 bungalowId,
         string calldata text,
         bytes calldata data
-    ) external nonReentrant {
+    ) external nonReentrant whenNotPaused {
         Bungalow storage b = bungalows[bungalowId];
         if (b.id == 0) revert BungalowNotFound();
         if (!b.active) revert BungalowNotActive();
         if (bytes(text).length == 0) revert EmptyString();
+        if (getHeat(msg.sender) == 0) revert InsufficientHeat();
 
         string memory topic = getTopic(b.tokenAddress);
 
@@ -925,7 +1066,34 @@ contract JungleBayIslandV6 is ReentrancyGuard, Ownable {
         emit BungalowStatusChanged(bungalowId, active);
     }
 
+    /// @notice Pause all state-changing functions
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    /// @notice Unpause all state-changing functions
+    function unpause() external onlyOwner {
+        _unpause();
+    }
+
+    /**
+     * @notice Emergency withdraw tokens to treasury, protecting lagoon deposits, pending refunds, and active bids.
+     * @dev For JBM: withdrawable = balance - totalLagoonDeposits[jbm] - totalPendingRefunds - totalActiveBids
+     *      For other tokens: withdrawable = balance - totalLagoonDeposits[token]
+     */
     function emergencyWithdraw(address token, uint256 amount) external onlyOwner {
+        uint256 balance = IERC20(token).balanceOf(address(this));
+        uint256 reserved = totalLagoonDeposits[token];
+
+        // JBM also has pending refunds and active auction bids reserved
+        if (token == address(jbmToken)) {
+            reserved += totalPendingRefunds;
+            reserved += totalActiveBids;
+        }
+
+        uint256 withdrawable = balance > reserved ? balance - reserved : 0;
+        if (amount > withdrawable) revert ExceedsWithdrawableBalance();
+
         IERC20(token).safeTransfer(treasury, amount);
     }
 

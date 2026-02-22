@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import type { ReactNode } from 'react';
-import { useIdentityToken, usePrivy, useWallets } from '@privy-io/react-auth';
+import { useCreateWallet, useIdentityToken, usePrivy, useWallets } from '@privy-io/react-auth';
 import { apiFetch } from '../lib/api';
 import type { Tier } from '../lib/types';
 
@@ -57,15 +57,34 @@ export function useProfile() {
 }
 
 export function ProfileProvider({ children }: { children: ReactNode }) {
-  const { authenticated } = usePrivy();
+  const { authenticated, user: privyUser } = usePrivy();
   const { identityToken } = useIdentityToken();
   const { wallets } = useWallets();
   const walletAddress = wallets.find((w: { address?: string }) => !!w.address)?.address;
+  const { createWallet: createEthWallet } = useCreateWallet();
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSettingUp, setIsSettingUp] = useState(false);
   const [hasInitialized, setHasInitialized] = useState(false);
+
+  // Log Privy state changes
+  useEffect(() => {
+    console.log('[PRIVY] authenticated:', authenticated);
+    console.log('[PRIVY] user:', privyUser);
+    console.log('[PRIVY] identityToken:', identityToken ? `${identityToken.slice(0, 30)}...` : null);
+    console.log('[PRIVY] wallets:', wallets.map((w: any) => ({ address: w.address, type: w.walletClientType, chain: w.chainId })));
+    console.log('[PRIVY] walletAddress (selected):', walletAddress);
+  }, [authenticated, privyUser, identityToken, wallets, walletAddress]);
+
+  // Auto-create embedded wallet for users who logged in before createOnLogin was enabled
+  useEffect(() => {
+    if (!authenticated || walletAddress) return;
+    console.log('[PRIVY] No wallet found, attempting to create embedded wallet...');
+    createEthWallet().catch(() => {
+      // Wallet may already exist or creation unsupported — ignore
+    });
+  }, [authenticated, walletAddress, createEthWallet]);
 
   // Fresh fetch of profile data (no setup, just read)
   const refetch = useCallback(async () => {
@@ -73,15 +92,17 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     const token = identityToken;
     if (!token) return;
 
+    console.log('[PROFILE] refetch starting...');
     setIsLoading(true);
     try {
       const user = await apiFetch<UserProfile>('/api/me', {
         accessToken: token,
         walletAddress,
       });
+      console.log('[PROFILE] refetch result:', user);
       setProfile(user);
-    } catch {
-      // keep existing profile on error
+    } catch (err) {
+      console.error('[PROFILE] refetch error:', err);
     } finally {
       setIsLoading(false);
     }
@@ -93,6 +114,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     const token = identityToken;
     if (!token) return;
 
+    console.log('[PROFILE] initialize (setup) starting...', { walletAddress });
     setIsSettingUp(true);
     try {
       const result = await apiFetch<UserProfile>('/api/me/setup', {
@@ -100,17 +122,20 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         accessToken: token,
         walletAddress,
       });
+      console.log('[PROFILE] setup result:', result);
       setProfile(result);
-    } catch {
+    } catch (err) {
+      console.error('[PROFILE] setup error:', err);
       // Setup failed — try a plain fetch as fallback
       try {
         const user = await apiFetch<UserProfile>('/api/me', {
           accessToken: token,
           walletAddress,
         });
+        console.log('[PROFILE] fallback /api/me result:', user);
         setProfile(user);
-      } catch {
-        // Nothing works — profile stays null
+      } catch (err2) {
+        console.error('[PROFILE] fallback /api/me error:', err2);
       }
     } finally {
       setIsSettingUp(false);
@@ -119,11 +144,12 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   }, [authenticated, identityToken, walletAddress]);
 
   useEffect(() => {
+    console.log('[PROFILE] init effect:', { authenticated, walletAddress: !!walletAddress, hasInitialized, identityToken: !!identityToken });
     if (authenticated && walletAddress && !hasInitialized) {
       if (identityToken) {
         initialize();
       } else {
-        // Keep profile UI accessible while waiting for token propagation.
+        console.log('[PROFILE] authenticated + wallet but no identityToken yet, marking initialized');
         setHasInitialized(true);
       }
     }
@@ -135,6 +161,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (authenticated && walletAddress && identityToken && hasInitialized && !profile) {
+      console.log('[PROFILE] has token + initialized but no profile, triggering refetch');
       void refetch();
     }
   }, [authenticated, walletAddress, identityToken, hasInitialized, profile, refetch]);

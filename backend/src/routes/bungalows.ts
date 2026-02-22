@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { getBungalowsDirectory, getGlobalBulletinFeed } from '../db/queries'
+import { getBungalowsDirectory, getGlobalBulletinFeed, getRecentActivity } from '../db/queries'
 import { logInfo } from '../services/logger'
 
 const bungalowsRoute = new Hono()
@@ -42,6 +42,15 @@ bungalowsRoute.get('/feed', async (c) => {
   const { posts, total } = await getGlobalBulletinFeed(limit, offset)
 
   return c.json({ posts, total })
+})
+
+bungalowsRoute.get('/activity', async (c) => {
+  const limitRaw = Number.parseInt(c.req.query('limit') ?? '20', 10)
+  const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 50) : 20
+
+  const events = await getRecentActivity(limit)
+
+  return c.json({ events })
 })
 
 export default bungalowsRoute

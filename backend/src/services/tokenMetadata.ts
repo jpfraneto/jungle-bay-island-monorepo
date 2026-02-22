@@ -2,6 +2,7 @@ import type { SupportedChain } from '../config'
 import { getBungalow } from '../db/queries'
 import { getCached, setCached } from './cache'
 import { fetchDexScreenerData } from './dexscreener'
+import { fetchSolanaTokenMetadata } from './solanaMetadata'
 
 const TOKEN_METADATA_CACHE_MS = 30 * 60 * 1000
 
@@ -61,10 +62,14 @@ export async function resolveTokenMetadata(
   const needsDexFallback = !bungalow || !bungalow.name || !bungalow.symbol || !bungalow.image_url
   const dexData = needsDexFallback ? await fetchDexScreenerData(tokenAddress, chain) : null
 
-  const name = bungalow?.name ?? dexData?.tokenName ?? null
-  const symbol = bungalow?.symbol ?? dexData?.tokenSymbol ?? null
-  const description = bungalow?.description ?? fallbackDescription(chain, tokenAddress, name, symbol)
-  const image_url = bungalow?.image_url ?? dexData?.imageUrl ?? null
+  // For Solana tokens, try on-chain metadata if DexScreener had nothing useful
+  const needsSolanaFallback = chain === 'solana' && needsDexFallback && (!dexData?.tokenName || !dexData?.imageUrl)
+  const solMeta = needsSolanaFallback ? await fetchSolanaTokenMetadata(tokenAddress) : null
+
+  const name = bungalow?.name ?? dexData?.tokenName ?? solMeta?.name ?? null
+  const symbol = bungalow?.symbol ?? dexData?.tokenSymbol ?? solMeta?.symbol ?? null
+  const description = bungalow?.description ?? solMeta?.description ?? fallbackDescription(chain, tokenAddress, name, symbol)
+  const image_url = bungalow?.image_url ?? dexData?.imageUrl ?? solMeta?.image ?? null
 
   const market_data = bungalow?.price_usd || bungalow?.market_cap || dexData?.priceUsd || dexData?.marketCap
     ? {
@@ -85,10 +90,10 @@ export async function resolveTokenMetadata(
     image_url,
     market_data,
     links: {
-      x: bungalow?.link_x ?? dexData?.linkX ?? null,
+      x: bungalow?.link_x ?? dexData?.linkX ?? solMeta?.twitter ?? null,
       farcaster: bungalow?.link_farcaster ?? null,
       telegram: bungalow?.link_telegram ?? dexData?.linkTelegram ?? null,
-      website: bungalow?.link_website ?? dexData?.linkWebsite ?? null,
+      website: bungalow?.link_website ?? dexData?.linkWebsite ?? solMeta?.website ?? null,
       dexscreener: bungalow?.link_dexscreener ?? dexData?.linkDexscreener ?? null,
     },
   }

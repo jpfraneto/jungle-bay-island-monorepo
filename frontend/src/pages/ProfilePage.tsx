@@ -5,6 +5,7 @@ import { Navigate } from 'react-router-dom';
 import { HeatBadge } from '../components/common/HeatBadge';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import { useProfile } from '../contexts/ProfileContext';
+import { useXProfile } from '../hooks/useXProfile';
 import { tierLabel } from '../lib/heat';
 import { formatHeat, truncateAddress } from '../lib/format';
 import type { Tier } from '../lib/types';
@@ -32,8 +33,14 @@ export function ProfilePage() {
     setIsRefreshing(false);
   };
 
+  const xProfile = useXProfile();
   const farcaster = profile?.farcaster;
   const hasFarcaster = Boolean(farcaster?.fid);
+
+  // Use Farcaster data if available, fall back to X profile from Privy
+  const displayName = farcaster?.display_name || farcaster?.username || xProfile?.name || xProfile?.username || 'Anonymous';
+  const displayUsername = farcaster?.username || xProfile?.username;
+  const displayPfp = farcaster?.pfp_url || xProfile?.profilePictureUrl;
   const walletEntries = (profile?.wallet_map?.length
     ? profile.wallet_map
     : (profile?.connected_wallets ?? [profile?.wallet].filter((address): address is string => Boolean(address))).map((address) => ({
@@ -66,16 +73,16 @@ export function ProfilePage() {
         {/* Profile info */}
         <div className="flex flex-col items-center gap-3 sm:flex-row sm:items-start sm:gap-4">
           <img
-            src={farcaster?.pfp_url || 'https://placehold.co/80x80/0d2118/ffffff?text=?'}
-            alt={farcaster?.username || 'Profile'}
+            src={displayPfp || 'https://placehold.co/80x80/0d2118/ffffff?text=?'}
+            alt={displayUsername || 'Profile'}
             className="h-16 w-16 rounded-full border-2 border-jungle-600 object-cover sm:h-20 sm:w-20"
           />
           <div className="flex-1 text-center sm:text-left">
             <h1 className="font-display text-lg font-semibold text-zinc-100 sm:text-xl">
-              {farcaster?.display_name || farcaster?.username || 'Anonymous'}
+              {displayName}
             </h1>
-            {farcaster?.username && (
-              <p className="text-sm text-zinc-400">@{farcaster.username}</p>
+            {displayUsername && (
+              <p className="text-sm text-zinc-400">@{displayUsername}</p>
             )}
             <div className="mt-2 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
               <HeatBadge heat={profile?.island_heat ?? 0} tier={(profile?.tier ?? 'drifter') as Tier} />

@@ -1,6 +1,6 @@
 export interface TokenRegistryRow {
   token_address: string
-  chain: 'base' | 'ethereum'
+  chain: 'base' | 'ethereum' | 'solana'
   name: string | null
   symbol: string | null
   decimals: number | null
@@ -17,7 +17,7 @@ export interface TokenRegistryRow {
 
 export interface BungalowRow {
   token_address: string
-  chain: 'base' | 'ethereum'
+  chain: 'base' | 'ethereum' | 'solana'
   name: string | null
   symbol: string | null
   ipfs_hash: string | null
@@ -79,7 +79,7 @@ export interface FidIslandProfileRow {
 export interface ScanLogRow {
   id: number
   token_address: string
-  chain: 'base' | 'ethereum'
+  chain: 'base' | 'ethereum' | 'solana'
   requested_by: string
   requester_fid: number | null
   requester_tier: string | null
@@ -98,7 +98,7 @@ export interface ScanLogRow {
 
 export interface BungalowSceneRow {
   id: number
-  chain: 'base' | 'ethereum'
+  chain: 'base' | 'ethereum' | 'solana'
   contract_address: string
   scene_config: unknown
   updated_at: string

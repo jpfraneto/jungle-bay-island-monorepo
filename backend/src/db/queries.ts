@@ -111,33 +111,52 @@ export async function getBungalow(tokenAddress: string, chain: string): Promise<
   return rows[0] ?? null
 }
 
+const TIER_THRESHOLDS: Record<string, string> = {
+  Elder: 'COALESCE(wfp.island_heat, 0) >= 250',
+  Builder: 'COALESCE(wfp.island_heat, 0) >= 150 AND COALESCE(wfp.island_heat, 0) < 250',
+  Resident: 'COALESCE(wfp.island_heat, 0) >= 80 AND COALESCE(wfp.island_heat, 0) < 150',
+  Observer: 'COALESCE(wfp.island_heat, 0) >= 30 AND COALESCE(wfp.island_heat, 0) < 80',
+  Drifter: '(wfp.island_heat IS NULL OR wfp.island_heat < 30)',
+}
+
+export const VALID_TIERS = Object.keys(TIER_THRESHOLDS)
+
 export async function getTokenHolders(
   tokenAddress: string,
   limit: number,
   offset: number,
+  tier?: string,
 ): Promise<{ holders: TokenHolderRow[]; total: number }> {
-  const holders = await db<TokenHolderRow[]>`
-    SELECT
+  const tierClause = tier && TIER_THRESHOLDS[tier] ? `AND ${TIER_THRESHOLDS[tier]}` : ''
+
+  const holders = await db.unsafe<TokenHolderRow[]>(
+    `SELECT
       thh.wallet,
       thh.heat_degrees,
       wfp.island_heat,
       wfp.fid,
       wfp.username,
       wfp.pfp_url
-    FROM ${db(CONFIG.SCHEMA)}.token_holder_heat thh
-    LEFT JOIN ${db(CONFIG.SCHEMA)}.wallet_farcaster_profiles wfp
+    FROM "${CONFIG.SCHEMA}".token_holder_heat thh
+    LEFT JOIN "${CONFIG.SCHEMA}".wallet_farcaster_profiles wfp
       ON wfp.wallet = thh.wallet
-    WHERE thh.token_address = ${tokenAddress}
+    WHERE thh.token_address = $1
+    ${tierClause}
     ORDER BY thh.heat_degrees DESC
-    LIMIT ${limit}
-    OFFSET ${offset}
-  `
+    LIMIT $2
+    OFFSET $3`,
+    [tokenAddress, limit, offset],
+  )
 
-  const totalRows = await db<{ cnt: string }[]>`
-    SELECT COUNT(*)::text AS cnt
-    FROM ${db(CONFIG.SCHEMA)}.token_holder_heat
-    WHERE token_address = ${tokenAddress}
-  `
+  const totalRows = await db.unsafe<{ cnt: string }[]>(
+    `SELECT COUNT(*)::text AS cnt
+    FROM "${CONFIG.SCHEMA}".token_holder_heat thh
+    LEFT JOIN "${CONFIG.SCHEMA}".wallet_farcaster_profiles wfp
+      ON wfp.wallet = thh.wallet
+    WHERE thh.token_address = $1
+    ${tierClause}`,
+    [tokenAddress],
+  )
 
   return {
     holders,
@@ -655,7 +674,7 @@ export async function getUserByWallet(wallet: string): Promise<{
     display_name: string | null
     pfp_url: string | null
   } | null
-  token_breakdown: Array<{ token: string; token_name: string; heat_degrees: number }>
+  token_breakdown: Array<{ token: string; token_name: string; token_symbol: string | null; chain: string | null; heat_degrees: number }>
   scans: Array<{ chain: string; token_address: string; scanned_at: string }>
 } | null> {
   const profileRows = await db<Array<{
@@ -687,10 +706,12 @@ export async function getUserByWallet(wallet: string): Promise<{
     LIMIT 1
   `
 
-  const tokenRows = await db<Array<{ token: string; token_name: string | null; heat_degrees: string }>>`
+  const tokenRows = await db<Array<{ token: string; token_name: string | null; token_symbol: string | null; chain: string | null; heat_degrees: string }>>`
     SELECT
       thh.token_address AS token,
       tr.name AS token_name,
+      tr.symbol AS token_symbol,
+      tr.chain,
       thh.heat_degrees::text AS heat_degrees
     FROM ${db(CONFIG.SCHEMA)}.token_holder_heat thh
     LEFT JOIN ${db(CONFIG.SCHEMA)}.token_registry tr
@@ -738,6 +759,8 @@ export async function getUserByWallet(wallet: string): Promise<{
     token_breakdown: tokenRows.map((row) => ({
       token: row.token,
       token_name: row.token_name ?? row.token,
+      token_symbol: row.token_symbol ?? null,
+      chain: row.chain ?? null,
       heat_degrees: Number(row.heat_degrees),
     })),
     scans: scanRows,
@@ -1457,6 +1480,55 @@ export async function getAgentByKeyHash(apiKeyHash: string): Promise<AgentRow | 
   `
 
   return rows[0]
+}
+
+export interface ActivityEvent {
+  type: 'post' | 'scan'
+  timestamp: string
+  chain: string
+  token_address: string
+  token_name: string | null
+  username: string | null
+  detail: string | null
+}
+
+export async function getRecentActivity(limit: number = 20): Promise<ActivityEvent[]> {
+  const rows = await db<ActivityEvent[]>`
+    (
+      SELECT
+        'post' AS type,
+        bp.created_at::text AS timestamp,
+        bp.chain,
+        bp.token_address,
+        b.name AS token_name,
+        wfp.username,
+        LEFT(bp.content, 80) AS detail
+      FROM ${db(CONFIG.SCHEMA)}.bulletin_posts bp
+      LEFT JOIN ${db(CONFIG.SCHEMA)}.bungalows b ON b.token_address = bp.token_address
+      LEFT JOIN ${db(CONFIG.SCHEMA)}.wallet_farcaster_profiles wfp ON wfp.wallet = bp.wallet
+      ORDER BY bp.created_at DESC
+      LIMIT ${limit}
+    )
+    UNION ALL
+    (
+      SELECT
+        'scan' AS type,
+        sl.completed_at::text AS timestamp,
+        sl.chain,
+        sl.token_address,
+        tr.name AS token_name,
+        NULL AS username,
+        sl.holders_found::text AS detail
+      FROM ${db(CONFIG.SCHEMA)}.scan_log sl
+      LEFT JOIN ${db(CONFIG.SCHEMA)}.token_registry tr ON tr.token_address = sl.token_address
+      WHERE sl.scan_status = 'complete' AND sl.completed_at IS NOT NULL
+      ORDER BY sl.completed_at DESC
+      LIMIT ${limit}
+    )
+    ORDER BY timestamp DESC
+    LIMIT ${limit}
+  `
+  return rows
 }
 
 export async function getCustomBungalow(tokenAddress: string, chain: string): Promise<{ html: string } | null> {

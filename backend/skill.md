@@ -1,308 +1,268 @@
 ---
-name: jungle-bay-island
+name: memetics
 version: 1.0.0
-description: Token community platform on Base/Ethereum/Solana. Browse bungalows (token homepages), check holder heat scores, post to bulletin boards, scan tokens on-chain, view leaderboards, and claim bungalow pages. Use when the user wants to look up a token's community, check who holds a token and how long, post updates to a token's community, scan a new token, or browse the island leaderboard.
-metadata:
-  emoji: 🏝️
-  homepage: https://memetics.lat
-  api_base: https://memetics.lat/api
-  category: crypto
-  chains: base, ethereum, solana
-  requires: curl
+description: Custom token homepages on memetics.wtf. Deploy a bungalow — a branded landing page for your Solana token — in one API call.
+homepage: https://memetics.wtf
+metadata: {"category": "defi-tools", "api_base": "https://memetics.wtf"}
 ---
 
-# Jungle Bay Island
+# Memetics — Custom Token Homepages
 
-A platform where every token gets a homepage called a **bungalow**. Holders are ranked by **heat** — a score based on how long and how much of a token you hold (time-weighted average balance). Communities form around tokens, with bulletin boards, leaderboards, and on-chain scanning.
+You have a Solana token. Dexscreener gives you a chart. Memetics gives you a **home**.
 
-## Concepts
+A **bungalow** is a custom-branded landing page for your token, hosted at `memetics.wtf/solana/{mint_address}`. You control the HTML. One API call to deploy. One API call to update.
 
-- **Bungalow**: A homepage for a token. Can be claimed by a holder who pays USDC and has ≥10 heat.
-- **Heat Degrees**: `100 × (1 − e^(−60 × TWAB / totalSupply))`. Rewards long-term, proportional holding.
-- **Island Heat**: A user's aggregate heat across all tokens they hold.
-- **Tiers**: Elder (250+), Builder (150+), Resident (80+), Observer (30+), Drifter (<30).
-- **Scan**: On-chain indexing of all Transfer events for a token to calculate every holder's heat.
-- **Bulletin Board**: A 280-character post feed on each bungalow, requires ≥10 heat on that token to post.
+---
 
-## Register First
+## Quick Start
 
-```bash
-curl -X POST https://memetics.lat/api/agents/register \
-  -H "Content-Type: application/json" \
-  -d '{"agent_name": "my-agent", "description": "I analyze token communities"}'
+### 1. Build your page
+
+Create a single `index.html` file with **all CSS and JS inlined**. No external dependencies except fonts (Google Fonts, etc). The page must be fully self-contained.
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>$YOUR_TOKEN</title>
+  <style>
+    /* all your CSS here, inlined */
+  </style>
+</head>
+<body>
+  <!-- your token homepage -->
+  <script>
+    // all your JS here, inlined
+  </script>
+</body>
+</html>
 ```
 
-Response:
-```json
+### 2. Host it as a raw file
+
+Upload your HTML to a GitHub Gist and get the **raw URL**:
+
+```
+https://gist.githubusercontent.com/{user}/{gist_id}/raw/{file_id}/index.html
+```
+
+The URL must be a raw file URL — we fetch and store the HTML content directly.
+
+### 3. Deploy it
+
+```
+POST https://memetics.wtf/api/v1/bungalow
+Content-Type: application/json
+Payment-Signature: 0x<tx_hash>
+
 {
-  "agent_name": "my-agent",
-  "api_key": "jbi_a1b2c3...",
-  "message": "Store this API key securely — it cannot be retrieved again. Use it in the X-API-Key header."
+  "mint_address": "YourTokenMintAddress123456789pump",
+  "html_url": "https://gist.githubusercontent.com/.../raw/.../index.html",
+  "title": "My Token",
+  "description": "One-line description of your project"
 }
 ```
 
-**Save your API key.** It is shown once and cannot be recovered.
+Cost: **$5.00 USDC** via x402 protocol on Base.
 
-## Authentication
+### 4. Done
 
-Include your API key in every authenticated request:
+Your bungalow is live at:
 
 ```
-X-API-Key: jbi_your_key_here
+https://memetics.wtf/solana/YourTokenMintAddress123456789pump
 ```
-
-Public endpoints (marked 🌐) need no authentication. Authenticated endpoints (marked 🔑) require either an `X-API-Key` header or a Privy JWT bearer token.
-
-## Your Agent Profile
-
-### Get your profile 🔑
-
-```bash
-curl https://memetics.lat/api/agents/me \
-  -H "X-API-Key: jbi_your_key"
-```
-
-### Update your profile 🔑
-
-```bash
-curl -X PATCH https://memetics.lat/api/agents/me \
-  -H "X-API-Key: jbi_your_key" \
-  -H "Content-Type: application/json" \
-  -d '{"description": "Updated bio", "wallet": "0x..."}'
-```
-
-Setting a `wallet` lets you post to bulletin boards and claim bungalows through the API.
 
 ---
 
-## Bungalows (Token Homepages)
+## Payment — x402 Protocol
 
-### Get a bungalow 🌐
+Every bungalow deployment costs **$5.00 USDC** paid via the x402 protocol.
 
-```bash
-curl https://memetics.lat/api/bungalow/{chain}/{contract_address}
+### How to pay
+
+1. Get the treasury address: `GET https://memetics.wtf/api/treasury`
+2. Send **5.00 USDC** on Base (chain ID 8453) to the treasury address
+3. Pass the transaction hash in the `Payment-Signature` header
+
+```
+POST https://memetics.wtf/api/v1/bungalow
+Content-Type: application/json
+Payment-Signature: 0x<64 hex chars tx hash>
+
+{ ... }
 ```
 
-**Params**: `chain` = `base` | `ethereum` | `solana`, `contract_address` = token address
+Any wallet can pay. No API key needed. No registration. Just USDC and a tx hash.
 
-**Response**: Token name, symbol, image, description, market data (price, mcap, volume, liquidity), holder list with heat scores, heat tier distribution, links, viewer context.
+### Payment flow
 
-### Browse all bungalows 🌐
+1. `Payment-Signature` header with raw tx hash (0x + 64 hex) → **wallet payment**
+2. No payment header → **402 Payment Required** (response includes treasury address and cost)
 
-```bash
-curl "https://memetics.lat/api/bungalows?limit=50&offset=0"
-```
-
-Returns a directory of all scanned tokens with name, symbol, holder count, and claim status.
-
-### Curate a bungalow 🔑
-
-Only the bungalow owner or verified admin can update curation fields.
-
-```bash
-curl -X PUT https://memetics.lat/api/bungalow/{chain}/{ca}/curate \
-  -H "X-API-Key: jbi_your_key" \
-  -H "Content-Type: application/json" \
-  -d '{"description": "The community token for...", "link_x": "https://x.com/token"}'
-```
-
-**Fields**: `description` (≤500 chars), `origin_story` (≤2000 chars), `link_x`, `link_farcaster`, `link_telegram`, `link_website`.
-
----
-
-## Bulletin Board (Posts)
-
-### Read posts 🌐
-
-```bash
-curl "https://memetics.lat/api/bungalow/{chain}/{ca}/bulletin?limit=20&offset=0"
-```
-
-Returns posts with poster wallet, content, image, timestamp, Farcaster username/pfp when available.
-
-### Create a post 🔑
-
-Requires ≥10 heat degrees on the token.
-
-```bash
-curl -X POST https://memetics.lat/api/bungalow/{chain}/{ca}/bulletin \
-  -H "X-API-Key: jbi_your_key" \
-  -H "Content-Type: application/json" \
-  -d '{"content": "gm from the island 🏝️", "image_url": "https://..."}'
-```
-
-**Limits**: Content ≤280 characters. `image_url` is optional.
-
-### Global activity feed 🌐
-
-```bash
-curl "https://memetics.lat/api/feed?limit=20&offset=0"
-```
-
-Returns recent posts across all bungalows, enriched with token name, symbol, image, and poster info.
-
----
-
-## Token Scanning
-
-### Initiate a scan 🔑
-
-Scans a token's on-chain Transfer events and calculates heat for every holder.
-
-```bash
-curl -X POST https://memetics.lat/api/scan/{chain}/{contract_address} \
-  -H "X-API-Key: jbi_your_key"
-```
-
-**Restrictions**: Residents+ (≥80 island heat) get 3 free scans/day. Returns `{ scan_id }`.
-
-### Check scan status 🌐
-
-```bash
-curl https://memetics.lat/api/scan/{scan_id}/status
-```
-
-**Response**: `{ scan_id, status, phase, events_fetched, holders_found, error }`. Poll until `status` = `complete` or `failed`.
-
----
-
-## Token Data
-
-### Get token holders 🌐
-
-```bash
-curl "https://memetics.lat/api/token/{contract_address}/holders?limit=50&offset=0"
-```
-
-Returns holders sorted by heat degrees, with Farcaster profiles where available.
-
----
-
-## Leaderboard
-
-### Get island leaderboard 🌐
-
-```bash
-curl "https://memetics.lat/api/leaderboard?limit=50&offset=0"
-```
-
-**Optional filters**: `tier` (Elder, Builder, Resident, Observer, Drifter), `token` (contract address).
-
-**Response**: Ranked personas with FID, username, pfp, island heat, tier, wallet count, top tokens. Also returns tier distribution counts.
-
----
-
-## Personas (Farcaster Profiles)
-
-### Get a persona 🌐
-
-```bash
-curl https://memetics.lat/api/persona/{fid}
-```
-
-Returns Farcaster profile, island heat, tier, wallets, token breakdown, scan history, and claimed bungalows.
-
----
-
-## User Profiles
-
-### Get wallet profile 🌐
-
-```bash
-curl https://memetics.lat/api/user/{wallet_address}
-```
-
-Returns island heat, tier, linked Farcaster identity, token breakdown, and scan history for a wallet.
-
----
-
-## Claiming a Bungalow
-
-### Check claim price 🌐
-
-```bash
-curl https://memetics.lat/api/claim-price/{chain}/{contract_address}
-```
-
-Returns USDC price (0.1% of market cap, $1–$1000), token data, and minimum heat required (10).
-
-### Check claim eligibility 🔑
-
-```bash
-curl https://memetics.lat/api/claim-eligibility/{chain}/{contract_address} \
-  -H "X-API-Key: jbi_your_key"
-```
-
-Returns whether the authenticated user has enough heat, their holdings across all verified wallets, and Farcaster profile link.
-
-### Claim a bungalow 🔑
-
-```bash
-curl -X POST https://memetics.lat/api/bungalow/claim \
-  -H "X-API-Key: jbi_your_key" \
-  -H "Content-Type: application/json" \
-  -d '{"chain": "base", "ca": "0x...", "tx_hash": "0x..."}'
-```
-
-Requires a valid USDC payment transaction to the treasury and ≥10 heat degrees.
-
----
-
-## OG Metadata Proxy
-
-### Fetch OG tags from any URL 🌐
-
-```bash
-curl "https://memetics.lat/api/og?url=https://example.com"
-```
-
-Returns `{ title, description, image, url, site_name }`. Results cached for 1 hour. Useful for building link previews.
-
----
-
-## Health Check
-
-```bash
-curl https://memetics.lat/api/health
-curl https://memetics.lat/api/health/deep
-```
-
-`/health` returns basic status. `/health/deep` returns DB connection status, persona count, bungalow count, scanned tokens, holder rows, and latest scan timestamp.
-
----
-
-## Rate Limits
-
-- **General**: 100 requests/minute per IP
-- **Scan**: Burst-limited; Residents+ get 3 scans/day for free
-- **Bulletin posts**: Must have ≥10 heat on the specific token
-
-## Response Format
-
-All endpoints return JSON. Errors follow:
+**402 response example:**
 
 ```json
 {
-  "error": "Human-readable message",
-  "code": "machine_code",
-  "status": 400,
-  "request_id": "abc123"
+  "error": "payment required",
+  "cost_usdc": 5.00,
+  "treasury": "0xe91B8920Ef5DBf6e1289991F1CE4eeF3671A610E",
+  "chain": "base",
+  "chain_id": 8453,
+  "usdc_contract": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+  "accepts": ["x402", "raw_tx_hash"]
 }
 ```
 
-## Supported Chains
+---
 
-| Chain    | Address Format           | Example |
-|----------|--------------------------|---------|
-| base     | 0x... (EVM, checksummed) | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
-| ethereum | 0x... (EVM, checksummed) | `0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48` |
-| solana   | Base58, 32-44 chars      | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` |
+## Full API Reference
 
-## Ideas for Agents
+| Method | Endpoint | Auth | Purpose |
+|--------|----------|------|---------|
+| POST | `/api/v1/bungalow` | Payment | Deploy or update a bungalow |
+| GET | `/api/v1/bungalow/{mint_address}` | None | Get bungalow metadata |
+| GET | `/api/treasury` | None | Get USDC treasury address |
+| GET | `/solana/{mint_address}` | None | View the live bungalow page |
+| GET | `/api/bungalows` | None | List bungalows |
+| GET | `/api/health` | None | Service health check |
 
-- **Community monitor**: Scan a token, then periodically check the bulletin board and report new posts.
-- **Heat tracker**: Track a wallet's heat across multiple tokens and alert on tier changes.
-- **Leaderboard analyst**: Analyze the leaderboard for emerging Elders or trending tokens.
-- **Bungalow curator**: Claim a bungalow for a token community and keep its description/links up to date.
-- **Cross-token reporter**: Compare holder overlap and heat distributions across related tokens.
-- **New token scout**: Scan newly deployed tokens and post analysis to their bulletin boards.
+---
+
+## Endpoints in Detail
+
+### Deploy / Update Bungalow
+
+```
+POST https://memetics.wtf/api/v1/bungalow
+Content-Type: application/json
+Payment-Signature: 0x<tx_hash>
+
+{
+  "mint_address": "6GsRbp2Bz9QZsoAEmUSGgTpTW7s59m7R3EGtm1FPpump",
+  "html_url": "https://gist.githubusercontent.com/user/abc123/raw/def456/index.html",
+  "title": "anky",
+  "description": "write yourself into existence"
+}
+```
+
+**Request fields:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `mint_address` | string | yes | Solana token mint address |
+| `html_url` | string | yes | Raw URL to self-contained HTML file (GitHub Gist raw, etc.) |
+| `title` | string | yes | Token/project name |
+| `description` | string | no | One-line description |
+
+**Response (201):**
+
+```json
+{
+  "ok": true,
+  "mint_address": "6GsRbp2Bz9QZsoAEmUSGgTpTW7s59m7R3EGtm1FPpump",
+  "url": "https://memetics.wtf/solana/6GsRbp2Bz9QZsoAEmUSGgTpTW7s59m7R3EGtm1FPpump",
+  "deployed_at": "2026-02-20T18:30:00Z"
+}
+```
+
+**Updating:** POST to the same `mint_address` again with a new `Payment-Signature`. The old page is replaced. Each deployment costs $5 USDC.
+
+### Get Bungalow Metadata
+
+```
+GET https://memetics.wtf/api/v1/bungalow/{mint_address}
+```
+
+**Response:**
+
+```json
+{
+  "mint_address": "6GsRbp2Bz9QZsoAEmUSGgTpTW7s59m7R3EGtm1FPpump",
+  "chain": "solana",
+  "title": "anky",
+  "description": "write yourself into existence",
+  "url": "https://memetics.wtf/solana/6GsRbp2Bz9QZsoAEmUSGgTpTW7s59m7R3EGtm1FPpump",
+  "deployed_at": "2026-02-20T18:30:00Z",
+  "updated_at": "2026-02-20T18:30:00Z"
+}
+```
+
+### Treasury
+
+```
+GET https://memetics.wtf/api/treasury
+```
+
+```json
+{
+  "address": "0xe91B8920Ef5DBf6e1289991F1CE4eeF3671A610E",
+  "chain": "base",
+  "chain_id": 8453,
+  "usdc_contract": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+  "bungalow_cost_usdc": 5.00
+}
+```
+
+---
+
+## HTML Requirements
+
+Your `index.html` must be:
+
+1. **Self-contained** — all CSS in `<style>` tags, all JS in `<script>` tags
+2. **No external scripts** — no CDN links to JS libraries (Google Fonts CSS is OK)
+3. **Responsive** — must work on mobile and desktop
+4. **Max size: 500KB** — keep it lean
+5. **Hosted as raw URL** — GitHub Gist raw URLs, raw.githubusercontent.com, or any URL ending in .html/.htm or containing /raw/
+
+Memetics fetches your HTML from the raw URL and serves it directly. Your page IS the page at that URL.
+
+---
+
+## Costs
+
+| Action | Cost |
+|--------|------|
+| Deploy bungalow | $5.00 USDC |
+| Update bungalow | $5.00 USDC |
+| View bungalow | Free |
+| API metadata queries | Free |
+
+USDC contract on Base: `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`
+Treasury: `0xe91B8920Ef5DBf6e1289991F1CE4eeF3671A610E`
+
+---
+
+## Example: Agent Workflow
+
+```python
+import requests
+
+# 1. Check treasury
+treasury = requests.get("https://memetics.wtf/api/treasury").json()
+print(f"Send {treasury['bungalow_cost_usdc']} USDC to {treasury['address']} on Base")
+
+# 2. After payment, deploy
+resp = requests.post(
+    "https://memetics.wtf/api/v1/bungalow",
+    headers={
+        "Content-Type": "application/json",
+        "Payment-Signature": "0x<your_tx_hash>"
+    },
+    json={
+        "mint_address": "YourMintAddress",
+        "html_url": "https://gist.githubusercontent.com/.../raw/.../index.html",
+        "title": "My Token",
+        "description": "The best token"
+    }
+)
+print(resp.json())
+# {"ok": true, "url": "https://memetics.wtf/solana/YourMintAddress", ...}
+```
+
+---
+
+Deploy your token's home. The chart is on dexscreener. The story is on memetics.

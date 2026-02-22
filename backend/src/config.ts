@@ -26,7 +26,14 @@ export const CONFIG = {
   PRIVY_APP_ID: required('PRIVY_APP_ID'),
   PRIVY_APP_SECRET: required('PRIVY_APP_SECRET'),
   PRIVY_VERIFICATION_KEY: required('PRIVY_VERIFICATION_KEY'),
+  TWITTER_CLIENT_ID: process.env.X_CLIENT_SECRET_ID ?? '',
+  TWITTER_CLIENT_SECRET: process.env.X_CLIENT_SECRET ?? '',
+  SESSION_SECRET: process.env.SESSION_SECRET ?? (() => {
+    console.warn('⚠️  SESSION_SECRET not set — using insecure default. Set this in production!')
+    return 'dev-session-secret-change-me'
+  })(),
   NEYNAR_API_KEY: process.env.NEYNAR_API_KEY ?? '',
+  HELIUS_API_KEY: process.env.HELIUS_API_KEY ?? '',
   PORT: optionalInt('PORT', 3001),
   CORS_ORIGIN: process.env.CORS_ORIGIN ?? '*',
   SCHEMA: 'prod-v11',

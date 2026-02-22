@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { normalizeAddress } from '../config'
-import { getTokenHolders, getTokenSummary } from '../db/queries'
+import { getTokenHolders, getTokenSummary, VALID_TIERS } from '../db/queries'
 import { getTierFromHeat } from '../services/heat'
 import { logInfo } from '../services/logger'
 import { ApiError } from '../services/errors'
@@ -18,12 +18,15 @@ tokenRoute.get('/token/:ca/holders', async (c) => {
   const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 200) : 50
   const offset = Number.isFinite(offsetRaw) ? Math.max(offsetRaw, 0) : 0
 
+  const tierRaw = c.req.query('tier')
+  const tier = tierRaw && VALID_TIERS.includes(tierRaw) ? tierRaw : undefined
+
   const token = await getTokenSummary(tokenAddress)
   if (!token) {
     throw new ApiError(404, 'token_not_found', 'Token not found in registry')
   }
 
-  const { holders, total } = await getTokenHolders(tokenAddress, limit, offset)
+  const { holders, total } = await getTokenHolders(tokenAddress, limit, offset, tier)
   logInfo('TOKEN HOLDERS', `token=${tokenAddress} total=${total} returned=${holders.length} limit=${limit} offset=${offset}`)
 
   return c.json({

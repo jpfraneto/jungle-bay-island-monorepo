@@ -165,17 +165,17 @@ export async function getTokenHolders(
 }
 
 export async function getTokenHeatDistribution(tokenAddress: string) {
-  const rows = await db<{ island_heat: string | null }[]>`
-    SELECT wfp.island_heat
-    FROM ${db(CONFIG.SCHEMA)}.token_holder_heat thh
-    LEFT JOIN ${db(CONFIG.SCHEMA)}.wallet_farcaster_profiles wfp
-      ON wfp.wallet = thh.wallet
-    WHERE thh.token_address = ${tokenAddress}
+  // Use per-token heat_degrees for tier distribution (not island_heat)
+  // This gives accurate tier breakdowns for this specific token
+  const rows = await db<{ heat_degrees: string }[]>`
+    SELECT heat_degrees
+    FROM ${db(CONFIG.SCHEMA)}.token_holder_heat
+    WHERE token_address = ${tokenAddress}
   `
 
   const distribution = emptyTierDistribution()
   for (const row of rows) {
-    addHeatToDistribution(distribution, Number(row.island_heat ?? 0))
+    addHeatToDistribution(distribution, Number(row.heat_degrees ?? 0))
   }
   return distribution
 }

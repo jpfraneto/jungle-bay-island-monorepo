@@ -44,7 +44,7 @@ function getBaseUrl(c: any): string {
 // GET /auth/twitter — redirect to Twitter OAuth
 authRoute.get('/auth/twitter', async (c) => {
   if (!CONFIG.TWITTER_CLIENT_ID) {
-    return c.text('Twitter OAuth not configured (missing TWITTER_CLIENT_ID)', 500)
+    return c.text('X OAuth not configured (missing X_CLIENT_SECRET_ID env var)', 500)
   }
 
   const returnUrl = c.req.query('return') ?? '/'

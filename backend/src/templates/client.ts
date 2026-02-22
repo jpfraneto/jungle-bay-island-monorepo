@@ -269,7 +269,7 @@ export function renderClientScript(): string {
 
   var SOL_TREASURY = 'Grd283VR3E1KQnrdpHkPhAB5BwSGX7Rq5WPdBs416pes';
   var SOL_USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
-  var SOL_RPC = D.solanaRpcUrl || 'https://api.mainnet-beta.solana.com';
+  var SOL_RPC = '/api/solana-rpc'; // Backend proxy (public RPC blocks browser requests)
 
   // ── payEvmUsdc: connect wallet → switch to Base → send ERC20 transfer → poll receipt ──
   async function payEvmUsdc() {
@@ -353,6 +353,18 @@ export function renderClientScript(): string {
     return { proof: txHash, from: from, chain: 'base' };
   }
 
+  // ── Helper: call Solana RPC through backend proxy ──
+  async function solanaRpc(method, params) {
+    var res = await fetch(SOL_RPC, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: method, params: params }),
+    });
+    var data = await res.json();
+    if (data.error) throw new Error('Solana RPC: ' + (data.error.message || JSON.stringify(data.error)));
+    return data.result;
+  }
+
   // ── paySolanaUsdc: connect Phantom/Solflare → build SPL transfer → sign+send ──
   async function paySolanaUsdc() {
     var provider = (window.phantom && window.phantom.solana) || window.solflare;
@@ -370,15 +382,12 @@ export function renderClientScript(): string {
       import('https://esm.sh/@solana/spl-token@0.4.9'),
     ]);
 
-    var Connection = web3Mod.Connection;
     var PublicKey = web3Mod.PublicKey;
     var Transaction = web3Mod.Transaction;
     var getAssociatedTokenAddress = splMod.getAssociatedTokenAddress;
     var createTransferInstruction = splMod.createTransferInstruction;
     var createAssociatedTokenAccountInstruction = splMod.createAssociatedTokenAccountInstruction;
-    var TOKEN_PROGRAM_ID = splMod.TOKEN_PROGRAM_ID;
 
-    var connection = new Connection(SOL_RPC, 'confirmed');
     var senderPk = new PublicKey(from);
     var treasuryPk = new PublicKey(SOL_TREASURY);
     var usdcMintPk = new PublicKey(SOL_USDC_MINT);
@@ -387,19 +396,18 @@ export function renderClientScript(): string {
     var senderAta = await getAssociatedTokenAddress(usdcMintPk, senderPk);
     var treasuryAta = await getAssociatedTokenAddress(usdcMintPk, treasuryPk);
 
-    // Check sender USDC balance
+    // Check sender USDC balance via proxy
     try {
-      var senderBalance = await connection.getTokenAccountBalance(senderAta);
-      var senderAmount = BigInt(senderBalance.value.amount);
+      var balResult = await solanaRpc('getTokenAccountBalance', [senderAta.toBase58()]);
+      var senderAmount = BigInt(balResult.value.amount);
       if (senderAmount < 1000000n) {
         throw new Error('Insufficient USDC balance on Solana');
       }
     } catch(e) {
       if (e.message.includes('Insufficient')) throw e;
-      if (e.message.includes('could not find account')) {
+      if (e.message.includes('could not find') || e.message.includes('null')) {
         throw new Error('No USDC token account found. You need USDC on Solana.');
       }
-      // Other errors: proceed, wallet will handle it
     }
 
     // Build transaction
@@ -407,7 +415,7 @@ export function renderClientScript(): string {
 
     // Check if treasury ATA exists, create if not
     try {
-      await connection.getTokenAccountBalance(treasuryAta);
+      await solanaRpc('getTokenAccountBalance', [treasuryAta.toBase58()]);
     } catch(e) {
       // ATA doesn't exist — add create instruction (costs sender ~0.002 SOL rent)
       tx.add(createAssociatedTokenAccountInstruction(
@@ -426,12 +434,12 @@ export function renderClientScript(): string {
       1000000 // 1 USDC
     ));
 
-    // Get recent blockhash
-    var bh = await connection.getLatestBlockhash('confirmed');
-    tx.recentBlockhash = bh.blockhash;
+    // Get recent blockhash via proxy
+    var bhResult = await solanaRpc('getLatestBlockhash', [{ commitment: 'confirmed' }]);
+    tx.recentBlockhash = bhResult.value.blockhash;
     tx.feePayer = senderPk;
 
-    // Sign and send
+    // Sign and send via wallet (wallet handles sending to network directly)
     var signed = await provider.signAndSendTransaction(tx);
     var signature = signed.signature || signed;
 

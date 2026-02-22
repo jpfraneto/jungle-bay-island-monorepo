@@ -26,7 +26,7 @@ import { getCached, setCached } from './services/cache'
 import { isApiError } from './services/errors'
 import { logError, logInfo, logWarn } from './services/logger'
 import { resolveTokenMetadata } from './services/tokenMetadata'
-import { renderLanding, render404 } from './templates/landing'
+import { renderLanding, render404, renderInvalidToken } from './templates/landing'
 import { renderBungalow } from './templates/bungalow'
 import { renderUserPage } from './templates/user'
 import { renderProfilePage } from './templates/profile'
@@ -120,6 +120,33 @@ app.route('/api', widgetRoute)
 app.route('/api', v1BungalowRoute)
 app.route('/api', walletLinkRoute)
 app.route('', authRoute)
+
+// --- Solana RPC proxy (browser can't hit public RPC directly due to CORS/403) ---
+app.post('/api/solana-rpc', async (c) => {
+  try {
+    const body = await c.req.json()
+    // Only allow safe read methods
+    const allowedMethods = new Set([
+      'getLatestBlockhash', 'getTokenAccountBalance', 'getAccountInfo',
+    ])
+    if (!allowedMethods.has(body.method)) {
+      return c.json({ error: 'Method not allowed' }, 403 as any)
+    }
+    const rpcUrl = CONFIG.HELIUS_API_KEY
+      ? `https://mainnet.helius-rpc.com/?api-key=${CONFIG.HELIUS_API_KEY}`
+      : 'https://api.mainnet-beta.solana.com'
+    const res = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15_000),
+    })
+    const data = await res.json()
+    return c.json(data)
+  } catch (err) {
+    return c.json({ error: 'RPC proxy failed' }, 502 as any)
+  }
+})
 
 // --- skill.md for AI agents ---
 async function serveSkillMd(c: any) {
@@ -270,7 +297,7 @@ app.get('/:chain/:ca', async (c, next) => {
   const tokenAddress = normalizeAddress(ca, supported)
   if (!tokenAddress) return next()
 
-  // Fetch all data in parallel
+  // Fetch all data in parallel (including token validation)
   const [bungalow, holdersResult, bulletinResult, customHtml, tokenMeta, heatDistribution, session] = await Promise.all([
     getBungalow(tokenAddress, supported),
     getTokenHolders(tokenAddress, 20, 0),
@@ -294,6 +321,13 @@ app.get('/:chain/:ca', async (c, next) => {
     getTokenHeatDistribution(tokenAddress),
     getSessionFromRequest(c.req.header('cookie')),
   ])
+
+  // If token has no data from any source, show invalid token page
+  const hasAnyData = bungalow || holdersResult.total > 0 || tokenMeta.name || tokenMeta.symbol || tokenMeta.market_data
+  if (!hasAnyData) {
+    logInfo('BUNGALOW PAGE', `chain=${chain} token=${tokenAddress} INVALID — no data found`)
+    return c.html(renderInvalidToken(tokenAddress, chain, session))
+  }
 
   logInfo('BUNGALOW PAGE', `chain=${chain} token=${tokenAddress} claimed=${bungalow?.is_claimed ?? false} custom=${!!customHtml}`)
 

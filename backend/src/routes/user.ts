@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { normalizeAddress } from '../config'
-import { getUserByWallet } from '../db/queries'
+import { getUserByWallet, getLinkedWalletsByWallet, getAggregatedUserByWallets } from '../db/queries'
 import { requireWalletAuth } from '../middleware/auth'
 import { ApiError } from '../services/errors'
 import { resolveUserWalletMap } from '../services/identityMap'
@@ -51,6 +51,27 @@ userRoute.get('/user/:wallet', async (c) => {
   const wallet = normalizeAddress(c.req.param('wallet'))
   if (!wallet) {
     throw new ApiError(400, 'invalid_wallet', 'Invalid wallet address')
+  }
+
+  const aggregate = c.req.query('aggregate') === 'true'
+
+  if (aggregate) {
+    // Try to find linked wallets and return aggregated data
+    const linked = await getLinkedWalletsByWallet(wallet)
+    if (linked && linked.wallets.length > 1) {
+      const allWallets = linked.wallets.map((w) => w.wallet)
+      const aggregated = await getAggregatedUserByWallets(allWallets)
+      if (aggregated) {
+        logInfo('USER AGGREGATE', `wallet=${wallet} linked_wallets=${allWallets.length} tokens=${aggregated.token_breakdown.length}`)
+        return c.json({
+          wallet,
+          ...aggregated,
+          linked_wallets: linked.wallets,
+          x_username: linked.x_username,
+          aggregated: true,
+        })
+      }
+    }
   }
 
   const user = await getUserByWallet(wallet)

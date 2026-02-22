@@ -2,10 +2,13 @@ import { Hono } from 'hono'
 import { CONFIG, db, normalizeAddress } from '../config'
 import { logInfo, logWarn } from '../services/logger'
 import {
-  verifyUsdcPayment,
+  verifyPayment,
   TREASURY_ADDRESS,
   USDC_ADDRESS,
+  SOLANA_TREASURY_ADDRESS,
+  SOLANA_USDC_MINT,
   BUNGALOW_COST_USDC,
+  BUNGALOW_COST_RAW,
 } from '../services/payment'
 
 const v1BungalowRoute = new Hono()
@@ -49,11 +52,20 @@ async function ensureCustomBungalowTable(): Promise<void> {
 // GET /api/treasury
 v1BungalowRoute.get('/treasury', (c) => {
   return c.json({
-    address: TREASURY_ADDRESS,
-    chain: 'base',
-    chain_id: 8453,
-    usdc_contract: USDC_ADDRESS,
     bungalow_cost_usdc: BUNGALOW_COST_USDC,
+    payment_options: [
+      {
+        chain: 'base',
+        chain_id: 8453,
+        treasury: TREASURY_ADDRESS,
+        usdc_contract: USDC_ADDRESS,
+      },
+      {
+        chain: 'solana',
+        treasury: SOLANA_TREASURY_ADDRESS,
+        usdc_mint: SOLANA_USDC_MINT,
+      },
+    ],
   })
 })
 
@@ -70,11 +82,20 @@ v1BungalowRoute.post('/v1/bungalow', async (c) => {
     return c.json({
       error: 'payment required',
       cost_usdc: BUNGALOW_COST_USDC,
-      treasury: TREASURY_ADDRESS,
-      chain: 'base',
-      chain_id: 8453,
-      usdc_contract: USDC_ADDRESS,
       accepts: ['x402', 'raw_tx_hash'],
+      payment_options: [
+        {
+          chain: 'base',
+          chain_id: 8453,
+          treasury: TREASURY_ADDRESS,
+          usdc_contract: USDC_ADDRESS,
+        },
+        {
+          chain: 'solana',
+          treasury: SOLANA_TREASURY_ADDRESS,
+          usdc_mint: SOLANA_USDC_MINT,
+        },
+      ],
     }, 402 as any)
   }
 
@@ -100,13 +121,8 @@ v1BungalowRoute.post('/v1/bungalow', async (c) => {
     return c.json({ error: 'Invalid mint_address format' }, 400 as any)
   }
 
-  // Verify payment
-  const txHash = paymentSig.startsWith('0x') ? paymentSig : `0x${paymentSig}`
-  if (!/^0x[a-fA-F0-9]{64}$/.test(txHash)) {
-    return c.json({ error: 'Invalid payment-signature format. Expected 0x + 64 hex chars.' }, 400 as any)
-  }
-
-  const payment = await verifyUsdcPayment(txHash, tokenAddress)
+  // Verify payment (supports both EVM tx hash and Solana tx signature)
+  const payment = await verifyPayment(paymentSig, tokenAddress, BUNGALOW_COST_RAW)
   if (!payment.valid) {
     return c.json({ error: payment.error }, 402 as any)
   }
@@ -155,7 +171,7 @@ v1BungalowRoute.post('/v1/bungalow', async (c) => {
       )
       VALUES (
         ${tokenAddress}, ${chain}, ${html}, ${title ?? null}, ${description ?? null}, ${html_url},
-        ${deployer}, ${txHash}, TRUE, NOW(), NOW()
+        ${deployer}, ${paymentSig}, TRUE, NOW(), NOW()
       )
       ON CONFLICT (token_address, chain)
       DO UPDATE SET
@@ -186,9 +202,9 @@ v1BungalowRoute.post('/v1/bungalow', async (c) => {
       updated_at = NOW()
   `
 
-  const url = `https://memetics.wtf/${chain}/${tokenAddress}`
+  const url = `https://memetics.lat/${chain}/${tokenAddress}`
 
-  logInfo('BUNGALOW CLAIM', `chain=${chain} token=${tokenAddress} deployer=${deployer} hasHtml=${!!html_url} tx=${txHash.slice(0, 10)}...`)
+  logInfo('BUNGALOW CLAIM', `chain=${chain} token=${tokenAddress} deployer=${deployer} hasHtml=${!!html_url} tx=${paymentSig.slice(0, 10)}...`)
 
   return c.json({
     ok: true,
@@ -238,7 +254,7 @@ v1BungalowRoute.get('/v1/bungalow/:mint_address', async (c) => {
     chain: row.chain,
     title: row.title,
     description: row.description,
-    url: `https://memetics.wtf/${row.chain}/${row.token_address}`,
+    url: `https://memetics.lat/${row.chain}/${row.token_address}`,
     deployed_at: row.deployed_at,
     updated_at: row.updated_at,
   })

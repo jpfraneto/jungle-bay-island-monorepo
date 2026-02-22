@@ -21,7 +21,7 @@ import widgetRoute from './routes/widget'
 import v1BungalowRoute from './routes/v1-bungalow'
 import authRoute from './routes/auth'
 import walletLinkRoute from './routes/wallet-link'
-import { getBulletinPosts, getBungalow, getCustomBungalow, getTokenHolders, getTokenHeatDistribution, getUserByWallet } from './db/queries'
+import { getBulletinPosts, getBungalow, getCustomBungalow, getTokenHolders, getTokenHeatDistribution, getUserByWallet, getLinkedWalletsByWallet } from './db/queries'
 import { getCached, setCached } from './services/cache'
 import { isApiError } from './services/errors'
 import { logError, logInfo, logWarn } from './services/logger'
@@ -230,16 +230,22 @@ app.get('/user/:wallet', async (c) => {
     return c.html(render404(), 404 as any)
   }
 
-  const [userData, userSession] = await Promise.all([
+  const [userData, userSession, linkedWallets] = await Promise.all([
     getUserByWallet(wallet),
     getSessionFromRequest(c.req.header('cookie')),
+    getLinkedWalletsByWallet(wallet).catch(() => null),
   ])
   if (!userData) {
     return c.html(render404(), 404 as any)
   }
 
-  logInfo('USER PAGE', `wallet=${wallet} heat=${userData.island_heat} tokens=${userData.token_breakdown.length}`)
-  return c.html(renderUserPage({ ...userData, session: userSession }))
+  logInfo('USER PAGE', `wallet=${wallet} heat=${userData.island_heat} tokens=${userData.token_breakdown.length} linked=${linkedWallets?.wallets?.length ?? 0}`)
+  return c.html(renderUserPage({
+    ...userData,
+    session: userSession,
+    linked_wallets: linkedWallets?.wallets ?? null,
+    x_username: linkedWallets?.x_username ?? null,
+  }))
 })
 
 // --- Landing page ---

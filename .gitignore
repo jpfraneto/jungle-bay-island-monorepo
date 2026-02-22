@@ -5,3 +5,5 @@ dist/
 *.local
 .DS_Store
 *.log
+figma-captures/
+frontend/package-lock.json

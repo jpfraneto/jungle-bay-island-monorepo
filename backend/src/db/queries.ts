@@ -767,6 +767,120 @@ export async function getUserByWallet(wallet: string): Promise<{
   }
 }
 
+// ─── Linked Wallets Lookup ─────────────────────────────────
+export async function getLinkedWalletsByWallet(wallet: string): Promise<{
+  x_id: string
+  x_username: string | null
+  wallets: Array<{ wallet: string; wallet_kind: string }>
+} | null> {
+  // First find x_id for this wallet
+  const linkRows = await db<Array<{ x_id: string | null; x_username: string | null }>>`
+    SELECT x_id, x_username
+    FROM ${db(CONFIG.SCHEMA)}.user_wallet_links
+    WHERE wallet = ${wallet} AND x_id IS NOT NULL
+    LIMIT 1
+  `
+
+  const link = linkRows[0]
+  if (!link?.x_id) return null
+
+  // Fetch all wallets for this x_id
+  const walletRows = await db<Array<{ wallet: string; wallet_kind: string }>>`
+    SELECT wallet, wallet_kind
+    FROM ${db(CONFIG.SCHEMA)}.user_wallet_links
+    WHERE x_id = ${link.x_id}
+    ORDER BY first_seen_at ASC
+  `
+
+  return {
+    x_id: link.x_id,
+    x_username: link.x_username,
+    wallets: walletRows,
+  }
+}
+
+// ─── Aggregated User Profile (multi-wallet) ───────────────
+export async function getAggregatedUserByWallets(wallets: string[]): Promise<{
+  island_heat: number
+  tier: string
+  token_breakdown: Array<{
+    token: string
+    token_name: string
+    token_symbol: string | null
+    chain: string | null
+    heat_degrees: number
+    wallet_heats: Array<{ wallet: string; heat_degrees: number }>
+  }>
+  scans: Array<{ chain: string; token_address: string; scanned_at: string }>
+} | null> {
+  if (wallets.length === 0) return null
+
+  // Aggregate token heat across all wallets, grouped by token
+  const tokenRows = await db<Array<{
+    token: string
+    token_name: string | null
+    token_symbol: string | null
+    chain: string | null
+    total_heat: string
+    wallet_heats: string
+  }>>`
+    SELECT
+      thh.token_address AS token,
+      tr.name AS token_name,
+      tr.symbol AS token_symbol,
+      tr.chain,
+      SUM(thh.heat_degrees)::text AS total_heat,
+      json_agg(json_build_object('wallet', thh.wallet, 'heat_degrees', thh.heat_degrees))::text AS wallet_heats
+    FROM ${db(CONFIG.SCHEMA)}.token_holder_heat thh
+    LEFT JOIN ${db(CONFIG.SCHEMA)}.token_registry tr
+      ON tr.token_address = thh.token_address
+    WHERE thh.wallet IN ${db(wallets)}
+    GROUP BY thh.token_address, tr.name, tr.symbol, tr.chain
+    ORDER BY SUM(thh.heat_degrees) DESC
+    LIMIT 200
+  `
+
+  // Aggregate scans across all wallets (dedup by token)
+  const scanRows = await db<Array<{ chain: string; token_address: string; scanned_at: string }>>`
+    SELECT DISTINCT ON (sl.token_address)
+      sl.chain,
+      sl.token_address,
+      sl.completed_at::text AS scanned_at
+    FROM ${db(CONFIG.SCHEMA)}.scan_log sl
+    WHERE sl.requested_by IN ${db(wallets)}
+      AND sl.scan_status = 'complete'
+      AND sl.completed_at IS NOT NULL
+    ORDER BY sl.token_address, sl.completed_at DESC
+  `
+
+  const tokenBreakdown = tokenRows.map((row) => {
+    let walletHeats: Array<{ wallet: string; heat_degrees: number }> = []
+    try {
+      walletHeats = JSON.parse(row.wallet_heats)
+    } catch {}
+    return {
+      token: row.token,
+      token_name: row.token_name ?? row.token,
+      token_symbol: row.token_symbol ?? null,
+      chain: row.chain ?? null,
+      heat_degrees: Number(row.total_heat),
+      wallet_heats: walletHeats.map((wh) => ({
+        wallet: wh.wallet,
+        heat_degrees: Number(wh.heat_degrees),
+      })),
+    }
+  })
+
+  const islandHeat = tokenBreakdown.reduce((sum, t) => sum + t.heat_degrees, 0)
+
+  return {
+    island_heat: islandHeat,
+    tier: getTierFromHeat(islandHeat),
+    token_breakdown: tokenBreakdown,
+    scans: scanRows,
+  }
+}
+
 export async function upsertWalletFarcasterProfile(
   wallet: string,
   fid: number,

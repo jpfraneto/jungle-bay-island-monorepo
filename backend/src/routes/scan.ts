@@ -12,16 +12,23 @@ import {
   setTokenStatus,
   updateScanProgress,
   updateBungalowMetadata,
+  upsertClaimedBungalow,
   writeScanResult,
 } from '../db/queries'
 import { fetchDexScreenerData } from '../services/dexscreener'
 import { requireWalletAuth, optionalWalletContext } from '../middleware/auth'
 import { createRateLimit } from '../middleware/rateLimit'
 import { ApiError } from '../services/errors'
-import { verifyUsdcPayment, TREASURY_ADDRESS, USDC_ADDRESS } from '../services/payment'
+import {
+  verifyPayment,
+  TREASURY_ADDRESS,
+  USDC_ADDRESS,
+  SOLANA_TREASURY_ADDRESS,
+  SOLANA_USDC_MINT,
+  SCAN_COST_USDC,
+  SCAN_COST_RAW,
+} from '../services/payment'
 import { logError, logEvent, logInfo, logSuccess } from '../services/logger'
-
-const SCAN_COST_USDC = 1.00
 import { scanToken } from '../services/scanner'
 import { scanSolanaToken } from '../services/solanaScanner'
 import type { AppEnv } from '../types'
@@ -77,23 +84,27 @@ scanRoute.post('/scan/:chain/:ca', optionalWalletContext, scanBurstLimit, async 
     if (!paymentProof) {
       throw new ApiError(402, 'payment_required', 'x402 payment is required for non-residents', {
         cost_usdc: SCAN_COST_USDC,
-        treasury: TREASURY_ADDRESS,
-        chain: 'base',
-        chain_id: 8453,
-        usdc_contract: USDC_ADDRESS,
+        payment_options: [
+          {
+            chain: 'base',
+            chain_id: 8453,
+            treasury: TREASURY_ADDRESS,
+            usdc_contract: USDC_ADDRESS,
+          },
+          {
+            chain: 'solana',
+            treasury: SOLANA_TREASURY_ADDRESS,
+            usdc_mint: SOLANA_USDC_MINT,
+          },
+        ],
       })
     }
 
-    const txHash = paymentProof.startsWith('0x') ? paymentProof : `0x${paymentProof}`
-    if (!/^0x[a-fA-F0-9]{64}$/.test(txHash)) {
-      throw new ApiError(400, 'invalid_payment', 'Invalid payment proof format (expected 0x + 64 hex chars)')
-    }
-
-    const payment = await verifyUsdcPayment(txHash, tokenAddress)
+    const payment = await verifyPayment(paymentProof, tokenAddress, SCAN_COST_RAW)
     if (!payment.valid) {
       throw new ApiError(402, 'payment_failed', payment.error ?? 'Payment verification failed')
     }
-    logInfo('SCAN PAYMENT', `verified tx=${txHash.slice(0, 10)}... from=${payment.from} for=${tokenAddress}`)
+    logInfo('SCAN PAYMENT', `verified ${payment.chain} tx=${paymentProof.slice(0, 10)}... from=${payment.from} for=${tokenAddress}`)
   }
 
   const isPaid = !isResidentPlus
@@ -110,6 +121,13 @@ scanRoute.post('/scan/:chain/:ca', optionalWalletContext, scanBurstLimit, async 
   })
 
   if (!isPaid) await incrementDailyAllowance(requester, today)
+
+  // Auto-claim bungalow for paid scans (merges scan + claim into one $1 payment)
+  if (isPaid) {
+    await upsertClaimedBungalow({ tokenAddress, chain, owner: requester })
+    logInfo('AUTO-CLAIM', `wallet=${requester} claimed bungalow for ${tokenAddress} via paid scan`)
+  }
+
   logEvent('SCAN STARTED', `scan_id=${scanId} wallet=${requester} token=${tokenAddress}`)
 
   void (async () => {
@@ -153,6 +171,7 @@ scanRoute.post('/scan/:chain/:ca', optionalWalletContext, scanBurstLimit, async 
     status: 'scanning',
     scan_id: scanId,
     estimated_seconds: 120,
+    claimed: isPaid,
   })
 })
 

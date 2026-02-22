@@ -54,6 +54,8 @@ interface UserPageData {
   }>
   scans: Array<{ chain: string; token_address: string; scanned_at: string }>
   session?: SessionUser | null
+  linked_wallets?: Array<{ wallet: string; wallet_kind: string }> | null
+  x_username?: string | null
 }
 
 export function renderUserPage(data: UserPageData): string {
@@ -73,6 +75,16 @@ export function renderUserPage(data: UserPageData): string {
       </div>`
     : ''
 
+  const hasLinkedWallets = data.linked_wallets && data.linked_wallets.length > 1
+  const walletCount = data.linked_wallets?.length ?? 0
+
+  const aggregateToggle = hasLinkedWallets
+    ? `<div class="aggregate-toggle">
+        <button class="toggle-btn active" id="toggle-single">This wallet</button>
+        <button class="toggle-btn" id="toggle-all">All wallets (${walletCount})</button>
+      </div>`
+    : ''
+
   const tokenRows = data.token_breakdown.map((t) => {
     const href = t.chain ? `/${t.chain}/${t.token}` : '#'
     const sym = t.token_symbol ? `$${esc(t.token_symbol)}` : esc(t.token_name)
@@ -85,10 +97,13 @@ export function renderUserPage(data: UserPageData): string {
 
   const tokenTable = data.token_breakdown.length > 0
     ? `<h3 class="section-title">Token Exposure</h3>
+       ${aggregateToggle}
+       <div id="token-table-container">
        <table class="token-table">
          <thead><tr><th>Token</th><th>Chain</th><th style="text-align:right">Heat</th></tr></thead>
          <tbody>${tokenRows}</tbody>
-       </table>`
+       </table>
+       </div>`
     : '<p class="empty-state">No token holdings found.</p>'
 
   const scansList = data.scans.length > 0
@@ -146,6 +161,8 @@ export function renderUserPage(data: UserPageData): string {
 
   <script>
     var wallet = ${JSON.stringify(data.wallet)};
+    var hasLinked = ${hasLinkedWallets ? 'true' : 'false'};
+
     var copyBtn = document.getElementById('copy-wallet');
     if (copyBtn) {
       copyBtn.addEventListener('click', function() {
@@ -154,6 +171,95 @@ export function renderUserPage(data: UserPageData): string {
           setTimeout(function() { copyBtn.textContent = 'copy'; }, 1500);
         });
       });
+    }
+
+    // ── Aggregate toggle ──
+    if (hasLinked) {
+      var singleBtn = document.getElementById('toggle-single');
+      var allBtn = document.getElementById('toggle-all');
+      var container = document.getElementById('token-table-container');
+      var heatBadge = document.querySelector('.badge-heat');
+      var tierBadge = document.querySelector('.badge-tier');
+      var isAggregated = false;
+
+      function shortAddr(addr) {
+        if (!addr || addr.length <= 10) return addr || '';
+        return addr.slice(0, 6) + '\\u2026' + addr.slice(-4);
+      }
+
+      function fmtHeat(val) {
+        return Number(val).toFixed(1) + '\\u00B0';
+      }
+
+      function chainLabel(ch) {
+        var map = { base: 'Base', ethereum: 'Ethereum', solana: 'Solana' };
+        return map[ch] || ch || '\\u2014';
+      }
+
+      function renderAggregatedTable(data) {
+        if (!data.token_breakdown || data.token_breakdown.length === 0) {
+          container.innerHTML = '<p style="color:#71717a;text-align:center;padding:20px">No token holdings found.</p>';
+          return;
+        }
+        var rows = data.token_breakdown.map(function(t) {
+          var href = t.chain ? '/' + t.chain + '/' + t.token : '#';
+          var sym = t.token_symbol ? '$' + t.token_symbol : t.token_name;
+          var walletBadges = '';
+          if (t.wallet_heats && t.wallet_heats.length > 1) {
+            walletBadges = '<div style="margin-top:4px">' + t.wallet_heats.map(function(wh) {
+              return '<span class="wallet-badge">' + shortAddr(wh.wallet) + ': ' + fmtHeat(wh.heat_degrees) + '</span>';
+            }).join(' ') + '</div>';
+          }
+          return '<tr>'
+            + '<td><a href="' + href + '">' + sym + '</a>' + walletBadges + '</td>'
+            + '<td>' + (t.chain ? '<span class="chain-badge">' + chainLabel(t.chain) + '</span>' : '\\u2014') + '</td>'
+            + '<td class="heat-val">' + fmtHeat(t.heat_degrees) + '</td>'
+            + '</tr>';
+        }).join('');
+
+        container.innerHTML = '<table class="token-table">'
+          + '<thead><tr><th>Token</th><th>Chain</th><th style="text-align:right">Heat</th></tr></thead>'
+          + '<tbody>' + rows + '</tbody></table>';
+
+        // Update heat + tier badges
+        if (heatBadge) heatBadge.textContent = fmtHeat(data.island_heat);
+        if (tierBadge) tierBadge.textContent = data.tier;
+      }
+
+      var originalHtml = container ? container.innerHTML : '';
+      var originalHeat = heatBadge ? heatBadge.textContent : '';
+      var originalTier = tierBadge ? tierBadge.textContent : '';
+
+      if (singleBtn) {
+        singleBtn.addEventListener('click', function() {
+          if (!isAggregated) return;
+          isAggregated = false;
+          singleBtn.classList.add('active');
+          allBtn.classList.remove('active');
+          if (container) container.innerHTML = originalHtml;
+          if (heatBadge) heatBadge.textContent = originalHeat;
+          if (tierBadge) tierBadge.textContent = originalTier;
+        });
+      }
+
+      if (allBtn) {
+        allBtn.addEventListener('click', function() {
+          if (isAggregated) return;
+          isAggregated = true;
+          allBtn.classList.add('active');
+          singleBtn.classList.remove('active');
+          if (container) container.innerHTML = '<p style="color:#71717a;text-align:center;padding:20px">Loading...</p>';
+
+          fetch('/api/user/' + wallet + '?aggregate=true')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+              renderAggregatedTable(data);
+            })
+            .catch(function() {
+              if (container) container.innerHTML = '<p style="color:#f87171;text-align:center;padding:20px">Failed to load aggregated data.</p>';
+            });
+        });
+      }
     }
   </script>
 </body>

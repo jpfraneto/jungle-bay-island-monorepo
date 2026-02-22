@@ -77,6 +77,19 @@ interface BungalowPageData {
   session?: SessionUser | null
 }
 
+function renderWalletChoice(): string {
+  return `<div id="wallet-choice" class="wallet-choice" style="display:none">
+    <button class="wallet-choice-btn" id="pay-base-btn">
+      <span class="wallet-choice-icon">&#x26D3;</span>
+      Pay with Base (MetaMask)
+    </button>
+    <button class="wallet-choice-btn" id="pay-solana-btn">
+      <span class="wallet-choice-icon">&#x2600;</span>
+      Pay with Solana (Phantom)
+    </button>
+  </div>`
+}
+
 export function renderBungalow(data: BungalowPageData): string {
   const b = data.bungalow
   const name = b?.name ?? data.fallbackName ?? 'Unknown Token'
@@ -119,6 +132,7 @@ export function renderBungalow(data: BungalowPageData): string {
     bulletinTotal: data.bulletinTotal,
     links,
     dexscreenerUrl: dexUrl,
+    solanaRpcUrl: 'https://api.mainnet-beta.solana.com',
   }
 
   return `<!DOCTYPE html>
@@ -165,11 +179,20 @@ export function renderBungalow(data: BungalowPageData): string {
         ${renderMarketStrip(b)}
         ${data.customHtml
           ? `<iframe class="home-frame" srcdoc="${esc(data.customHtml)}" sandbox="allow-scripts allow-same-origin" loading="lazy"></iframe>`
+          : data.holderTotal === 0 && !isClaimed
+            ? `<div class="unclaimed-cta">
+                <p>This token hasn't been scanned yet.</p>
+                <p>Scan to see holders &amp; heat &mdash; you'll also claim this bungalow.</p>
+                <button class="cta-link claim-btn" id="scan-claim-btn">Scan &amp; Claim &mdash; 1 USDC</button>
+                ${renderWalletChoice()}
+                <div id="scan-claim-status" class="claim-status"></div>
+              </div>`
           : !isClaimed
             ? `<div class="unclaimed-cta">
                 <p>This bungalow hasn't been claimed yet.</p>
                 <p>Are you the founder? Claim it for 1 USDC.</p>
                 <button class="cta-link claim-btn" id="claim-btn">Claim Bungalow &mdash; 1 USDC</button>
+                ${renderWalletChoice()}
                 <div id="claim-status" class="claim-status"></div>
               </div>`
             : `<div class="unclaimed-cta">
@@ -256,8 +279,9 @@ function renderMarketStrip(b: BungalowRow | null): string {
 function renderHolders(holders: TokenHolderRow[], total: number, chain: string): string {
   if (holders.length === 0) {
     return `<div class="scan-cta">
-      <p>No holder data yet.</p>
-      <button class="cta-link scan-pay-btn" id="scan-btn">Scan this token &mdash; 1 USDC</button>
+      <p>No holder data yet. Scan this token to see holders &amp; heat.</p>
+      <button class="cta-link scan-pay-btn" id="scan-btn">Scan &amp; Claim &mdash; 1 USDC</button>
+      ${renderWalletChoice()}
       <div id="scan-status" class="claim-status" style="margin-top:8px"></div>
     </div>`
   }

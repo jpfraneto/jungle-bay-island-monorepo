@@ -424,6 +424,24 @@ export const BUNGALOW_CSS = `
     text-align: center; padding: 24px; color: ${COLORS.textMuted};
     font-size: 13px;
   }
+
+  /* ── Wallet choice UI ── */
+  .wallet-choice {
+    display: flex; gap: 10px; margin-top: 12px;
+    justify-content: center; flex-wrap: wrap;
+  }
+  .wallet-choice-btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: ${COLORS.surface}; color: ${COLORS.text};
+    border: 1px solid ${COLORS.border}; border-radius: 6px;
+    padding: 10px 20px; font-size: 13px; font-weight: 500;
+    font-family: inherit; cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .wallet-choice-btn:hover {
+    border-color: ${COLORS.accent}; background: ${COLORS.surfaceHover};
+  }
+  .wallet-choice-icon { font-size: 16px; }
 `
 
 export const USER_PAGE_CSS = `
@@ -513,5 +531,31 @@ export const USER_PAGE_CSS = `
   .empty-state {
     color: ${COLORS.textMuted}; font-size: 14px;
     text-align: center; padding: 40px 20px;
+  }
+
+  /* ── Aggregate toggle ── */
+  .aggregate-toggle {
+    display: flex; gap: 6px; margin-bottom: 12px;
+  }
+  .toggle-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 5px 14px; border-radius: 16px;
+    font-size: 12px; font-weight: 500; font-family: inherit;
+    background: ${COLORS.surface}; color: ${COLORS.textMuted};
+    border: 1px solid ${COLORS.border}; cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .toggle-btn:hover { border-color: ${COLORS.accent}; color: ${COLORS.text}; }
+  .toggle-btn.active {
+    border-color: ${COLORS.accent}; color: ${COLORS.accent};
+    background: ${COLORS.bg};
+  }
+
+  /* ── Wallet badge (aggregated view) ── */
+  .wallet-badge {
+    display: inline-block;
+    font-size: 10px; color: ${COLORS.textMuted};
+    background: ${COLORS.bg}; border: 1px solid ${COLORS.border};
+    padding: 1px 6px; border-radius: 3px; margin-right: 4px;
   }
 `

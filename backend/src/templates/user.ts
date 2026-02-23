@@ -59,14 +59,19 @@ export function renderUserPage(data: UserPageData): string {
   const displayName = data.farcaster?.display_name ?? null;
   const username = data.farcaster?.username ?? null;
 
+  const fcProfileUrl = data.farcaster?.username
+    ? `https://warpcast.com/${esc(data.farcaster.username)}`
+    : null;
+
   const fcCard = data.farcaster
-    ? `<div class="fc-card">
+    ? `<a href="${fcProfileUrl}" target="_blank" rel="noopener" class="fc-card" style="text-decoration:none">
         ${data.farcaster.pfp_url ? `<img class="fc-pfp" src="${esc(data.farcaster.pfp_url)}" alt="" />` : ""}
-        <div>
+        <div style="flex:1">
           ${data.farcaster.display_name ? `<div class="fc-display">${esc(data.farcaster.display_name)}</div>` : ""}
           ${data.farcaster.username ? `<div class="fc-username">@${esc(data.farcaster.username)}</div>` : ""}
         </div>
-      </div>`
+        <span style="color:${COLORS.textMuted};font-size:11px">Farcaster \u2197</span>
+      </a>`
     : "";
 
   const hasLinkedWallets =
@@ -150,6 +155,16 @@ export function renderUserPage(data: UserPageData): string {
 
     ${fcCard}
     ${tokenTable}
+
+    <div class="scan-another" style="margin-top:32px">
+      <h3 class="section-title">Scan Another Token</h3>
+      <div class="scan-form-group">
+        <input type="text" id="ca-input" placeholder="contract address" autocomplete="off" spellcheck="false" readonly />
+        <button type="button" class="scan-paste-btn" id="paste-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M9 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-2"/></svg> PASTE</button>
+      </div>
+      <div class="scan-status-msg" id="status-msg"></div>
+      <p class="scan-hint">Base &amp; Solana tokens</p>
+    </div>
   </div>
 
   <a href="https://x.com/jpfraneto" target="_blank" rel="noopener" class="beta-banner">this app is in BETA. contact @jpfraneto on X for support</a>
@@ -252,6 +267,74 @@ export function renderUserPage(data: UserPageData): string {
             });
         });
       }
+    }
+
+    // ── Scan another token (paste CA) ──
+    var EVM_RE = /^0x[0-9a-fA-F]{40}$/;
+    var SOL_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+    var caInput = document.getElementById('ca-input');
+    var pasteBtn = document.getElementById('paste-btn');
+    var statusEl2 = document.getElementById('status-msg');
+
+    function setStatus2(msg, type) {
+      if (!statusEl2) return;
+      statusEl2.textContent = msg;
+      statusEl2.className = 'scan-status-msg' + (type ? ' ' + type : '');
+    }
+
+    function detectChain(addr) {
+      if (EVM_RE.test(addr)) return 'base';
+      if (SOL_RE.test(addr)) return 'solana';
+      return null;
+    }
+
+    async function validateAndGo(addr) {
+      var chain = detectChain(addr);
+      if (!chain) { setStatus2('Not a valid contract address', 'error'); return; }
+      if (caInput) caInput.value = addr;
+      setStatus2('Checking token...', 'checking');
+      if (pasteBtn) pasteBtn.disabled = true;
+      try {
+        var resp = await fetch('https://api.dexscreener.com/latest/dex/tokens/' + addr);
+        var data = await resp.json();
+        if (data.pairs && data.pairs.length > 0) {
+          var pair = data.pairs[0];
+          if (pair.chainId === 'solana') chain = 'solana';
+          else if (pair.chainId === 'base') chain = 'base';
+          else if (pair.chainId === 'ethereum') chain = 'ethereum';
+          setStatus2('Token found! Redirecting...', 'success');
+          setTimeout(function() { window.location.href = '/' + chain + '/' + addr; }, 300);
+          return;
+        }
+        setStatus2('Token not listed on DexScreener. Loading anyway...', 'checking');
+        setTimeout(function() { window.location.href = '/' + chain + '/' + addr; }, 800);
+      } catch(e) {
+        setStatus2('Could not verify token. Loading...', 'checking');
+        setTimeout(function() { window.location.href = '/' + chain + '/' + addr; }, 500);
+      }
+    }
+
+    if (pasteBtn) {
+      pasteBtn.addEventListener('click', async function() {
+        setStatus2('', '');
+        try {
+          var text = await navigator.clipboard.readText();
+          var addr = (text || '').trim();
+          if (!addr) { setStatus2('Clipboard is empty', 'error'); return; }
+          await validateAndGo(addr);
+        } catch(e) {
+          setStatus2('Clipboard access denied. Paste manually below.', 'error');
+          if (caInput) caInput.focus();
+        }
+      });
+    }
+    if (caInput) {
+      caInput.addEventListener('paste', function() {
+        setTimeout(function() {
+          var addr = caInput.value.trim();
+          if (addr) validateAndGo(addr);
+        }, 50);
+      });
     }
   </script>
 </body>

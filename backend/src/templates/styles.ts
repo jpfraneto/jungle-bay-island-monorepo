@@ -695,6 +695,42 @@ export const USER_PAGE_CSS = `
     padding: 1px 6px; border-radius: 3px; margin-right: 4px;
   }
 
+  /* ── Scan another token ── */
+  .scan-form-group { display: flex; gap: 8px; margin-bottom: 8px; }
+  .scan-form-group input[type="text"] {
+    flex: 1; min-width: 0;
+    background: ${COLORS.surface};
+    border: 1px solid ${COLORS.border};
+    color: ${COLORS.text};
+    padding: 12px 14px; font-size: 13px;
+    font-family: inherit; border-radius: 6px;
+    outline: none; -webkit-appearance: none;
+  }
+  .scan-form-group input[type="text"]:focus { border-color: ${COLORS.accent}; }
+  .scan-form-group input[type="text"]::placeholder { color: ${COLORS.textMuted}; }
+  .scan-paste-btn {
+    background: ${COLORS.accent}; color: ${COLORS.bg};
+    border: none; padding: 12px 20px; font-size: 13px;
+    font-weight: 600; font-family: inherit; border-radius: 6px;
+    cursor: pointer; white-space: nowrap;
+    display: flex; align-items: center; gap: 6px;
+    transition: opacity 0.15s;
+  }
+  .scan-paste-btn:hover { opacity: 0.9; }
+  .scan-paste-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .scan-status-msg {
+    font-size: 12px; min-height: 20px; margin-bottom: 4px;
+    transition: color 0.15s;
+  }
+  .scan-status-msg.error { color: ${COLORS.red}; }
+  .scan-status-msg.checking { color: ${COLORS.textMuted}; }
+  .scan-status-msg.success { color: ${COLORS.green}; }
+  .scan-hint { color: ${COLORS.textMuted}; font-size: 11px; }
+  .scan-another { padding-bottom: 48px; }
+
+  /* ── Farcaster card as link ── */
+  .fc-card:hover { border-color: ${COLORS.accent}; }
+
   /* ── Beta banner ── */
   .beta-banner {
     position: fixed; bottom: 0; left: 0; right: 0;

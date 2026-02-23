@@ -197,12 +197,15 @@ export function renderClientScript(): string {
       }
     }
 
+    var holderPanel = document.getElementById('panel-holders');
     if (selectedHolders.length === 0) {
       wrap.style.display = 'none';
+      if (holderPanel) holderPanel.classList.remove('has-chart');
       return;
     }
 
     wrap.style.display = 'block';
+    if (holderPanel) holderPanel.classList.add('has-chart');
     drawHolderChart();
   }
 
@@ -215,10 +218,17 @@ export function renderClientScript(): string {
 
     var dpr = window.devicePixelRatio || 1;
     var w = wrap.clientWidth;
-    // Cap chart to 50% of the tab panel height so holders list is always visible
     var panel = wrap.closest('.tab-panel');
-    var maxH = panel ? Math.round(panel.clientHeight * 0.5) : 400;
-    var h = Math.min(Math.round(w / 2), maxH);
+    var isDesktopSplit = panel && panel.classList.contains('has-chart') && window.innerWidth >= 768;
+    var h;
+    if (isDesktopSplit) {
+      // Desktop: chart fills the right half vertically, leave room for legend
+      h = Math.max((panel.clientHeight || 400) - 40, 200);
+    } else {
+      // Mobile: cap to 50% of panel height
+      var maxH = panel ? Math.round(panel.clientHeight * 0.5) : 300;
+      h = Math.min(Math.round(w / 2), maxH);
+    }
     canvas.width = w * dpr;
     canvas.height = h * dpr;
     canvas.style.width = w + 'px';

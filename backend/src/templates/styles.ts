@@ -457,11 +457,25 @@ export const BUNGALOW_CSS = `
   /* ── Holder balance chart ── */
   .holder-chart-wrap {
     flex-shrink: 0; width: 100%; position: relative;
-    max-height: 50%; overflow: hidden;
     background: ${COLORS.bg}; border-bottom: 1px solid ${COLORS.border};
   }
   .holder-chart-wrap canvas {
     width: 100%; display: block;
+  }
+  /* Desktop: side-by-side layout when chart is visible */
+  @media (min-width: 768px) {
+    #panel-holders.has-chart {
+      flex-direction: row;
+    }
+    #panel-holders.has-chart .holder-chart-wrap {
+      width: 50%; flex-shrink: 0; border-bottom: none;
+      border-left: 1px solid ${COLORS.border};
+      order: 1; display: flex; flex-direction: column;
+      overflow-y: auto;
+    }
+    #panel-holders.has-chart .panel-scroll {
+      width: 50%; order: 0;
+    }
   }
   .holder-chart-legend {
     display: flex; gap: 12px; flex-wrap: wrap;

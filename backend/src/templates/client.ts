@@ -96,48 +96,63 @@ export function renderClientScript(): string {
   }
 
   function toggleHolderHistory(wallet, label) {
+    console.log('[toggle] wallet:', wallet, 'label:', label, 'selected:', selectedHolders.length);
     var idx = -1;
     for (var i = 0; i < selectedHolders.length; i++) {
       if (selectedHolders[i].wallet === wallet) { idx = i; break; }
     }
 
     if (idx !== -1) {
+      console.log('[toggle] deselecting wallet at idx', idx);
       selectedHolders.splice(idx, 1);
       updateHolderChartUI();
       return;
     }
 
-    if (D.chain === 'solana') return; // no history for solana
+    if (D.chain === 'solana') { console.log('[toggle] skipping — solana chain'); return; }
 
     var color = HOLDER_COLORS[selectedHolders.length % HOLDER_COLORS.length];
-    // Mark loading
     markHeatCell(wallet, color, true);
 
-    // Show skeleton immediately for visual feedback
     if (selectedHolders.length === 0) {
+      console.log('[toggle] showing skeleton');
       showSkeleton();
     }
 
-    fetch('/api/token/' + D.chain + '/' + D.tokenAddress + '/holder/' + wallet + '/history')
-      .then(function(r) { return r.json(); })
+    var url = '/api/token/' + D.chain + '/' + D.tokenAddress + '/holder/' + wallet + '/history';
+    console.log('[toggle] fetching:', url);
+
+    fetch(url)
+      .then(function(r) {
+        console.log('[toggle] fetch status:', r.status);
+        return r.json();
+      })
       .then(function(data) {
+        console.log('[toggle] data received, points:', data.points ? data.points.length : 0);
         if (!data.points || data.points.length === 0) {
+          console.log('[toggle] no points, hiding');
           markHeatCell(wallet, null, false);
           if (selectedHolders.length === 0) {
             var wrap = document.getElementById('holder-chart-wrap');
             if (wrap) wrap.classList.remove('visible');
+            var holderPanel = document.getElementById('panel-holders');
+            if (holderPanel) holderPanel.classList.remove('has-chart');
           }
           return;
         }
         selectedHolders.push({ wallet: wallet, color: color, points: data.points, label: label || shortAddr(wallet) });
         ensureHolderRow(wallet, label || shortAddr(wallet));
+        console.log('[toggle] calling updateHolderChartUI, selected:', selectedHolders.length);
         updateHolderChartUI();
       })
-      .catch(function() {
+      .catch(function(err) {
+        console.error('[toggle] fetch error:', err);
         markHeatCell(wallet, null, false);
         if (selectedHolders.length === 0) {
           var wrap = document.getElementById('holder-chart-wrap');
           if (wrap) wrap.classList.remove('visible');
+          var holderPanel = document.getElementById('panel-holders');
+          if (holderPanel) holderPanel.classList.remove('has-chart');
         }
       });
   }
@@ -346,10 +361,11 @@ export function renderClientScript(): string {
   // ── Click handler for heat cells ──
   document.addEventListener('click', function(e) {
     var cell = e.target.closest('td.heat[data-wallet]');
-    if (!cell) return;
+    if (!cell) { console.log('[heat-click] no td.heat cell found, target:', e.target.tagName, e.target.className); return; }
     e.preventDefault();
     e.stopPropagation();
     var wallet = cell.getAttribute('data-wallet');
+    console.log('[heat-click] wallet:', wallet, 'chain:', D.chain, 'token:', D.tokenAddress);
     if (!wallet) return;
 
     // Build label from the row

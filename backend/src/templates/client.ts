@@ -215,7 +215,7 @@ export function renderClientScript(): string {
 
     var dpr = window.devicePixelRatio || 1;
     var w = wrap.clientWidth;
-    var h = w; // square
+    var h = Math.round(w / 2); // 2:1 aspect ratio
     canvas.width = w * dpr;
     canvas.height = h * dpr;
     canvas.style.width = w + 'px';

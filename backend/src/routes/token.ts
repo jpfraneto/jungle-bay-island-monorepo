@@ -1,14 +1,19 @@
 import { Hono } from 'hono'
-import { normalizeAddress } from '../config'
-import { getTokenHolders, getTokenSummary, VALID_TIERS } from '../db/queries'
+import { normalizeAddress, toSupportedChain } from '../config'
+import { getTokenHolders, getTokenSummary, getTransferTimeline, VALID_TIERS } from '../db/queries'
 import { getTierFromHeat } from '../services/heat'
 import { logInfo } from '../services/logger'
 import { ApiError } from '../services/errors'
+import { fetchHolderBalanceHistory } from '../services/scanner'
 
 const tokenRoute = new Hono()
 
-tokenRoute.get('/token/:ca/holders', async (c) => {
-  const tokenAddress = normalizeAddress(c.req.param('ca'))
+tokenRoute.get('/token/:chain/:ca/holders', async (c) => {
+  const chain = toSupportedChain(c.req.param('chain'))
+  if (!chain) {
+    throw new ApiError(400, 'invalid_chain', 'Invalid chain')
+  }
+  const tokenAddress = normalizeAddress(c.req.param('ca'), chain)
   if (!tokenAddress) {
     throw new ApiError(400, 'invalid_token', 'Invalid token address')
   }
@@ -49,6 +54,35 @@ tokenRoute.get('/token/:ca/holders', async (c) => {
     }),
     total,
   })
+})
+
+tokenRoute.get('/token/:ca/timeline', async (c) => {
+  const tokenAddress = normalizeAddress(c.req.param('ca')) || normalizeAddress(c.req.param('ca'), 'solana')
+  if (!tokenAddress) {
+    throw new ApiError(400, 'invalid_token', 'Invalid token address')
+  }
+
+  const timeline = await getTransferTimeline(tokenAddress)
+  return c.json({ timeline })
+})
+
+tokenRoute.get('/token/:chain/:ca/holder/:wallet/history', async (c) => {
+  const chain = toSupportedChain(c.req.param('chain'))
+  if (!chain || chain === 'solana') {
+    throw new ApiError(400, 'unsupported_chain', 'Balance history is only available for EVM tokens')
+  }
+  const tokenAddress = normalizeAddress(c.req.param('ca'), chain)
+  if (!tokenAddress) {
+    throw new ApiError(400, 'invalid_token', 'Invalid token address')
+  }
+  const wallet = c.req.param('wallet')?.toLowerCase()
+  if (!wallet || !/^0x[0-9a-f]{40}$/.test(wallet)) {
+    throw new ApiError(400, 'invalid_wallet', 'Invalid wallet address')
+  }
+
+  logInfo('HOLDER HISTORY', `chain=${chain} token=${tokenAddress} wallet=${wallet}`)
+  const result = await fetchHolderBalanceHistory(chain, tokenAddress, wallet)
+  return c.json(result)
 })
 
 export default tokenRoute

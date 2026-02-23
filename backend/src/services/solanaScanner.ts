@@ -203,6 +203,7 @@ export async function scanSolanaToken(
     holderCount: holders.length,
     eventsFetched: 0,
     rpcCallsMade: rpcCallsMade.count,
+    timeline: [],
     holders,
   }
 }

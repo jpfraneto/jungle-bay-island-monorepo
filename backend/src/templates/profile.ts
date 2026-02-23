@@ -69,7 +69,7 @@ export function renderProfilePage(data: ProfilePageData): string {
     <div class="wallet-item" data-wallet="${esc(w.wallet)}">
       <span class="kind">${w.wallet_kind}</span>
       <span class="addr">${shortAddr(w.wallet)}</span>
-      <a href="/user/${esc(w.wallet)}" style="color:${COLORS.accent};font-size:12px">view</a>
+      <a href="/wallet/${esc(w.wallet)}" style="color:${COLORS.accent};font-size:12px">view</a>
       <button class="unlink-btn" data-unlink="${esc(w.wallet)}">unlink</button>
     </div>
   `).join('')
@@ -84,7 +84,7 @@ export function renderProfilePage(data: ProfilePageData): string {
 </head>
 <body>
   <header class="topbar">
-    <a href="/" class="topbar-logo">MEMETICS</a>
+    <a href="/" class="topbar-logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 20V4l5 8 4-6 4 6 5-8v16" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
     <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
       <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:${COLORS.text}">
         ${session.x_pfp ? `<img src="${esc(session.x_pfp)}" alt="" style="width:22px;height:22px;border-radius:50%;border:1px solid ${COLORS.border}" />` : ''}
@@ -117,6 +117,8 @@ export function renderProfilePage(data: ProfilePageData): string {
     </div>
     <div class="status-msg" id="connect-status"></div>
   </div>
+
+  <a href="https://x.com/jpfraneto" target="_blank" rel="noopener" class="beta-banner">this app is in BETA. contact @jpfraneto on X for support</a>
 
   <script>
   (function() {

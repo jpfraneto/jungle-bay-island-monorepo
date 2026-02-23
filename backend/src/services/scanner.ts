@@ -2,10 +2,15 @@ import {
   createPublicClient,
   formatUnits,
   http,
-  parseAbiItem,
 } from 'viem'
 import { base, mainnet } from 'viem/chains'
 import { calculateHeatDegrees, calculateTWAB, type BalanceSnapshot } from './heat'
+import { logInfo } from './logger'
+
+export interface TimelineBucket {
+  t: number  // timestamp (start of bucket)
+  c: number  // transfer count in this bucket
+}
 
 export interface ScanResult {
   tokenAddress: string
@@ -19,6 +24,7 @@ export interface ScanResult {
   holderCount: number
   eventsFetched: number
   rpcCallsMade: number
+  timeline: TimelineBucket[]
   holders: {
     wallet: string
     heatDegrees: number
@@ -29,15 +35,9 @@ export interface ScanResult {
 }
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
-const BLOCK_RANGE = 10_000
-const MAX_CONCURRENT = 20
-const DELAY_MS = 50
 const MAX_RETRIES = 3
 const MIN_HEAT_DEGREES = 0.01
-
-const BASE_ANCHOR_BLOCK = 23_205_873n
-const BASE_ANCHOR_TS = 1733201093
-const BASE_BLOCK_TIME = 2
+const ALCHEMY_PAGE_SIZE = '0x3e8' // 1000 per page
 
 const erc20ReadAbi = [
   { name: 'name', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'string' }] },
@@ -52,15 +52,11 @@ const erc721ReadAbi = [
   { name: 'totalSupply', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
 ] as const
 
-const ERC20_TRANSFER = parseAbiItem('event Transfer(address indexed from, address indexed to, uint256 value)')
-const ERC721_TRANSFER = parseAbiItem('event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)')
-
 type TransferEvent = {
   from: string
   to: string
   value: bigint
-  blockNumber: bigint
-  logIndex: number
+  blockNumber: number
   timestamp: number
 }
 
@@ -73,10 +69,6 @@ interface WalletLedger {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-function estimateBaseTimestamp(blockNumber: bigint): number {
-  return BASE_ANCHOR_TS + Number(blockNumber - BASE_ANCHOR_BLOCK) * BASE_BLOCK_TIME
 }
 
 async function withRetry<T>(fn: () => Promise<T>, attempt = 1): Promise<T> {
@@ -95,6 +87,12 @@ function getClient(chain: 'base' | 'ethereum') {
     return createPublicClient({ chain: base, transport: http(process.env.PONDER_RPC_URL_8453) })
   }
   return createPublicClient({ chain: mainnet, transport: http(process.env.PONDER_RPC_URL_1) })
+}
+
+function getRpcUrl(chain: 'base' | 'ethereum'): string {
+  return chain === 'base'
+    ? process.env.PONDER_RPC_URL_8453!
+    : process.env.PONDER_RPC_URL_1!
 }
 
 async function getTokenMetadata(
@@ -140,116 +138,155 @@ async function getTokenMetadata(
   return { name, symbol, decimals, totalSupply, isNft }
 }
 
-function mapLogToEvent(log: any, isNft: boolean, timestamp: number): TransferEvent {
-  const value = isNft ? 1n : (log.args.value as bigint)
-  return {
-    from: String(log.args.from).toLowerCase(),
-    to: String(log.args.to).toLowerCase(),
-    value,
-    blockNumber: log.blockNumber as bigint,
-    logIndex: Number(log.logIndex ?? 0),
-    timestamp,
-  }
+interface AlchemyTransfer {
+  blockNum: string
+  from: string
+  to: string
+  value: number | null
+  rawContract: {
+    value: string | null
+    address: string
+    decimal: string | null
+  } | null
+  metadata: {
+    blockTimestamp: string
+  } | null
+  category: string
+  hash: string
 }
 
-async function getLogsRange(
-  client: ReturnType<typeof getClient>,
-  tokenAddress: `0x${string}`,
+async function fetchAllTransfers(
+  rpcUrl: string,
+  tokenAddress: string,
   isNft: boolean,
-  fromBlock: number,
-  toBlock: number,
   rpcCounter: { count: number },
-): Promise<any[]> {
-  rpcCounter.count += 1
-  return withRetry(() => client.getLogs({
-    address: tokenAddress,
-    event: isNft ? ERC721_TRANSFER : ERC20_TRANSFER,
-    fromBlock: BigInt(fromBlock),
-    toBlock: BigInt(toBlock),
-  }))
+  onProgress?: (progress: { phase: string; pct: number; detail?: string }) => void,
+): Promise<TransferEvent[]> {
+  const category = isNft ? ['erc721'] : ['erc20']
+  const events: TransferEvent[] = []
+  let pageKey: string | undefined
+  let page = 0
+
+  do {
+    rpcCounter.count += 1
+
+    const params: Record<string, unknown> = {
+      fromBlock: '0x0',
+      toBlock: 'latest',
+      contractAddresses: [tokenAddress],
+      category,
+      withMetadata: true,
+      excludeZeroValue: !isNft,
+      maxCount: ALCHEMY_PAGE_SIZE,
+      order: 'asc',
+    }
+    if (pageKey) {
+      params.pageKey = pageKey
+    }
+
+    const response = await withRetry(async () => {
+      const res = await fetch(rpcUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'alchemy_getAssetTransfers',
+          params: [params],
+        }),
+      })
+      if (!res.ok) {
+        throw new Error(`Alchemy API error: ${res.status} ${res.statusText}`)
+      }
+      const data = await res.json()
+      if (data.error) {
+        throw new Error(`Alchemy RPC error: ${data.error.message || JSON.stringify(data.error)}`)
+      }
+      return data.result as { transfers: AlchemyTransfer[]; pageKey?: string }
+    })
+
+    for (const t of response.transfers) {
+      const blockNumber = parseInt(t.blockNum, 16)
+      const timestamp = t.metadata?.blockTimestamp
+        ? Math.floor(new Date(t.metadata.blockTimestamp).getTime() / 1000)
+        : Math.floor(Date.now() / 1000)
+      let value: bigint
+
+      if (isNft) {
+        value = 1n
+      } else if (t.rawContract?.value) {
+        value = BigInt(t.rawContract.value)
+      } else {
+        // Fallback: use decimal value * 10^decimals
+        const dec = t.rawContract?.decimal ? parseInt(t.rawContract.decimal, 16) : 18
+        value = BigInt(Math.round((t.value ?? 0) * (10 ** dec)))
+      }
+
+      events.push({
+        from: t.from.toLowerCase(),
+        to: t.to.toLowerCase(),
+        value,
+        blockNumber,
+        timestamp,
+      })
+    }
+
+    pageKey = response.pageKey || undefined
+    page++
+    logInfo('ALCHEMY TRANSFERS', `token=${tokenAddress} page=${page} got=${response.transfers.length} total=${events.length} hasMore=${!!pageKey}`)
+
+    // Progress: 15% to 70% across pages using asymptotic curve
+    if (onProgress) {
+      const pct = pageKey
+        ? Math.round(15 + 55 * (1 - 1 / (1 + page / 10)))
+        : 70
+      const detail = `${events.length.toLocaleString()} transfers fetched`
+      onProgress({ phase: 'transfers', pct, detail })
+    }
+  } while (pageKey)
+
+  return events
 }
 
-async function hasAnyTransferInRange(
-  client: ReturnType<typeof getClient>,
-  tokenAddress: `0x${string}`,
-  isNft: boolean,
-  fromBlock: number,
-  toBlock: number,
-  rpcCounter: { count: number },
-): Promise<{ exists: boolean; firstBlock: number | null }> {
-  const logs = await getLogsRange(client, tokenAddress, isNft, fromBlock, toBlock, rpcCounter)
-  if (logs.length === 0) return { exists: false, firstBlock: null }
+function buildTransferTimeline(events: TransferEvent[], deployTimestamp: number): TimelineBucket[] {
+  const now = Math.floor(Date.now() / 1000)
+  const spanSeconds = now - deployTimestamp
+  const DAY = 86400
+  const WEEK = 7 * DAY
+  const MONTH = 30 * DAY
 
-  let first = Number(logs[0].blockNumber)
-  for (const log of logs) {
-    const bn = Number(log.blockNumber)
-    if (bn < first) first = bn
-  }
-  return { exists: true, firstBlock: first }
-}
-
-async function findDeployBlock(
-  client: ReturnType<typeof getClient>,
-  tokenAddress: `0x${string}`,
-  isNft: boolean,
-  headBlock: number,
-  rpcCounter: { count: number },
-): Promise<number> {
-  const overall = await hasAnyTransferInRange(client, tokenAddress, isNft, 0, headBlock, rpcCounter)
-  if (!overall.exists || overall.firstBlock === null) {
-    throw new Error('No Transfer events found for token')
+  // Adaptive bucketing: daily (<90 days), weekly (<1 year), monthly (>1 year)
+  let bucketSize: number
+  if (spanSeconds < 90 * DAY) {
+    bucketSize = DAY
+  } else if (spanSeconds < 365 * DAY) {
+    bucketSize = WEEK
+  } else {
+    bucketSize = MONTH
   }
 
-  let low = 0
-  let high = headBlock
+  // Create buckets from deploy to now
+  const buckets: TimelineBucket[] = []
+  const bucketStart = deployTimestamp - (deployTimestamp % bucketSize)
+  for (let t = bucketStart; t <= now; t += bucketSize) {
+    buckets.push({ t, c: 0 })
+  }
 
-  while (high - low > 1000) {
-    const mid = Math.floor((low + high) / 2)
-    const left = await hasAnyTransferInRange(client, tokenAddress, isNft, low, mid, rpcCounter)
-    if (left.exists) {
-      high = mid
-    } else {
-      low = mid + 1
+  // Fill buckets with event counts
+  for (const event of events) {
+    const idx = Math.floor((event.timestamp - bucketStart) / bucketSize)
+    if (idx >= 0 && idx < buckets.length) {
+      buckets[idx].c++
     }
   }
 
-  for (let start = low; start <= high; start += 100) {
-    const end = Math.min(start + 99, high)
-    const chunk = await hasAnyTransferInRange(client, tokenAddress, isNft, start, end, rpcCounter)
-    if (chunk.exists && chunk.firstBlock !== null) return chunk.firstBlock
-  }
-
-  return overall.firstBlock
+  return buckets
 }
 
-async function buildEthereumTimestampMap(
-  client: ReturnType<typeof getClient>,
-  events: { blockNumber: bigint }[],
-  rpcCounter: { count: number },
-): Promise<Map<bigint, number>> {
-  const uniqueBlockNumbers = [...new Set(events.map((event) => event.blockNumber))].sort((a, b) => (a < b ? -1 : 1))
-  const blockTimestamps = new Map<bigint, number>()
-
-  for (let i = 0; i < uniqueBlockNumbers.length; i += MAX_CONCURRENT) {
-    const batch = uniqueBlockNumbers.slice(i, i + MAX_CONCURRENT)
-    const results = await Promise.all(
-      batch.map(async (blockNumber) => {
-        rpcCounter.count += 1
-        const block = await withRetry(() => client.getBlock({ blockNumber }))
-        return { blockNumber, timestamp: Number(block.timestamp) }
-      }),
-    )
-
-    for (const item of results) {
-      blockTimestamps.set(item.blockNumber, item.timestamp)
-    }
-
-    if (i + MAX_CONCURRENT < uniqueBlockNumbers.length) {
-      await sleep(DELAY_MS)
-    }
-  }
-
-  return blockTimestamps
+function formatDateShort(ts: number): string {
+  const d = new Date(ts * 1000)
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`
 }
 
 function computeHolderHeat(
@@ -286,76 +323,38 @@ function computeHolderHeat(
 export async function scanToken(
   chain: 'base' | 'ethereum',
   tokenAddress: string,
-  onProgress?: (progress: { phase: string; pct: number }) => void,
+  onProgress?: (progress: { phase: string; pct: number; detail?: string }) => void,
 ): Promise<ScanResult> {
   const client = getClient(chain)
+  const rpcUrl = getRpcUrl(chain)
   const checksumAddress = tokenAddress.toLowerCase() as `0x${string}`
   const rpcCounter = { count: 0 }
 
-  onProgress?.({ phase: 'metadata', pct: 5 })
+  // Phase 1: metadata (5%)
+  onProgress?.({ phase: 'metadata', pct: 5, detail: 'Reading token contract' })
   const metadata = await getTokenMetadata(client, checksumAddress, rpcCounter)
 
-  rpcCounter.count += 1
-  const headBlock = Number(await withRetry(() => client.getBlockNumber()))
+  // Phase 2: fetch all transfers via Alchemy API (15-70%)
+  onProgress?.({ phase: 'transfers', pct: 15, detail: 'Starting transfer fetch' })
+  const events = await fetchAllTransfers(rpcUrl, checksumAddress, metadata.isNft, rpcCounter, onProgress)
 
-  onProgress?.({ phase: 'deploy_block', pct: 10 })
-  const deployBlock = await findDeployBlock(client, checksumAddress, metadata.isNft, headBlock, rpcCounter)
-
-  const deployTimestamp =
-    chain === 'base'
-      ? estimateBaseTimestamp(BigInt(deployBlock))
-      : await (async () => {
-        rpcCounter.count += 1
-        const block = await withRetry(() => client.getBlock({ blockNumber: BigInt(deployBlock) }))
-        return Number(block.timestamp)
-      })()
-
-  onProgress?.({ phase: 'transfer_logs', pct: 20 })
-  const ranges: Array<{ from: number; to: number }> = []
-  for (let from = deployBlock; from <= headBlock; from += BLOCK_RANGE) {
-    ranges.push({ from, to: Math.min(from + BLOCK_RANGE - 1, headBlock) })
+  if (events.length === 0) {
+    throw new Error('No Transfer events found for token')
   }
 
-  const rawLogs: any[] = []
-  for (let i = 0; i < ranges.length; i += MAX_CONCURRENT) {
-    const batch = ranges.slice(i, i + MAX_CONCURRENT)
-    const batchLogs = await Promise.all(
-      batch.map((range) =>
-        getLogsRange(client, checksumAddress, metadata.isNft, range.from, range.to, rpcCounter),
-      ),
-    )
+  // Deploy block/timestamp from first transfer
+  const deployBlock = events[0].blockNumber
+  const deployTimestamp = events[0].timestamp
 
-    for (const logs of batchLogs) rawLogs.push(...logs)
+  // Enhanced progress: show date range
+  const dateRange = `${events.length.toLocaleString()} transfers (${formatDateShort(deployTimestamp)} \u2192 ${formatDateShort(Math.floor(Date.now() / 1000))})`
+  onProgress?.({ phase: 'transfers', pct: 72, detail: dateRange })
 
-    const pct = 20 + Math.floor(((i + batch.length) / ranges.length) * 35)
-    onProgress?.({ phase: 'transfer_logs', pct })
+  // Build transfer timeline
+  const timeline = buildTransferTimeline(events, deployTimestamp)
 
-    if (i + MAX_CONCURRENT < ranges.length) {
-      await sleep(DELAY_MS)
-    }
-  }
-
-  let blockTimestamps = new Map<bigint, number>()
-  if (chain === 'ethereum') {
-    onProgress?.({ phase: 'timestamps', pct: 60 })
-    blockTimestamps = await buildEthereumTimestampMap(client, rawLogs as { blockNumber: bigint }[], rpcCounter)
-  }
-
-  onProgress?.({ phase: 'balances', pct: 75 })
-  const events: TransferEvent[] = (rawLogs as any[])
-    .map((log) => {
-      const timestamp =
-        chain === 'base'
-          ? estimateBaseTimestamp(log.blockNumber as bigint)
-          : (blockTimestamps.get(log.blockNumber as bigint) ?? Math.floor(Date.now() / 1000))
-      return mapLogToEvent(log, metadata.isNft, timestamp)
-    })
-    .sort((a, b) => {
-      if (a.blockNumber < b.blockNumber) return -1
-      if (a.blockNumber > b.blockNumber) return 1
-      return a.logIndex - b.logIndex
-    })
-
+  // Phase 3: build wallet ledgers (75%)
+  onProgress?.({ phase: 'balances', pct: 75, detail: `Processing ${events.length.toLocaleString()} transfers` })
   const ledgers = new Map<string, WalletLedger>()
 
   for (const event of events) {
@@ -390,7 +389,8 @@ export async function scanToken(
     }
   }
 
-  onProgress?.({ phase: 'heat', pct: 90 })
+  // Phase 4: compute heat (90%)
+  onProgress?.({ phase: 'heat', pct: 90, detail: `Scoring ${ledgers.size.toLocaleString()} wallets` })
   const holders = computeHolderHeat(ledgers, deployTimestamp, metadata.totalSupply, metadata.decimals)
 
   onProgress?.({ phase: 'complete', pct: 100 })
@@ -404,8 +404,128 @@ export async function scanToken(
     deployBlock,
     deployTimestamp,
     holderCount: holders.length,
-    eventsFetched: rawLogs.length,
+    eventsFetched: events.length,
     rpcCallsMade: rpcCounter.count,
+    timeline,
     holders,
   }
+}
+
+export async function fetchHolderBalanceHistory(
+  chain: 'base' | 'ethereum',
+  tokenAddress: string,
+  walletAddress: string,
+): Promise<{ points: Array<{ t: number; b: number }>; decimals: number }> {
+  const rpcUrl = getRpcUrl(chain)
+  const wallet = walletAddress.toLowerCase()
+
+  async function fetchDirection(direction: 'to' | 'from'): Promise<TransferEvent[]> {
+    const events: TransferEvent[] = []
+    let pageKey: string | undefined
+
+    do {
+      const params: Record<string, unknown> = {
+        fromBlock: '0x0',
+        toBlock: 'latest',
+        contractAddresses: [tokenAddress],
+        category: ['erc20'],
+        withMetadata: true,
+        excludeZeroValue: true,
+        maxCount: ALCHEMY_PAGE_SIZE,
+        order: 'asc',
+      }
+      if (direction === 'to') params.toAddress = walletAddress
+      else params.fromAddress = walletAddress
+      if (pageKey) params.pageKey = pageKey
+
+      const response = await withRetry(async () => {
+        const res = await fetch(rpcUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'alchemy_getAssetTransfers',
+            params: [params],
+          }),
+        })
+        if (!res.ok) throw new Error(`Alchemy API error: ${res.status}`)
+        const data = await res.json()
+        if (data.error) throw new Error(data.error.message)
+        return data.result as { transfers: AlchemyTransfer[]; pageKey?: string }
+      })
+
+      for (const t of response.transfers) {
+        const timestamp = t.metadata?.blockTimestamp
+          ? Math.floor(new Date(t.metadata.blockTimestamp).getTime() / 1000)
+          : Math.floor(Date.now() / 1000)
+        let value: bigint
+        if (t.rawContract?.value) {
+          value = BigInt(t.rawContract.value)
+        } else {
+          const dec = t.rawContract?.decimal ? parseInt(t.rawContract.decimal, 16) : 18
+          value = BigInt(Math.round((t.value ?? 0) * (10 ** dec)))
+        }
+        events.push({
+          from: t.from.toLowerCase(),
+          to: t.to.toLowerCase(),
+          value,
+          blockNumber: parseInt(t.blockNum, 16),
+          timestamp,
+        })
+      }
+
+      pageKey = response.pageKey || undefined
+    } while (pageKey)
+
+    return events
+  }
+
+  const [incoming, outgoing] = await Promise.all([
+    fetchDirection('to'),
+    fetchDirection('from'),
+  ])
+
+  const all = [...incoming, ...outgoing]
+  all.sort((a, b) => a.timestamp - b.timestamp || a.blockNumber - b.blockNumber)
+
+  // Get decimals
+  const client = getClient(chain)
+  let decimals = 18
+  try {
+    const raw = await client.readContract({
+      address: tokenAddress as `0x${string}`,
+      abi: erc20ReadAbi,
+      functionName: 'decimals',
+    })
+    decimals = Number(raw)
+  } catch {}
+
+  // Reconstruct running balance
+  let balance = 0n
+  const rawPoints: Array<{ t: number; b: bigint }> = []
+
+  for (const event of all) {
+    if (event.to === wallet) balance += event.value
+    if (event.from === wallet) balance -= event.value
+    rawPoints.push({ t: event.timestamp, b: balance })
+  }
+
+  // Add current point if we have data
+  if (rawPoints.length > 0) {
+    const last = rawPoints[rawPoints.length - 1]
+    const now = Math.floor(Date.now() / 1000)
+    if (now - last.t > 3600) {
+      rawPoints.push({ t: now, b: last.b })
+    }
+  }
+
+  // Convert to human-readable numbers
+  const divisor = 10 ** decimals
+  const points = rawPoints.map(p => ({
+    t: p.t,
+    b: Number(p.b) / divisor,
+  }))
+
+  return { points, decimals }
 }

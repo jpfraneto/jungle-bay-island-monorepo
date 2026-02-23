@@ -1,128 +1,115 @@
-import { COLORS, USER_PAGE_CSS } from './styles'
-import { getTierFromHeat } from '../services/heat'
-import { renderTopbarAuth } from './auth-ui'
-import type { SessionUser } from '../services/session'
+import { COLORS, USER_PAGE_CSS } from "./styles";
+import { getTierFromHeat } from "../services/heat";
+import { renderTopbarAuth } from "./auth-ui";
 
 function esc(str: string | null | undefined): string {
-  if (!str) return ''
+  if (!str) return "";
   return str
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/'/g, '&#39;')
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/'/g, "&#39;");
 }
 
 function shortAddr(addr: string): string {
-  if (addr.length <= 10) return addr
-  return addr.slice(0, 6) + '\u2026' + addr.slice(-4)
+  if (addr.length <= 10) return addr;
+  return addr.slice(0, 6) + "\u2026" + addr.slice(-4);
 }
 
 function fmtHeat(val: number): string {
-  return val.toFixed(1) + '\u00B0'
+  return val.toFixed(1) + "\u00B0";
 }
 
-function chainLabel(chain: string): string {
-  const labels: Record<string, string> = { base: 'Base', ethereum: 'Ethereum', solana: 'Solana' }
-  return labels[chain] ?? chain
-}
-
-const TIER_COLORS: Record<string, string> = {
-  Elder: COLORS.orange,
-  Builder: COLORS.yellow,
-  Resident: COLORS.green,
-  Observer: COLORS.accent,
-  Drifter: COLORS.textMuted,
+function chainSvg(chain: string | null, size = 14): string {
+  if (chain === "base") {
+    return `<svg class="chain-icon" width="${size}" height="${size}" viewBox="0 0 111 111" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="55.5" cy="55.5" r="55.5" fill="#0052FF"/><path d="M55.4 93.5c20.9 0 37.9-17 37.9-37.9 0-20.9-17-37.9-37.9-37.9-19.7 0-35.9 15.1-37.7 34.3h50v7.2h-50C19.5 78.4 35.7 93.5 55.4 93.5z" fill="#fff"/></svg>`;
+  }
+  if (chain === "solana") {
+    return `<svg class="chain-icon" width="${size}" height="${size}" viewBox="0 0 397 312" xmlns="http://www.w3.org/2000/svg"><linearGradient id="sg2" x1="360" y1="350" x2="40" y2="-30" gradientUnits="userSpaceOnUse"><stop stop-color="#00FFA3"/><stop offset="1" stop-color="#DC1FFF"/></linearGradient><path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1l62.7-62.7z" fill="url(#sg2)"/><path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#sg2)"/><path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#sg2)"/></svg>`;
+  }
+  return `<svg class="chain-icon" width="${size}" height="${size}" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><circle cx="16" cy="16" r="16" fill="#627EEA"/><path d="M16.5 4v8.87l7.5 3.35L16.5 4z" fill="#fff" opacity=".6"/><path d="M16.5 4L9 16.22l7.5-3.35V4z" fill="#fff"/></svg>`;
 }
 
 interface UserPageData {
-  wallet: string
-  island_heat: number
-  tier: string
+  wallet: string;
+  island_heat: number;
+  tier: string;
   farcaster: {
-    fid: number | null
-    username: string | null
-    display_name: string | null
-    pfp_url: string | null
-  } | null
+    fid: number | null;
+    username: string | null;
+    display_name: string | null;
+    pfp_url: string | null;
+  } | null;
   token_breakdown: Array<{
-    token: string
-    token_name: string
-    token_symbol: string | null
-    chain: string | null
-    heat_degrees: number
-  }>
-  scans: Array<{ chain: string; token_address: string; scanned_at: string }>
-  session?: SessionUser | null
-  linked_wallets?: Array<{ wallet: string; wallet_kind: string }> | null
-  x_username?: string | null
+    token: string;
+    token_name: string;
+    token_symbol: string | null;
+    chain: string | null;
+    heat_degrees: number;
+  }>;
+  scans: Array<{ chain: string; token_address: string; scanned_at: string }>;
+  linked_wallets?: Array<{ wallet: string; wallet_kind: string }> | null;
+  x_username?: string | null;
 }
 
 export function renderUserPage(data: UserPageData): string {
-  const tier = data.tier || getTierFromHeat(data.island_heat)
-  const tierColor = TIER_COLORS[tier] ?? COLORS.textMuted
-  const pfp = data.farcaster?.pfp_url ?? null
-  const displayName = data.farcaster?.display_name ?? null
-  const username = data.farcaster?.username ?? null
+  const tier = data.tier || getTierFromHeat(data.island_heat);
+  const pfp = data.farcaster?.pfp_url ?? null;
+  const displayName = data.farcaster?.display_name ?? null;
+  const username = data.farcaster?.username ?? null;
 
   const fcCard = data.farcaster
     ? `<div class="fc-card">
-        ${data.farcaster.pfp_url ? `<img class="fc-pfp" src="${esc(data.farcaster.pfp_url)}" alt="" />` : ''}
+        ${data.farcaster.pfp_url ? `<img class="fc-pfp" src="${esc(data.farcaster.pfp_url)}" alt="" />` : ""}
         <div>
-          ${data.farcaster.display_name ? `<div class="fc-display">${esc(data.farcaster.display_name)}</div>` : ''}
-          ${data.farcaster.username ? `<div class="fc-username">@${esc(data.farcaster.username)}</div>` : ''}
+          ${data.farcaster.display_name ? `<div class="fc-display">${esc(data.farcaster.display_name)}</div>` : ""}
+          ${data.farcaster.username ? `<div class="fc-username">@${esc(data.farcaster.username)}</div>` : ""}
         </div>
       </div>`
-    : ''
+    : "";
 
-  const hasLinkedWallets = data.linked_wallets && data.linked_wallets.length > 1
-  const walletCount = data.linked_wallets?.length ?? 0
+  const hasLinkedWallets =
+    data.linked_wallets && data.linked_wallets.length > 1;
+  const walletCount = data.linked_wallets?.length ?? 0;
 
   const aggregateToggle = hasLinkedWallets
     ? `<div class="aggregate-toggle">
         <button class="toggle-btn active" id="toggle-single">This wallet</button>
         <button class="toggle-btn" id="toggle-all">All wallets (${walletCount})</button>
       </div>`
-    : ''
+    : "";
 
-  const tokenRows = data.token_breakdown.map((t) => {
-    const href = t.chain ? `/${t.chain}/${t.token}` : '#'
-    const sym = t.token_symbol ? `$${esc(t.token_symbol)}` : esc(t.token_name)
-    return `<tr>
+  const tokenRows = data.token_breakdown
+    .map((t) => {
+      const href = t.chain ? `/${t.chain}/${t.token}` : "#";
+      const sym = t.token_symbol
+        ? `$${esc(t.token_symbol)}`
+        : esc(t.token_name);
+      return `<tr>
       <td><a href="${esc(href)}">${sym}</a></td>
-      <td>${t.chain ? `<span class="chain-badge">${chainLabel(t.chain)}</span>` : '—'}</td>
+      <td class="ca-col"><a href="${esc(href)}">${shortAddr(t.token)}</a></td>
+      <td class="chain-col">${t.chain ? chainSvg(t.chain) : "\u2014"}</td>
       <td class="heat-val">${fmtHeat(t.heat_degrees)}</td>
-    </tr>`
-  }).join('')
+    </tr>`;
+    })
+    .join("");
 
-  const tokenTable = data.token_breakdown.length > 0
-    ? `<h3 class="section-title">Token Exposure</h3>
+  const tokenTable =
+    data.token_breakdown.length > 0
+      ? `<h3 class="section-title">Token Exposure</h3>
        ${aggregateToggle}
        <div id="token-table-container">
        <table class="token-table">
-         <thead><tr><th>Token</th><th>Chain</th><th style="text-align:right">Heat</th></tr></thead>
+         <thead><tr><th>Token</th><th>CA</th><th>Chain</th><th style="text-align:right">Heat</th></tr></thead>
          <tbody>${tokenRows}</tbody>
        </table>
        </div>`
-    : '<p class="empty-state">No token holdings found.</p>'
+      : '<p class="empty-state">No scanned token holdings found.</p>';
 
-  const scansList = data.scans.length > 0
-    ? `<h3 class="section-title">Recent Scans</h3>
-       <table class="token-table">
-         <thead><tr><th>Token</th><th>Chain</th><th style="text-align:right">When</th></tr></thead>
-         <tbody>${data.scans.slice(0, 20).map((s) => {
-           const when = new Date(s.scanned_at)
-           const ago = timeAgo(when)
-           return `<tr>
-             <td><a href="/${s.chain}/${s.token_address}">${shortAddr(s.token_address)}</a></td>
-             <td><span class="chain-badge">${chainLabel(s.chain)}</span></td>
-             <td style="text-align:right;color:${COLORS.textMuted};font-size:12px">${ago}</td>
-           </tr>`
-         }).join('')}</tbody>
-       </table>`
-    : ''
-
-  const pageTitle = username ? `@${esc(username)} — Memetics` : `${shortAddr(data.wallet)} — Memetics`
+  const pageTitle = username
+    ? `@${esc(username)} — Memetics`
+    : `${shortAddr(data.wallet)} — Memetics`;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -134,34 +121,42 @@ export function renderUserPage(data: UserPageData): string {
 </head>
 <body>
   <header class="topbar">
-    <a href="/" class="topbar-logo">MEMETICS</a>
+    <a href="/" class="topbar-logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 20V4l5 8 4-6 4 6 5-8v16" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
     <div style="margin-left:auto;display:flex;align-items:center">
-      ${renderTopbarAuth(data.session ?? null, '/user/' + data.wallet)}
+      ${renderTopbarAuth()}
     </div>
   </header>
 
   <div class="wrap">
     <div class="user-header">
-      ${pfp ? `<img class="user-pfp" src="${esc(pfp)}" alt="" />` : ''}
+      ${pfp ? `<img class="user-pfp" src="${esc(pfp)}" alt="" />` : ""}
       <div class="user-info">
-        <div class="user-name">${displayName ? esc(displayName) : shortAddr(data.wallet)}</div>
-        <div class="user-wallet-line">
-          <span id="wallet-addr">${shortAddr(data.wallet)}</span>
-          <button class="copy-btn" id="copy-wallet">copy</button>
-        </div>
+        ${
+          displayName
+            ? `<div class="user-name">${esc(displayName)}</div>
+             <div class="user-wallet-line">
+               <span class="wallet-full" id="wallet-addr">${esc(data.wallet)}</span>
+               <span class="wallet-short" id="wallet-addr-short">${shortAddr(data.wallet)}</span>
+               <button class="copy-btn" id="copy-wallet">copy</button>
+             </div>`
+            : `<div class="user-wallet-line user-wallet-primary">
+               <span class="wallet-full" id="wallet-addr">${esc(data.wallet)}</span>
+               <span class="wallet-short" id="wallet-addr-short">${shortAddr(data.wallet)}</span>
+               <button class="copy-btn" id="copy-wallet">copy</button>
+             </div>`
+        }
       </div>
-      <span class="badge badge-heat">${fmtHeat(data.island_heat)}</span>
-      <span class="badge badge-tier" style="color:${tierColor}">${tier}</span>
     </div>
 
     ${fcCard}
     ${tokenTable}
-    ${scansList}
   </div>
+
+  <a href="https://x.com/jpfraneto" target="_blank" rel="noopener" class="beta-banner">this app is in BETA. contact @jpfraneto on X for support</a>
 
   <script>
     var wallet = ${JSON.stringify(data.wallet)};
-    var hasLinked = ${hasLinkedWallets ? 'true' : 'false'};
+    var hasLinked = ${hasLinkedWallets ? "true" : "false"};
 
     var copyBtn = document.getElementById('copy-wallet');
     if (copyBtn) {
@@ -178,8 +173,6 @@ export function renderUserPage(data: UserPageData): string {
       var singleBtn = document.getElementById('toggle-single');
       var allBtn = document.getElementById('toggle-all');
       var container = document.getElementById('token-table-container');
-      var heatBadge = document.querySelector('.badge-heat');
-      var tierBadge = document.querySelector('.badge-tier');
       var isAggregated = false;
 
       function shortAddr(addr) {
@@ -191,14 +184,15 @@ export function renderUserPage(data: UserPageData): string {
         return Number(val).toFixed(1) + '\\u00B0';
       }
 
-      function chainLabel(ch) {
-        var map = { base: 'Base', ethereum: 'Ethereum', solana: 'Solana' };
-        return map[ch] || ch || '\\u2014';
+      function chainSvgClient(chain) {
+        if (chain === 'base') return '<svg class="chain-icon" width="14" height="14" viewBox="0 0 111 111" fill="none"><circle cx="55.5" cy="55.5" r="55.5" fill="#0052FF"/><path d="M55.4 93.5c20.9 0 37.9-17 37.9-37.9 0-20.9-17-37.9-37.9-37.9-19.7 0-35.9 15.1-37.7 34.3h50v7.2h-50C19.5 78.4 35.7 93.5 55.4 93.5z" fill="#fff"/></svg>';
+        if (chain === 'solana') return '<svg class="chain-icon" width="14" height="14" viewBox="0 0 397 312"><linearGradient id="sg3" x1="360" y1="350" x2="40" y2="-30" gradientUnits="userSpaceOnUse"><stop stop-color="#00FFA3"/><stop offset="1" stop-color="#DC1FFF"/></linearGradient><path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1l62.7-62.7z" fill="url(#sg3)"/><path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#sg3)"/><path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#sg3)"/></svg>';
+        return '\\u2014';
       }
 
       function renderAggregatedTable(data) {
         if (!data.token_breakdown || data.token_breakdown.length === 0) {
-          container.innerHTML = '<p style="color:#71717a;text-align:center;padding:20px">No token holdings found.</p>';
+          container.innerHTML = '<p style="color:#71717a;text-align:center;padding:20px">No scanned token holdings found.</p>';
           return;
         }
         var rows = data.token_breakdown.map(function(t) {
@@ -212,23 +206,22 @@ export function renderUserPage(data: UserPageData): string {
           }
           return '<tr>'
             + '<td><a href="' + href + '">' + sym + '</a>' + walletBadges + '</td>'
-            + '<td>' + (t.chain ? '<span class="chain-badge">' + chainLabel(t.chain) + '</span>' : '\\u2014') + '</td>'
+            + '<td class="ca-col"><a href="' + href + '">' + shortAddr(t.token) + '</a></td>'
+            + '<td class="chain-col">' + (t.chain ? chainSvgClient(t.chain) : '\\u2014') + '</td>'
             + '<td class="heat-val">' + fmtHeat(t.heat_degrees) + '</td>'
             + '</tr>';
         }).join('');
 
         container.innerHTML = '<table class="token-table">'
-          + '<thead><tr><th>Token</th><th>Chain</th><th style="text-align:right">Heat</th></tr></thead>'
+          + '<thead><tr><th>Token</th><th>CA</th><th>Chain</th><th style="text-align:right">Heat</th></tr></thead>'
           + '<tbody>' + rows + '</tbody></table>';
 
-        // Update heat + tier badges
+        // Update heat badge
         if (heatBadge) heatBadge.textContent = fmtHeat(data.island_heat);
-        if (tierBadge) tierBadge.textContent = data.tier;
       }
 
       var originalHtml = container ? container.innerHTML : '';
       var originalHeat = heatBadge ? heatBadge.textContent : '';
-      var originalTier = tierBadge ? tierBadge.textContent : '';
 
       if (singleBtn) {
         singleBtn.addEventListener('click', function() {
@@ -238,7 +231,6 @@ export function renderUserPage(data: UserPageData): string {
           allBtn.classList.remove('active');
           if (container) container.innerHTML = originalHtml;
           if (heatBadge) heatBadge.textContent = originalHeat;
-          if (tierBadge) tierBadge.textContent = originalTier;
         });
       }
 
@@ -250,7 +242,7 @@ export function renderUserPage(data: UserPageData): string {
           singleBtn.classList.remove('active');
           if (container) container.innerHTML = '<p style="color:#71717a;text-align:center;padding:20px">Loading...</p>';
 
-          fetch('/api/user/' + wallet + '?aggregate=true')
+          fetch('/api/wallet/' + wallet + '?aggregate=true')
             .then(function(r) { return r.json(); })
             .then(function(data) {
               renderAggregatedTable(data);
@@ -263,15 +255,15 @@ export function renderUserPage(data: UserPageData): string {
     }
   </script>
 </body>
-</html>`
+</html>`;
 }
 
 function timeAgo(date: Date): string {
-  const diff = Date.now() - date.getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours}h ago`
-  return `${Math.floor(hours / 24)}d ago`
+  const diff = Date.now() - date.getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
 }

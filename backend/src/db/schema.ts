@@ -12,6 +12,7 @@ export interface TokenRegistryRow {
   last_scanned_at: string | null
   last_scan_block: number | null
   holder_count: number
+  transfer_timeline: unknown | null
   created_at: string
 }
 
@@ -91,6 +92,7 @@ export interface ScanLogRow {
   rpc_calls_made: number
   progress_phase: string | null
   progress_pct: string | null
+  progress_detail: string | null
   started_at: string
   completed_at: string | null
   error_message: string | null

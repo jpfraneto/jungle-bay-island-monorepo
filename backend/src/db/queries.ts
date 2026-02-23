@@ -29,6 +29,31 @@ function parseJsonArray<T>(value: unknown): T[] {
   return []
 }
 
+export interface RecentScanRow {
+  requested_by: string
+  token_address: string
+  chain: string
+  symbol: string | null
+  completed_at: string
+}
+
+export async function getRecentScans(limit = 10): Promise<RecentScanRow[]> {
+  return db<RecentScanRow[]>`
+    SELECT
+      sl.requested_by,
+      sl.token_address,
+      sl.chain,
+      tr.symbol,
+      sl.completed_at::text AS completed_at
+    FROM ${db(CONFIG.SCHEMA)}.scan_log sl
+    LEFT JOIN ${db(CONFIG.SCHEMA)}.token_registry tr
+      ON tr.token_address = sl.token_address
+    WHERE sl.scan_status = 'complete'
+    ORDER BY sl.completed_at DESC
+    LIMIT ${limit}
+  `
+}
+
 export async function checkDbHealth(): Promise<boolean> {
   const rows = await db<{ ok: number }[]>`SELECT 1 AS ok`
   return rows.length > 0
@@ -265,6 +290,20 @@ export async function incrementDailyAllowance(wallet: string, date: string): Pro
   `
 }
 
+let timelineColumnPromise: Promise<void> | null = null
+
+async function ensureTimelineColumn(): Promise<void> {
+  if (!timelineColumnPromise) {
+    timelineColumnPromise = (async () => {
+      await db`
+        ALTER TABLE ${db(CONFIG.SCHEMA)}.token_registry
+        ADD COLUMN IF NOT EXISTS transfer_timeline JSONB
+      `
+    })()
+  }
+  await timelineColumnPromise
+}
+
 let scanLogProgressColumnsPromise: Promise<void> | null = null
 
 async function ensureScanLogProgressColumns(): Promise<void> {
@@ -278,6 +317,11 @@ async function ensureScanLogProgressColumns(): Promise<void> {
       await db`
         ALTER TABLE ${db(CONFIG.SCHEMA)}.scan_log
         ADD COLUMN IF NOT EXISTS progress_pct NUMERIC
+      `
+
+      await db`
+        ALTER TABLE ${db(CONFIG.SCHEMA)}.scan_log
+        ADD COLUMN IF NOT EXISTS progress_detail TEXT
       `
     })()
   }
@@ -377,7 +421,7 @@ export async function markScanFailed(scanId: number, tokenAddress: string, messa
 
 export async function updateScanProgress(
   scanId: number,
-  progress: { phase: string; pct: number },
+  progress: { phase: string; pct: number; detail?: string },
 ): Promise<void> {
   await ensureScanLogProgressColumns()
 
@@ -386,6 +430,7 @@ export async function updateScanProgress(
     SET
       progress_phase = ${progress.phase},
       progress_pct = ${Math.max(0, Math.min(100, progress.pct))},
+      progress_detail = ${progress.detail ?? null},
       completed_at = CASE WHEN ${progress.pct >= 100} THEN NOW() ELSE completed_at END
     WHERE id = ${scanId}
   `
@@ -393,6 +438,7 @@ export async function updateScanProgress(
 
 export async function writeScanResult(scanId: number, result: ScanResult): Promise<void> {
   await ensureScanLogProgressColumns()
+  await ensureTimelineColumn()
 
   await db`
     INSERT INTO ${db(CONFIG.SCHEMA)}.token_registry (
@@ -419,12 +465,35 @@ export async function writeScanResult(scanId: number, result: ScanResult): Promi
       holder_count = EXCLUDED.holder_count
   `
 
+  // Persist transfer timeline
+  if (result.timeline && result.timeline.length > 0) {
+    await db`
+      UPDATE ${db(CONFIG.SCHEMA)}.token_registry
+      SET transfer_timeline = ${JSON.stringify(result.timeline)}::jsonb
+      WHERE token_address = ${result.tokenAddress}
+    `
+  }
+
   await db`
     DELETE FROM ${db(CONFIG.SCHEMA)}.token_holder_heat
     WHERE token_address = ${result.tokenAddress}
   `
 
-  const holderRows = result.holders.map((holder) => ({
+  // Deduplicate holders by wallet (a wallet can have multiple token accounts on Solana)
+  const deduped = new Map<string, typeof result.holders[0]>()
+  for (const holder of result.holders) {
+    const existing = deduped.get(holder.wallet)
+    if (existing) {
+      existing.balanceRaw = (BigInt(existing.balanceRaw) + BigInt(holder.balanceRaw)).toString()
+      existing.heatDegrees = Math.max(existing.heatDegrees, holder.heatDegrees)
+      existing.firstSeenAt = Math.min(existing.firstSeenAt, holder.firstSeenAt)
+      existing.lastTransferAt = Math.max(existing.lastTransferAt, holder.lastTransferAt)
+    } else {
+      deduped.set(holder.wallet, { ...holder })
+    }
+  }
+
+  const holderRows = [...deduped.values()].map((holder) => ({
     token_address: result.tokenAddress,
     wallet: holder.wallet,
     heat_degrees: holder.heatDegrees,
@@ -1035,6 +1104,18 @@ export async function getTokenSummary(tokenAddress: string): Promise<{
     total_supply: row.total_supply === null ? null : Number(row.total_supply),
     holder_count: row.holder_count,
   }
+}
+
+export async function getTransferTimeline(tokenAddress: string): Promise<unknown | null> {
+  await ensureTimelineColumn()
+
+  const rows = await db<{ transfer_timeline: unknown | null }[]>`
+    SELECT transfer_timeline
+    FROM ${db(CONFIG.SCHEMA)}.token_registry
+    WHERE token_address = ${tokenAddress}
+    LIMIT 1
+  `
+  return rows[0]?.transfer_timeline ?? null
 }
 
 export function parseTokenBreakdown(value: unknown): Array<{ token: string; token_name: string; heat_degrees: number }> {

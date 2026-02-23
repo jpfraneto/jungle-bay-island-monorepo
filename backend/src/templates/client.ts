@@ -5,12 +5,36 @@ export function renderClientScript(): string {
 (function() {
   var D = window.__DATA__ || {};
 
+  // ── Passive wallet detection (no popup) ──
+  (function() {
+    var display = document.getElementById('wallet-display');
+    if (!display) return;
+
+    function show(addr) {
+      if (!addr) return;
+      var short = addr.length > 10 ? addr.slice(0, 6) + '\\u2026' + addr.slice(-4) : addr;
+      display.textContent = short;
+      display.title = addr;
+    }
+
+    // EVM: passive check (no connect popup)
+    if (window.ethereum) {
+      window.ethereum.request({ method: 'eth_accounts' }).then(function(accts) {
+        if (accts && accts.length > 0) show(accts[0]);
+      }).catch(function() {});
+    }
+    // Solana: Phantom embedded browser exposes publicKey immediately
+    if (window.phantom && window.phantom.solana && window.phantom.solana.publicKey) {
+      show(window.phantom.solana.publicKey.toString());
+    } else if (window.solflare && window.solflare.publicKey) {
+      show(window.solflare.publicKey.toString());
+    }
+  })();
+
   // ── Tab switching ──
   var tabs = document.querySelectorAll('.tab-btn');
   var panels = document.querySelectorAll('.tab-panel');
   var chartLoaded = false;
-
-  var currentTier = '';
 
   function switchTab(name, updateUrl) {
     tabs.forEach(function(t) {
@@ -19,6 +43,10 @@ export function renderClientScript(): string {
     panels.forEach(function(p) {
       p.classList.toggle('active', p.id === 'panel-' + name);
     });
+    // Lazy-load timeline on first visit
+    if (name === 'activity') {
+      loadTimeline();
+    }
     // Lazy-load chart iframe on first visit
     if (name === 'chart' && !chartLoaded && D.dexscreenerUrl) {
       var frame = document.getElementById('chart-frame');
@@ -32,11 +60,10 @@ export function renderClientScript(): string {
     // Update URL if requested
     if (updateUrl !== false) {
       var params = new URLSearchParams();
-      if (name !== 'home') params.set('tab', name);
-      if (currentTier && name === 'holders') params.set('tier', currentTier);
+      if (name !== 'holders') params.set('tab', name);
       var qs = params.toString();
       var newUrl = window.location.pathname + (qs ? '?' + qs : '');
-      history.replaceState({ tab: name, tier: currentTier }, '', newUrl);
+      history.replaceState({ tab: name }, '', newUrl);
     }
   }
 
@@ -45,6 +72,406 @@ export function renderClientScript(): string {
       e.preventDefault();
       switchTab(this.getAttribute('data-tab'));
     });
+  });
+
+  // ── Activity tab: canvas timeline chart ──
+  var timelineLoaded = false;
+
+  function loadTimeline() {
+    if (timelineLoaded) return;
+    timelineLoaded = true;
+    var container = document.getElementById('timeline-container');
+    if (!container) return;
+
+    if (D.chain === 'solana') {
+      container.innerHTML = '<div class="timeline-empty">Transfer timeline is not available for Solana tokens yet.</div>';
+      return;
+    }
+
+    fetch('/api/token/' + D.tokenAddress + '/timeline')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (!data.timeline || data.timeline.length === 0) {
+          container.innerHTML = '<div class="timeline-empty">No transfer data available. Scan this token first.</div>';
+          return;
+        }
+        renderTimelineChart(container, data.timeline);
+      })
+      .catch(function() {
+        container.innerHTML = '<div class="timeline-empty">Failed to load timeline data.</div>';
+      });
+  }
+
+  function renderTimelineChart(container, buckets) {
+    // Build DOM
+    container.innerHTML =
+      '<div class="timeline-header">'
+      + '<div class="timeline-title">' + (D.name || 'Token') + (D.symbol ? ' ($' + D.symbol + ')' : '') + '</div>'
+      + '<div class="timeline-subtitle">Transfer activity over time</div>'
+      + '</div>'
+      + '<div class="timeline-canvas-wrap" id="tl-wrap">'
+      + '<canvas id="tl-canvas"></canvas>'
+      + '<div class="timeline-tooltip" id="tl-tooltip"></div>'
+      + '</div>';
+
+    var wrap = document.getElementById('tl-wrap');
+    var canvas = document.getElementById('tl-canvas');
+    var tooltip = document.getElementById('tl-tooltip');
+    if (!wrap || !canvas) return;
+
+    var ctx = canvas.getContext('2d');
+    var dpr = window.devicePixelRatio || 1;
+
+    function draw() {
+      var w = wrap.clientWidth;
+      var h = wrap.clientHeight;
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      canvas.style.width = w + 'px';
+      canvas.style.height = h + 'px';
+      ctx.scale(dpr, dpr);
+
+      var pad = { top: 20, right: 16, bottom: 36, left: 52 };
+      var cw = w - pad.left - pad.right;
+      var ch = h - pad.top - pad.bottom;
+
+      if (cw < 40 || ch < 40) return;
+
+      // Background
+      ctx.fillStyle = '#0a0a0f';
+      ctx.fillRect(0, 0, w, h);
+
+      var maxCount = 0;
+      for (var i = 0; i < buckets.length; i++) {
+        if (buckets[i].c > maxCount) maxCount = buckets[i].c;
+      }
+      if (maxCount === 0) maxCount = 1;
+
+      // Y-axis grid lines + labels
+      var ySteps = 4;
+      ctx.strokeStyle = '#1a1a24';
+      ctx.lineWidth = 1;
+      ctx.fillStyle = '#71717a';
+      ctx.font = '10px monospace';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+
+      for (var yi = 0; yi <= ySteps; yi++) {
+        var yVal = Math.round((maxCount / ySteps) * yi);
+        var yPos = pad.top + ch - (ch * yi / ySteps);
+        ctx.beginPath();
+        ctx.moveTo(pad.left, yPos);
+        ctx.lineTo(w - pad.right, yPos);
+        ctx.stroke();
+        var label = yVal >= 1000 ? (yVal / 1000).toFixed(yVal >= 10000 ? 0 : 1) + 'k' : String(yVal);
+        ctx.fillText(label, pad.left - 6, yPos);
+      }
+
+      // Bars
+      var barGap = Math.max(1, Math.floor(cw / buckets.length * 0.15));
+      var barW = Math.max(1, (cw / buckets.length) - barGap);
+
+      for (var bi = 0; bi < buckets.length; bi++) {
+        var bx = pad.left + (cw / buckets.length) * bi + barGap / 2;
+        var ratio = buckets[bi].c / maxCount;
+        var bh = Math.max(ratio > 0 ? 1 : 0, ch * ratio);
+        var by = pad.top + ch - bh;
+
+        // Color gradient by intensity
+        var r = Math.round(14 + (34 - 14) * ratio);
+        var g = Math.round(116 + (211 - 116) * ratio);
+        var b = Math.round(144 + (238 - 144) * ratio);
+        ctx.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')';
+        ctx.fillRect(bx, by, barW, bh);
+      }
+
+      // X-axis date labels
+      ctx.fillStyle = '#71717a';
+      ctx.font = '10px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      var labelCount = Math.min(6, buckets.length);
+      for (var li = 0; li < labelCount; li++) {
+        var idx = Math.floor((buckets.length - 1) * li / (labelCount - 1 || 1));
+        var ts = buckets[idx].t;
+        var d = new Date(ts * 1000);
+        var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        var dlabel = months[d.getMonth()] + ' ' + d.getDate() + ', ' + String(d.getFullYear()).slice(2);
+        var dx = pad.left + (cw / buckets.length) * idx + barW / 2;
+        ctx.fillText(dlabel, dx, pad.top + ch + 8);
+      }
+    }
+
+    draw();
+
+    // Resize handler
+    var resizeTimer;
+    window.addEventListener('resize', function() {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(draw, 150);
+    });
+
+    // Tooltip on click/tap
+    canvas.addEventListener('click', function(e) {
+      var rect = canvas.getBoundingClientRect();
+      var x = e.clientX - rect.left;
+      var pad = { left: 52, right: 16, top: 20, bottom: 36 };
+      var cw = rect.width - pad.left - pad.right;
+      var idx = Math.floor((x - pad.left) / (cw / buckets.length));
+      if (idx < 0 || idx >= buckets.length) {
+        tooltip.style.display = 'none';
+        return;
+      }
+      var bucket = buckets[idx];
+      var d = new Date(bucket.t * 1000);
+      var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      var dateStr = months[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
+      tooltip.innerHTML = '<strong>' + bucket.c.toLocaleString() + '</strong> transfers<br>' + dateStr;
+      tooltip.style.display = 'block';
+
+      // Position tooltip
+      var tx = e.clientX - rect.left;
+      var ty = e.clientY - rect.top;
+      if (tx + 120 > rect.width) tx = tx - 120;
+      tooltip.style.left = tx + 'px';
+      tooltip.style.top = (ty - 50) + 'px';
+    });
+
+    // Hide tooltip when leaving
+    canvas.addEventListener('mouseleave', function() {
+      tooltip.style.display = 'none';
+    });
+  }
+
+  // ════════════════════════════════════════════════════════
+  // ── Holder balance history chart (click heat to toggle) ──
+  // ════════════════════════════════════════════════════════
+
+  var HOLDER_COLORS = ['#22d3ee', '#f87171', '#4ade80', '#facc15', '#fb923c', '#a78bfa', '#f472b6', '#38bdf8'];
+  var selectedHolders = []; // [{wallet, color, points, label}]
+
+  function toggleHolderHistory(wallet, label) {
+    var idx = -1;
+    for (var i = 0; i < selectedHolders.length; i++) {
+      if (selectedHolders[i].wallet === wallet) { idx = i; break; }
+    }
+
+    if (idx !== -1) {
+      selectedHolders.splice(idx, 1);
+      updateHolderChartUI();
+      return;
+    }
+
+    if (D.chain === 'solana') return; // no history for solana
+
+    var color = HOLDER_COLORS[selectedHolders.length % HOLDER_COLORS.length];
+    // Mark loading
+    markHeatCell(wallet, color, true);
+
+    fetch('/api/token/' + D.chain + '/' + D.tokenAddress + '/holder/' + wallet + '/history')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (!data.points || data.points.length === 0) {
+          markHeatCell(wallet, null, false);
+          return;
+        }
+        selectedHolders.push({ wallet: wallet, color: color, points: data.points, label: label || shortAddr(wallet) });
+        updateHolderChartUI();
+      })
+      .catch(function() {
+        markHeatCell(wallet, null, false);
+      });
+  }
+
+  function markHeatCell(wallet, color, loading) {
+    var cells = document.querySelectorAll('td.heat[data-wallet="' + wallet + '"]');
+    for (var i = 0; i < cells.length; i++) {
+      if (color) {
+        cells[i].classList.add('selected');
+        cells[i].style.color = color;
+        if (loading) cells[i].style.opacity = '0.5';
+        else cells[i].style.opacity = '1';
+      } else {
+        cells[i].classList.remove('selected');
+        cells[i].style.color = '';
+        cells[i].style.opacity = '1';
+      }
+    }
+  }
+
+  function updateHolderChartUI() {
+    var wrap = document.getElementById('holder-chart-wrap');
+    if (!wrap) return;
+
+    // Update all heat cell colors
+    var allCells = document.querySelectorAll('td.heat[data-wallet]');
+    for (var c = 0; c < allCells.length; c++) {
+      var w = allCells[c].getAttribute('data-wallet');
+      var found = null;
+      for (var s = 0; s < selectedHolders.length; s++) {
+        if (selectedHolders[s].wallet === w) { found = selectedHolders[s]; break; }
+      }
+      if (found) {
+        allCells[c].classList.add('selected');
+        allCells[c].style.color = found.color;
+        allCells[c].style.opacity = '1';
+      } else {
+        allCells[c].classList.remove('selected');
+        allCells[c].style.color = '';
+        allCells[c].style.opacity = '1';
+      }
+    }
+
+    if (selectedHolders.length === 0) {
+      wrap.style.display = 'none';
+      return;
+    }
+
+    wrap.style.display = 'block';
+    drawHolderChart();
+  }
+
+  function drawHolderChart() {
+    var wrap = document.getElementById('holder-chart-wrap');
+    var canvas = document.getElementById('holder-chart-canvas');
+    var legend = document.getElementById('holder-chart-legend');
+    if (!wrap || !canvas || !legend) return;
+
+    var dpr = window.devicePixelRatio || 1;
+    var w = wrap.clientWidth;
+    var h = w; // square
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
+    var ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    var pad = { top: 24, right: 16, bottom: 40, left: 60 };
+    var cw = w - pad.left - pad.right;
+    var ch = h - pad.top - pad.bottom;
+
+    // Background
+    ctx.fillStyle = '#0a0a0f';
+    ctx.fillRect(0, 0, w, h);
+
+    if (cw < 40 || ch < 40) return;
+
+    // Find global time and balance range
+    var tMin = Infinity, tMax = -Infinity, bMax = 0;
+    for (var si = 0; si < selectedHolders.length; si++) {
+      var pts = selectedHolders[si].points;
+      for (var pi = 0; pi < pts.length; pi++) {
+        if (pts[pi].t < tMin) tMin = pts[pi].t;
+        if (pts[pi].t > tMax) tMax = pts[pi].t;
+        if (pts[pi].b > bMax) bMax = pts[pi].b;
+      }
+    }
+    if (tMin >= tMax) tMax = tMin + 1;
+    if (bMax <= 0) bMax = 1;
+
+    // Y grid + labels
+    var ySteps = 4;
+    ctx.strokeStyle = '#1a1a24';
+    ctx.lineWidth = 1;
+    ctx.fillStyle = '#71717a';
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    for (var yi = 0; yi <= ySteps; yi++) {
+      var yVal = (bMax / ySteps) * yi;
+      var yPos = pad.top + ch - (ch * yi / ySteps);
+      ctx.beginPath();
+      ctx.moveTo(pad.left, yPos);
+      ctx.lineTo(w - pad.right, yPos);
+      ctx.stroke();
+      var yLabel;
+      if (yVal >= 1e9) yLabel = (yVal / 1e9).toFixed(1) + 'B';
+      else if (yVal >= 1e6) yLabel = (yVal / 1e6).toFixed(1) + 'M';
+      else if (yVal >= 1e3) yLabel = (yVal / 1e3).toFixed(1) + 'K';
+      else yLabel = yVal.toFixed(yVal < 10 ? 2 : 0);
+      ctx.fillText(yLabel, pad.left - 6, yPos);
+    }
+
+    // X-axis date labels
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    var xLabels = 5;
+    var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    for (var xi = 0; xi < xLabels; xi++) {
+      var xT = tMin + (tMax - tMin) * xi / (xLabels - 1);
+      var xX = pad.left + cw * xi / (xLabels - 1);
+      var dd = new Date(xT * 1000);
+      ctx.fillText(months[dd.getMonth()] + ' ' + dd.getDate() + ', ' + String(dd.getFullYear()).slice(2), xX, pad.top + ch + 8);
+    }
+
+    // Draw lines for each selected holder
+    for (var hi = 0; hi < selectedHolders.length; hi++) {
+      var holder = selectedHolders[hi];
+      var pts = holder.points;
+      if (pts.length < 2) continue;
+
+      ctx.strokeStyle = holder.color;
+      ctx.lineWidth = 2;
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      for (var p = 0; p < pts.length; p++) {
+        var px = pad.left + ((pts[p].t - tMin) / (tMax - tMin)) * cw;
+        var py = pad.top + ch - (pts[p].b / bMax) * ch;
+        if (p === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+    }
+
+    // Legend
+    legend.innerHTML = selectedHolders.map(function(h) {
+      return '<span class="holder-chart-legend-item" data-wallet="' + h.wallet + '">'
+        + '<span class="holder-chart-legend-dot" style="background:' + h.color + '"></span>'
+        + h.label
+        + ' \\u2715'
+        + '</span>';
+    }).join('');
+
+    // Click legend item to deselect
+    legend.querySelectorAll('.holder-chart-legend-item').forEach(function(el) {
+      el.addEventListener('click', function() {
+        var w = el.getAttribute('data-wallet');
+        if (w) toggleHolderHistory(w);
+      });
+    });
+  }
+
+  // ── Click handler for heat cells ──
+  document.addEventListener('click', function(e) {
+    var cell = e.target.closest('td.heat[data-wallet]');
+    if (!cell) return;
+    e.preventDefault();
+    e.stopPropagation();
+    var wallet = cell.getAttribute('data-wallet');
+    if (!wallet) return;
+
+    // Build label from the row
+    var row = cell.closest('tr');
+    var label = wallet;
+    if (row) {
+      var un = row.querySelector('.holder-username');
+      if (un) label = un.textContent;
+      else {
+        var wa = row.querySelector('.holder-wallet');
+        if (wa) label = wa.textContent;
+      }
+    }
+    toggleHolderHistory(wallet, label);
+  });
+
+  // Redraw chart on resize
+  var hcResizeTimer;
+  window.addEventListener('resize', function() {
+    if (selectedHolders.length > 0) {
+      clearTimeout(hcResizeTimer);
+      hcResizeTimer = setTimeout(drawHolderChart, 150);
+    }
   });
 
   // ── Helper: short address ──
@@ -58,84 +485,84 @@ export function renderClientScript(): string {
     return Number(val).toFixed(1) + '\\u00B0';
   }
 
-  // ── AJAX: fetch and render filtered holders ──
-  function fetchHolders(tier) {
+  // ── AJAX: fetch and render holders ──
+  var holdersPage = 0;
+  var holdersLoading = false;
+  var holdersAllLoaded = false;
+  var HOLDERS_PER_PAGE = 30;
+
+  function fetchHolders(offset, append) {
     var list = document.getElementById('holders-list');
     var countEl = document.getElementById('holder-count');
-    if (!list) return;
-    list.innerHTML = '<div class="holders-loading">Loading...</div>';
+    if (!list || holdersLoading) return;
+    holdersLoading = true;
 
-    var url = '/api/token/' + D.tokenAddress + '/holders?limit=50';
-    if (tier) url += '&tier=' + encodeURIComponent(tier);
+    var url = '/api/token/' + D.chain + '/' + D.tokenAddress + '/holders?limit=' + HOLDERS_PER_PAGE + '&offset=' + offset;
 
     fetch(url)
       .then(function(r) { return r.json(); })
       .then(function(data) {
+        holdersLoading = false;
         if (!data.holders || data.holders.length === 0) {
-          list.innerHTML = '<p class="holders-loading">No holders found for this tier.</p>';
-          if (countEl) countEl.textContent = '0 holders';
+          holdersAllLoaded = true;
+          var loadMore = document.getElementById('holders-load-more');
+          if (loadMore) loadMore.style.display = 'none';
           return;
         }
-        if (countEl) countEl.textContent = data.total + ' holder' + (data.total !== 1 ? 's' : '');
+        if (data.holders.length < HOLDERS_PER_PAGE) {
+          holdersAllLoaded = true;
+        }
+        if (countEl && data.total) countEl.textContent = data.total + ' holder' + (data.total !== 1 ? 's' : '');
         var rows = data.holders.map(function(h, i) {
+          var rank = offset + i + 1;
           var identity = h.farcaster && h.farcaster.username
             ? '<span class="holder-identity">'
               + (h.farcaster.pfp_url ? '<img class="holder-pfp" src="' + h.farcaster.pfp_url + '" alt="" />' : '')
               + '<span class="holder-username">' + h.farcaster.username + '</span></span>'
             : '<span class="holder-wallet">' + shortAddr(h.wallet) + '</span>';
-          return '<tr class="holder-row"><td class="rank">' + (i + 1) + '</td>'
-            + '<td><a class="holder-link" href="/user/' + h.wallet + '">' + identity + '</a></td>'
-            + '<td class="heat">' + fmtHeat(h.heat_degrees) + '</td></tr>';
+          return '<tr class="holder-row" data-wallet="' + h.wallet + '"><td class="rank">' + rank + '</td>'
+            + '<td><a class="holder-link" href="/wallet/' + h.wallet + '">' + identity + '</a></td>'
+            + '<td class="heat" data-wallet="' + h.wallet + '">' + fmtHeat(h.heat_degrees) + '</td></tr>';
         }).join('');
-        list.innerHTML = '<table class="holders-table">'
-          + '<thead><tr><th>#</th><th>Holder</th><th style="text-align:right">Heat</th></tr></thead>'
-          + '<tbody>' + rows + '</tbody></table>';
+
+        if (append) {
+          var tbody = list.querySelector('tbody');
+          if (tbody) {
+            tbody.insertAdjacentHTML('beforeend', rows);
+          }
+        } else {
+          list.innerHTML = '<table class="holders-table">'
+            + '<thead><tr><th>#</th><th>Holder</th><th style="text-align:right">Heat Score</th></tr></thead>'
+            + '<tbody>' + rows + '</tbody></table>'
+            + (holdersAllLoaded ? '' : '<div class="holders-load-more" id="holders-load-more">Loading more...</div>');
+        }
+
+        var loadMore = document.getElementById('holders-load-more');
+        if (loadMore && holdersAllLoaded) loadMore.style.display = 'none';
       })
       .catch(function() {
-        list.innerHTML = '<p class="holders-loading">Failed to load holders.</p>';
+        holdersLoading = false;
       });
   }
 
-  // ── Tier filter pills ──
-  function activateTierFilter(tier) {
-    currentTier = tier || '';
-    var pills = document.querySelectorAll('.tier-filter-btn');
-    pills.forEach(function(btn) {
-      btn.classList.toggle('active', btn.getAttribute('data-tier-filter') === currentTier);
+  // ── Infinite scroll for holders ──
+  var holdersScroll = document.getElementById('holders-scroll');
+  if (holdersScroll) {
+    holdersScroll.addEventListener('scroll', function() {
+      if (holdersAllLoaded || holdersLoading) return;
+      var el = holdersScroll;
+      if (el.scrollTop + el.clientHeight >= el.scrollHeight - 100) {
+        holdersPage += 1;
+        fetchHolders(holdersPage * HOLDERS_PER_PAGE, true);
+      }
     });
-    // Highlight matching tier bar
-    var bars = document.querySelectorAll('.tier-row');
-    bars.forEach(function(row) {
-      row.classList.toggle('active', tier && row.getAttribute('data-tier') === tier);
-    });
-    fetchHolders(currentTier);
   }
-
-  document.addEventListener('click', function(e) {
-    var pill = e.target.closest('.tier-filter-btn');
-    if (pill) {
-      var tier = pill.getAttribute('data-tier-filter');
-      switchTab('holders');
-      activateTierFilter(tier);
-      return;
-    }
-    var tierRow = e.target.closest('.tier-row[data-tier]');
-    if (tierRow) {
-      var tier = tierRow.getAttribute('data-tier');
-      switchTab('holders');
-      activateTierFilter(tier);
-      return;
-    }
-  });
 
   // ── Popstate (back/forward) ──
   window.addEventListener('popstate', function(e) {
     var state = e.state;
     if (state && state.tab) {
       switchTab(state.tab, false);
-      if (state.tier) {
-        activateTierFilter(state.tier);
-      }
     }
   });
 
@@ -143,21 +570,10 @@ export function renderClientScript(): string {
   (function() {
     var params = new URLSearchParams(window.location.search);
     var tab = params.get('tab');
-    var tier = params.get('tier');
     if (tab && document.getElementById('panel-' + tab)) {
       switchTab(tab, false);
-      if (tier) {
-        activateTierFilter(tier);
-      }
-    } else {
-      // Fallback to sessionStorage
-      try {
-        var saved = sessionStorage.getItem('activeTab');
-        if (saved && document.getElementById('panel-' + saved)) {
-          switchTab(saved, false);
-        }
-      } catch(e) {}
     }
+    // Default is holders (set in HTML), no need to override
   })();
 
   // ── Copy contract address ──
@@ -178,24 +594,16 @@ export function renderClientScript(): string {
     });
   }
 
-  // ── Heat tier bar chart ──
-  var dist = D.heatDistribution;
-  if (dist) {
-    var total = (dist.elders || 0) + (dist.builders || 0) + (dist.residents || 0) + (dist.observers || 0) + (dist.drifters || 0);
-    if (total > 0) {
-      var tiers = ['elder', 'builder', 'resident', 'observer', 'drifter'];
-      var counts = [dist.elders, dist.builders, dist.residents, dist.observers, dist.drifters];
-      tiers.forEach(function(tier, i) {
-        var bar = document.getElementById('bar-' + tier);
-        if (bar) {
-          var pct = Math.round((counts[i] / total) * 100);
-          bar.style.width = Math.max(pct, counts[i] > 0 ? 2 : 0) + '%';
+  // ── Show update form only if connected wallet matches owner ──
+  var ownerForm = document.getElementById('owner-update-form');
+  if (ownerForm && D.ownerWallet) {
+    // Check if EVM wallet matches owner
+    if (window.ethereum) {
+      window.ethereum.request({ method: 'eth_accounts' }).then(function(accounts) {
+        if (accounts && accounts.length > 0 && accounts[0].toLowerCase() === D.ownerWallet.toLowerCase()) {
+          ownerForm.style.display = 'block';
         }
-        var countEl = document.getElementById('count-' + tier);
-        if (countEl) countEl.textContent = counts[i];
-      });
-      var totalEl = document.getElementById('heat-total');
-      if (totalEl) totalEl.textContent = total;
+      }).catch(function() {});
     }
   }
 
@@ -214,50 +622,44 @@ export function renderClientScript(): string {
     try { localStorage.setItem('recentBungalows', JSON.stringify(recents)); } catch(e) {}
   }
 
-  function renderRecents() {
-    var container = document.getElementById('recents');
-    if (!container) return;
-    var recents = getRecents();
-    if (recents.length === 0) { container.style.display = 'none'; return; }
-    container.innerHTML = recents.map(function(r) {
-      return '<a class="recent-pill" href="/' + r.chain + '/' + r.ca + '">' + (r.name || r.ca.slice(0,8)) + '</a>';
-    }).join('');
-  }
-
   // Save current visit
   if (D.chain && D.tokenAddress) {
     saveRecent(D.chain, D.tokenAddress, D.name);
   }
-  renderRecents();
 
-  // ── Activity bar polling ──
-  var tickerEl = document.getElementById('activity-ticker');
-  var activityInterval = null;
+  // ── Payment receipt storage (survives page reload) ──
+  var PAYMENT_KEY = 'scanPayments';
 
-  function renderActivity(events) {
-    if (!tickerEl || !events || events.length === 0) return;
-    tickerEl.innerHTML = events.slice(0, 10).map(function(ev) {
-      if (ev.type === 'scan') {
-        return '<span class="evt-scan">\\u25B8 Scan complete: ' + (ev.token_name || ev.token_address.slice(0,8)) + ' (' + (ev.detail || '?') + ' holders)</span>';
+  function getSavedPayment(tokenAddr) {
+    try {
+      var all = JSON.parse(localStorage.getItem(PAYMENT_KEY) || '{}');
+      var entry = all[tokenAddr.toLowerCase()];
+      if (!entry) return null;
+      // Expire after 24h
+      if (Date.now() - entry.ts > 86400000) {
+        delete all[tokenAddr.toLowerCase()];
+        localStorage.setItem(PAYMENT_KEY, JSON.stringify(all));
+        return null;
       }
-      if (ev.type === 'post') {
-        var who = ev.username || 'anon';
-        return '<span class="evt-post">\\u25B8 ' + who + ' posted on ' + (ev.token_name || ev.token_address.slice(0,8)) + '</span>';
-      }
-      return '';
-    }).join('');
+      return entry;
+    } catch(e) { return null; }
   }
 
-  function pollActivity() {
-    fetch('/api/activity?limit=10')
-      .then(function(r) { return r.json(); })
-      .then(function(data) { renderActivity(data.events); })
-      .catch(function() {});
+  function savePayment(tokenAddr, proof, from) {
+    try {
+      var all = JSON.parse(localStorage.getItem(PAYMENT_KEY) || '{}');
+      all[tokenAddr.toLowerCase()] = { proof: proof, from: from, ts: Date.now() };
+      localStorage.setItem(PAYMENT_KEY, JSON.stringify(all));
+    } catch(e) {}
   }
 
-  // Initial load + poll every 15s
-  pollActivity();
-  activityInterval = setInterval(pollActivity, 15000);
+  function clearPayment(tokenAddr) {
+    try {
+      var all = JSON.parse(localStorage.getItem(PAYMENT_KEY) || '{}');
+      delete all[tokenAddr.toLowerCase()];
+      localStorage.setItem(PAYMENT_KEY, JSON.stringify(all));
+    } catch(e) {}
+  }
 
   // ════════════════════════════════════════════════════════
   // ── Payment helpers ──
@@ -332,24 +734,7 @@ export function renderClientScript(): string {
       }]
     });
 
-    // Poll for receipt
-    var confirmed = false;
-    for (var attempt = 0; attempt < 30; attempt++) {
-      await new Promise(function(r) { setTimeout(r, 3000); });
-      try {
-        var receipt = await window.ethereum.request({
-          method: 'eth_getTransactionReceipt',
-          params: [txHash]
-        });
-        if (receipt && receipt.status === '0x1') { confirmed = true; break; }
-        if (receipt && receipt.status === '0x0') throw new Error('Transaction reverted');
-      } catch(e) {
-        if (e.message === 'Transaction reverted') throw e;
-      }
-    }
-
-    if (!confirmed) throw new Error('Transaction not confirmed after 90s');
-
+    // Wallet accepted the tx — return immediately, backend will verify on-chain
     return { proof: txHash, from: from, chain: 'base' };
   }
 
@@ -447,7 +832,9 @@ export function renderClientScript(): string {
   }
 
   // ── payUsdc: unified wrapper — detects wallets, shows choice if both available ──
-  function payUsdc(statusFn) {
+  // statusFn receives a single string to show on the button
+  // contextEl is the container near the button (to find the right wallet-choice)
+  function payUsdc(statusFn, contextEl) {
     return new Promise(function(resolve, reject) {
       var hasEvm = !!window.ethereum;
       var hasSolana = !!(window.phantom && window.phantom.solana) || !!window.solflare;
@@ -457,25 +844,35 @@ export function renderClientScript(): string {
         return;
       }
 
-      // Only one wallet type available — use it directly
-      if (hasEvm && !hasSolana) {
+      function wrapEvm() {
         if (statusFn) statusFn('Connecting wallet...');
-        payEvmUsdc().then(resolve).catch(reject);
-        return;
-      }
-      if (hasSolana && !hasEvm) {
-        if (statusFn) statusFn('Connecting wallet...');
-        paySolanaUsdc().then(resolve).catch(reject);
-        return;
+        payEvmUsdc().then(function(r) {
+          if (statusFn) statusFn('Submitting scan...');
+          resolve(r);
+        }).catch(reject);
       }
 
-      // Both available — show wallet choice UI
-      var choiceEl = document.getElementById('wallet-choice');
+      function wrapSolana() {
+        if (statusFn) statusFn('Connecting wallet...');
+        paySolanaUsdc().then(function(r) {
+          if (statusFn) statusFn('Submitting scan...');
+          resolve(r);
+        }).catch(reject);
+      }
+
+      if (hasEvm && !hasSolana) { wrapEvm(); return; }
+      if (hasSolana && !hasEvm) { wrapSolana(); return; }
+
+      // Both available — show wallet choice UI (find nearest one to the button)
+      var choiceEl = contextEl
+        ? contextEl.querySelector('.wallet-choice')
+        : document.querySelector('.wallet-choice');
       if (choiceEl) {
+        if (statusFn) statusFn('Choose wallet');
         choiceEl.style.display = 'flex';
 
-        var baseBtn = document.getElementById('pay-base-btn');
-        var solBtn = document.getElementById('pay-solana-btn');
+        var baseBtn = choiceEl.querySelector('.pay-base-btn');
+        var solBtn = choiceEl.querySelector('.pay-solana-btn');
 
         function cleanup() {
           choiceEl.style.display = 'none';
@@ -484,113 +881,265 @@ export function renderClientScript(): string {
         }
 
         if (baseBtn) {
-          baseBtn.onclick = function() {
-            cleanup();
-            if (statusFn) statusFn('Connecting MetaMask...');
-            payEvmUsdc().then(resolve).catch(reject);
-          };
+          baseBtn.onclick = function() { cleanup(); wrapEvm(); };
         }
         if (solBtn) {
-          solBtn.onclick = function() {
-            cleanup();
-            if (statusFn) statusFn('Connecting Phantom...');
-            paySolanaUsdc().then(resolve).catch(reject);
-          };
+          solBtn.onclick = function() { cleanup(); wrapSolana(); };
         }
       } else {
-        // No choice UI in DOM — default to EVM
-        if (statusFn) statusFn('Connecting wallet...');
-        payEvmUsdc().then(resolve).catch(reject);
+        wrapEvm();
       }
     });
   }
 
   // ════════════════════════════════════════════════════════
-  // ── Scan & Claim (combined for unscanned tokens) ──
+  // ── Scan & Claim (unified for all scan buttons) ──
   // ════════════════════════════════════════════════════════
 
-  var scanClaimBtn = document.getElementById('scan-claim-btn');
-  var scanClaimStatus = document.getElementById('scan-claim-status');
+  var originalTitle = document.title;
 
-  function showScanClaim(msg, type) {
-    if (!scanClaimStatus) return;
-    scanClaimStatus.textContent = msg;
-    scanClaimStatus.className = 'claim-status' + (type ? ' ' + type : '');
+  // Show error text below the button
+  function showError(el, msg) {
+    if (!el) return;
+    el.textContent = msg;
+    el.className = 'claim-status error';
+  }
+  function clearError(el) {
+    if (!el) return;
+    el.textContent = '';
+    el.className = 'claim-status';
   }
 
-  if (scanClaimBtn) {
-    scanClaimBtn.addEventListener('click', async function() {
-      scanClaimBtn.disabled = true;
-      showScanClaim('', '');
+  // ── Phase name mapping ──
+  var PHASE_LABELS = {
+    metadata:      'Fetching token info',
+    transfers:     'Fetching transfer history',
+    deploy_block:  'Finding contract origin',
+    transfer_logs: 'Reading transfer history',
+    timestamps:    'Processing timestamps',
+    balances:      'Computing holder balances',
+    holders:       'Discovering holders',
+    heat:          'Calculating heat scores',
+    complete:      'Scan complete',
+  };
 
-      try {
-        var result = await payUsdc(function(msg) {
-          scanClaimBtn.textContent = msg;
-          showScanClaim(msg, '');
-        });
+  function phaseLabel(raw) {
+    return PHASE_LABELS[raw] || 'Processing';
+  }
 
-        // Payment confirmed — trigger scan (backend auto-claims)
-        scanClaimBtn.textContent = 'Starting scan...';
-        showScanClaim('Payment confirmed! Starting scan...', '');
+  // Replace the scan CTA container with a progress UI
+  function showScanProgress(container) {
+    container.innerHTML =
+      '<div class="scan-progress">'
+      + '<div class="scan-progress-phase" id="sp-phase">Starting scan...</div>'
+      + '<div class="scan-progress-detail" id="sp-detail">This usually takes 1\\u20132 minutes</div>'
+      + '<div class="scan-progress-bar"><div class="scan-progress-fill" id="sp-fill" style="width:0%"></div></div>'
+      + '<div class="scan-progress-pct" id="sp-pct"></div>'
+      + '</div>';
+  }
 
-        var scanResp = await fetch('/api/scan/' + D.chain + '/' + D.tokenAddress, {
-          method: 'POST',
-          headers: {
-            'X-Wallet-Address': result.from,
-            'X-Payment-Proof': result.proof,
-          },
-        });
+  function updateScanProgressUI(phase, pct, detail) {
+    var phaseEl = document.getElementById('sp-phase');
+    var detailEl = document.getElementById('sp-detail');
+    var fillEl = document.getElementById('sp-fill');
+    var pctEl = document.getElementById('sp-pct');
+    if (phaseEl) phaseEl.textContent = phaseLabel(phase);
+    if (detailEl) {
+      if (detail) {
+        detailEl.textContent = detail;
+      } else if (pct != null && pct < 30) {
+        detailEl.textContent = 'Analyzing on-chain data...';
+      } else if (pct != null && pct < 95) {
+        detailEl.textContent = 'Crunching the numbers...';
+      } else {
+        detailEl.textContent = '';
+      }
+    }
+    if (fillEl && pct != null) fillEl.style.width = Math.round(pct) + '%';
+    if (pctEl && pct != null) pctEl.textContent = Math.round(pct) + '%';
+  }
 
-        var scanResult = await scanResp.json();
+  function showScanDone(container, holdersFound) {
+    container.innerHTML =
+      '<div class="scan-progress">'
+      + '<div class="scan-progress-done">' + holdersFound + ' holders found!</div>'
+      + '<div class="scan-progress-detail">Reloading page...</div>'
+      + '<div class="scan-progress-bar"><div class="scan-progress-fill" style="width:100%"></div></div>'
+      + '</div>';
+  }
 
+  function showScanError(container, msg, btn) {
+    container.innerHTML =
+      '<div class="scan-cta">'
+      + '<p style="color:#f87171">' + msg + '</p>'
+      + '<p style="color:#71717a;font-size:12px;margin-top:8px">This will be retried automatically. Come back in a few minutes.</p>'
+      + '</div>';
+    if (btn) {
+      container.querySelector('.scan-cta').appendChild(btn);
+      btn.disabled = false;
+      btn.textContent = 'Try Again Now';
+      btn.style.display = '';
+    }
+  }
+
+  // Shared: submit scan request and poll progress
+  function submitScanAndPoll(from, proof, btn, statusEl) {
+    // Find the parent container to replace with progress UI
+    var container = btn ? btn.closest('.scan-cta') || btn.closest('.unclaimed-cta') : null;
+    if (container) {
+      showScanProgress(container);
+    } else if (btn) {
+      btn.textContent = 'Starting scan...';
+    }
+
+    fetch('/api/scan/' + D.chain + '/' + D.tokenAddress, {
+      method: 'POST',
+      headers: {
+        'X-Wallet-Address': from,
+        'X-Payment-Proof': proof || '',
+      },
+    }).then(function(scanResp) {
+      return scanResp.json().then(function(scanResult) {
         if (!scanResp.ok) {
-          showScanClaim(scanResult.error || 'Scan request failed', 'error');
-          scanClaimBtn.disabled = false;
-          scanClaimBtn.textContent = 'Scan & Claim \\u2014 1 USDC';
+          if (container) {
+            showScanError(container, scanResult.error || 'Scan request failed', btn);
+          } else {
+            showError(statusEl, scanResult.error || 'Scan request failed');
+            if (btn) { btn.disabled = false; btn.textContent = 'Retry Scan'; }
+          }
           return;
         }
 
-        // Poll scan progress
+        if (scanResult.status === 'already_exists') {
+          clearPayment(D.tokenAddress);
+          if (container) showScanDone(container, '\\u2713');
+          setTimeout(function() { window.location.reload(); }, 1500);
+          return;
+        }
+
         var scanId = scanResult.scan_id;
         if (scanId) {
-          showScanClaim('Scan in progress... This may take a few minutes.', '');
-          scanClaimBtn.textContent = 'Scanning...';
+          var lastUpdate = Date.now();
+          var STALL_TIMEOUT = 120000; // 2 minutes with no progress change
+          var lastPct = -1;
+          var lastDetail = null;
+
           var pollScan = setInterval(async function() {
             try {
-              var statusResp = await fetch('/api/scan/' + scanId + '/status');
-              var statusData = await statusResp.json();
-              if (statusData.status === 'complete') {
+              var sr = await fetch('/api/scan/' + scanId + '/status');
+              var sd = await sr.json();
+              if (sd.status === 'complete') {
                 clearInterval(pollScan);
-                showScanClaim('Scan complete! ' + (statusData.holders_found || 0) + ' holders found. Reloading...', 'success');
+                clearPayment(D.tokenAddress);
+                if (container) {
+                  showScanDone(container, sd.holders_found || 0);
+                } else if (btn) {
+                  btn.textContent = sd.holders_found + ' holders found!';
+                }
                 setTimeout(function() { window.location.reload(); }, 2000);
-              } else if (statusData.status === 'failed') {
+              } else if (sd.status === 'failed') {
                 clearInterval(pollScan);
-                showScanClaim('Scan failed: ' + (statusData.error_message || 'Unknown error'), 'error');
-                scanClaimBtn.disabled = false;
-                scanClaimBtn.textContent = 'Scan & Claim \\u2014 1 USDC';
+                if (container) {
+                  showScanError(container, sd.error_message || 'Scan failed', btn);
+                } else {
+                  showError(statusEl, sd.error_message || 'Scan failed');
+                  if (btn) { btn.disabled = false; btn.textContent = 'Retry Scan'; }
+                }
               } else {
-                var phase = statusData.progress_phase || 'processing';
-                var pct = statusData.progress_pct != null ? ' (' + Math.round(statusData.progress_pct) + '%)' : '';
-                showScanClaim('Scanning: ' + phase + pct, '');
+                var phase = sd.progress_phase || 'processing';
+                var pct = sd.progress_pct != null ? Number(sd.progress_pct) : null;
+                var detail = sd.progress_detail || null;
+
+                // Track stalls — detail changes also count as progress
+                if ((pct !== null && pct !== lastPct) || (detail && detail !== lastDetail)) {
+                  lastPct = pct;
+                  lastDetail = detail;
+                  lastUpdate = Date.now();
+                }
+
+                if (container) {
+                  updateScanProgressUI(phase, pct, detail);
+                  // Stall warning
+                  if (Date.now() - lastUpdate > STALL_TIMEOUT) {
+                    var detailEl = document.getElementById('sp-detail');
+                    if (detailEl) detailEl.textContent = 'Taking longer than usual. Hang tight...';
+                  }
+                } else if (btn) {
+                  btn.textContent = phaseLabel(phase) + (pct != null ? ' ' + Math.round(pct) + '%' : '...');
+                }
               }
             } catch(e) {}
           }, 3000);
         } else {
-          showScanClaim('Scan started! Reload in a few minutes.', 'success');
+          if (container) updateScanProgressUI('metadata', 5);
+          else if (btn) btn.textContent = 'Scan started...';
         }
-
-      } catch(err) {
-        var msg = err.message || 'Unknown error';
-        if (msg.includes('User denied') || msg.includes('rejected')) {
-          showScanClaim('Transaction cancelled.', 'error');
-        } else {
-          showScanClaim('Error: ' + msg, 'error');
-        }
-        scanClaimBtn.disabled = false;
-        scanClaimBtn.textContent = 'Scan & Claim \\u2014 1 USDC';
+      });
+    }).catch(function(err) {
+      if (container) {
+        showScanError(container, err.message || 'Unknown error', btn);
+      } else {
+        showError(statusEl, err.message || 'Unknown error');
+        if (btn) { btn.disabled = false; btn.textContent = 'Retry Scan'; }
       }
     });
   }
+
+  // ── Reusable scan button initializer ──
+  function initScanButton(btn, statusEl) {
+    if (!btn) return;
+    var saved = getSavedPayment(D.tokenAddress);
+    if (saved) {
+      btn.textContent = 'Retry Scan (already paid)';
+      btn.addEventListener('click', async function() {
+        btn.disabled = true;
+        clearError(statusEl);
+        var from = saved.from;
+        if (!from) {
+          btn.textContent = 'Connecting wallet...';
+          try {
+            if (window.ethereum) {
+              var accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+              from = accounts && accounts[0];
+            }
+          } catch(e) {}
+        }
+        if (!from) {
+          showError(statusEl, 'Connect your wallet to retry.');
+          btn.disabled = false;
+          btn.textContent = 'Retry Scan (already paid)';
+          return;
+        }
+        submitScanAndPoll(from, saved.proof, btn, statusEl);
+      });
+    } else {
+      btn.addEventListener('click', async function() {
+        btn.disabled = true;
+        clearError(statusEl);
+        try {
+          document.title = 'Memetics Bungalow';
+          var result = await payUsdc(function(msg) { btn.textContent = msg; }, btn.parentElement);
+          document.title = originalTitle;
+          savePayment(D.tokenAddress, result.proof, result.from);
+          submitScanAndPoll(result.from, result.proof, btn, statusEl);
+        } catch(err) {
+          document.title = originalTitle;
+          var msg = err.message || 'Unknown error';
+          if (msg.includes('User denied') || msg.includes('rejected')) {
+            showError(statusEl, 'Transaction cancelled.');
+          } else {
+            showError(statusEl, msg);
+          }
+          btn.disabled = false;
+          btn.textContent = 'Scan & Claim \\u2014 1 USDC';
+        }
+      });
+    }
+  }
+
+  // Wire up both scan buttons (Miniapp tab + Holders tab)
+  initScanButton(document.getElementById('scan-claim-btn'), document.getElementById('scan-claim-status'));
+  initScanButton(document.getElementById('scan-holders-btn'), document.getElementById('scan-holders-status'));
 
   // ════════════════════════════════════════════════════════
   // ── Claim bungalow (already scanned but unclaimed) ──
@@ -614,7 +1163,7 @@ export function renderClientScript(): string {
         var result = await payUsdc(function(msg) {
           claimBtn.textContent = msg;
           showClaim(msg, '');
-        });
+        }, claimBtn.parentElement);
 
         claimBtn.textContent = 'Claiming bungalow...';
         showClaim('Payment confirmed! Claiming bungalow...', '');
@@ -680,7 +1229,7 @@ export function renderClientScript(): string {
         var result = await payUsdc(function(msg) {
           updateBtn.textContent = msg;
           showUpdate(msg, '');
-        });
+        }, updateBtn.parentElement);
 
         updateBtn.textContent = 'Deploying...';
         showUpdate('Payment confirmed! Fetching HTML and deploying...', '');
@@ -721,89 +1270,7 @@ export function renderClientScript(): string {
     });
   }
 
-  // ── Scan-only button (holders tab, when token is unscanned) ──
-  var scanBtn = document.getElementById('scan-btn');
-  var scanStatus = document.getElementById('scan-status');
-
-  function showScan(msg, type) {
-    if (!scanStatus) return;
-    scanStatus.textContent = msg;
-    scanStatus.className = 'claim-status' + (type ? ' ' + type : '');
-  }
-
-  if (scanBtn) {
-    scanBtn.addEventListener('click', async function() {
-      scanBtn.disabled = true;
-      showScan('', '');
-
-      try {
-        var result = await payUsdc(function(msg) {
-          scanBtn.textContent = msg;
-          showScan(msg, '');
-        });
-
-        scanBtn.textContent = 'Starting scan...';
-        showScan('Payment confirmed! Starting scan...', '');
-
-        var scanResp = await fetch('/api/scan/' + D.chain + '/' + D.tokenAddress, {
-          method: 'POST',
-          headers: {
-            'X-Wallet-Address': result.from,
-            'X-Payment-Proof': result.proof,
-          },
-        });
-
-        var scanResult = await scanResp.json();
-
-        if (!scanResp.ok) {
-          showScan(scanResult.error || 'Scan request failed', 'error');
-          scanBtn.disabled = false;
-          scanBtn.textContent = 'Scan & Claim \\u2014 1 USDC';
-          return;
-        }
-
-        var scanId = scanResult.scan_id;
-        if (scanId) {
-          showScan('Scan in progress...', '');
-          scanBtn.textContent = 'Scanning...';
-          var pollScan = setInterval(async function() {
-            try {
-              var statusResp = await fetch('/api/scan/' + scanId + '/status');
-              var statusData = await statusResp.json();
-              if (statusData.status === 'complete') {
-                clearInterval(pollScan);
-                showScan('Scan complete! ' + (statusData.holders_found || 0) + ' holders found. Reloading...', 'success');
-                setTimeout(function() { window.location.reload(); }, 2000);
-              } else if (statusData.status === 'failed') {
-                clearInterval(pollScan);
-                showScan('Scan failed: ' + (statusData.error_message || 'Unknown error'), 'error');
-                scanBtn.disabled = false;
-                scanBtn.textContent = 'Scan & Claim \\u2014 1 USDC';
-              } else {
-                var phase = statusData.progress_phase || 'processing';
-                var pct = statusData.progress_pct != null ? ' (' + Math.round(statusData.progress_pct) + '%)' : '';
-                showScan('Scanning: ' + phase + pct, '');
-              }
-            } catch(e) {}
-          }, 3000);
-        } else {
-          showScan('Scan started! Reload in a few minutes.', 'success');
-        }
-
-      } catch(err) {
-        var msg = err.message || 'Unknown error';
-        if (msg.includes('User denied') || msg.includes('rejected')) {
-          showScan('Transaction cancelled.', 'error');
-        } else {
-          showScan('Error: ' + msg, 'error');
-        }
-        scanBtn.disabled = false;
-        scanBtn.textContent = 'Scan & Claim \\u2014 1 USDC';
-      }
-    });
-  }
-
-  // Auth is now server-rendered (session cookie), no client-side auth needed
+  // Wallet-based UX: no auth needed, wallet IS the identity
 })();
-</script>`
+</script>`;
 }

@@ -36,7 +36,6 @@ export interface ScanResult {
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
 const MAX_RETRIES = 3
-const MIN_HEAT_DEGREES = 0.01
 const ALCHEMY_PAGE_SIZE = '0x3e8' // 1000 per page
 
 const erc20ReadAbi = [
@@ -299,13 +298,11 @@ function computeHolderHeat(
   const holders: ScanResult['holders'] = []
 
   for (const [wallet, ledger] of walletLedgers.entries()) {
-    if (ledger.balance <= 0n) continue
-
     const twab = calculateTWAB(ledger.snapshots, deployTimestamp, nowTimestamp)
     const normalizedTwab = decimals > 0 ? twab / (10 ** decimals) : twab
     const heat = calculateHeatDegrees(normalizedTwab, totalSupply)
 
-    if (heat < MIN_HEAT_DEGREES) continue
+    if (heat <= 0) continue
 
     holders.push({
       wallet,

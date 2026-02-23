@@ -444,8 +444,10 @@ export function renderLoginPage(): string {
 
       <div class="login-divider">or</div>
 
-      <div class="login-desktop">
-        On <strong>desktop</strong>, install a browser extension like MetaMask or Phantom and visit any bungalow. Your connected wallet is your identity.
+      <div id="wallet-section">
+        <div class="login-desktop">
+          On <strong>desktop</strong>, install a browser extension like MetaMask or Phantom and visit any bungalow. Your connected wallet is your identity.
+        </div>
       </div>
     </div>
 
@@ -458,28 +460,104 @@ export function renderLoginPage(): string {
   (function() {
     var link = document.getElementById('memetics-login-link');
     var msg = document.getElementById('memetics-login-msg');
-    if (!link) return;
-    link.addEventListener('click', function(e) {
-      e.preventDefault();
-      var url = 'https://memetics.lat';
-      if (!navigator.clipboard || !navigator.clipboard.writeText) {
-        if (msg) {
-          msg.textContent = 'copied';
-          setTimeout(function() { msg.textContent = ''; }, 1200);
-        }
-        return;
-      }
-      navigator.clipboard.writeText(url).then(function() {
-        if (!msg) return;
-        msg.textContent = 'copied';
-        setTimeout(function() { msg.textContent = ''; }, 1200);
-      }).catch(function() {
-        if (msg) {
-          msg.textContent = 'copied';
-          setTimeout(function() { msg.textContent = ''; }, 1200);
-        }
+    if (link) {
+      link.addEventListener('click', function(e) {
+        e.preventDefault();
+        var url = 'https://memetics.lat';
+        navigator.clipboard.writeText(url).then(function() {
+          if (msg) { msg.textContent = 'copied'; setTimeout(function() { msg.textContent = ''; }, 1200); }
+        }).catch(function() {
+          if (msg) { msg.textContent = 'copied'; setTimeout(function() { msg.textContent = ''; }, 1200); }
+        });
       });
-    });
+    }
+
+    // ── Wallet detection ──
+    var section = document.getElementById('wallet-section');
+    if (!section) return;
+    var hasEvm = !!window.ethereum;
+    var phantom = window.phantom && window.phantom.solana;
+    var solflare = window.solflare;
+    var hasSolana = !!(phantom && phantom.isPhantom) || !!solflare;
+
+    if (!hasEvm && !hasSolana) return; // no wallets, keep the static text
+
+    function shortAddr(a) { return a.length <= 10 ? a : a.slice(0,6) + '\u2026' + a.slice(-4); }
+
+    // Replace the static text with connect UI
+    var html = '<div style="text-align:center">';
+    html += '<div style="font-size:13px;color:${COLORS.textMuted};margin-bottom:12px">Wallets detected on this browser:</div>';
+    html += '<div id="wallet-list" style="display:flex;flex-direction:column;gap:8px;align-items:center"></div>';
+    html += '</div>';
+    section.innerHTML = html;
+    var list = document.getElementById('wallet-list');
+
+    function addWallet(label, addr) {
+      var row = document.createElement('a');
+      row.href = '/wallet/' + addr;
+      row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 16px;background:${COLORS.surface};border:1px solid ${COLORS.border};border-radius:6px;text-decoration:none;width:100%;max-width:360px;transition:border-color 0.15s';
+      row.innerHTML = '<span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;background:${COLORS.bg};color:${COLORS.textMuted};padding:2px 6px;border-radius:3px;border:1px solid ${COLORS.border}">' + label + '</span>'
+        + '<span style="font-size:13px;color:${COLORS.text};flex:1">' + shortAddr(addr) + '</span>'
+        + '<span style="font-size:11px;color:${COLORS.accent}">view profile \u2192</span>';
+      row.addEventListener('mouseenter', function() { row.style.borderColor = '${COLORS.accent}'; });
+      row.addEventListener('mouseleave', function() { row.style.borderColor = '${COLORS.border}'; });
+      list.appendChild(row);
+    }
+
+    function addConnectBtn(label, onClick) {
+      var btn = document.createElement('button');
+      btn.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 16px;background:${COLORS.surface};border:1px solid ${COLORS.border};border-radius:6px;cursor:pointer;width:100%;max-width:360px;font-family:inherit;transition:border-color 0.15s';
+      btn.innerHTML = '<span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;background:${COLORS.bg};color:${COLORS.textMuted};padding:2px 6px;border-radius:3px;border:1px solid ${COLORS.border}">' + label + '</span>'
+        + '<span style="font-size:13px;color:${COLORS.text};flex:1;text-align:left">Connect</span>';
+      btn.addEventListener('mouseenter', function() { btn.style.borderColor = '${COLORS.accent}'; });
+      btn.addEventListener('mouseleave', function() { btn.style.borderColor = '${COLORS.border}'; });
+      btn.addEventListener('click', onClick);
+      list.appendChild(btn);
+      return btn;
+    }
+
+    // EVM: try passive first, then show connect button
+    if (hasEvm) {
+      window.ethereum.request({ method: 'eth_accounts' }).then(function(accts) {
+        if (accts && accts[0]) {
+          addWallet('EVM', accts[0]);
+        } else {
+          addConnectBtn('EVM', async function() {
+            try {
+              var accts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+              if (accts && accts[0]) {
+                list.innerHTML = '';
+                addWallet('EVM', accts[0]);
+                checkSolana();
+              }
+            } catch(e) {}
+          });
+        }
+      }).catch(function() {});
+    }
+
+    // Solana: check for immediate publicKey, else show connect button
+    function checkSolana() {
+      if (!hasSolana) return;
+      var provider = (phantom && phantom.isPhantom) ? phantom : solflare;
+      if (provider && provider.publicKey) {
+        addWallet('SOL', provider.publicKey.toString());
+      } else {
+        addConnectBtn('SOL', async function() {
+          try {
+            var resp = await provider.connect();
+            if (resp && resp.publicKey) {
+              // Rebuild list
+              var existing = list.querySelectorAll('a');
+              list.innerHTML = '';
+              existing.forEach(function(el) { list.appendChild(el); });
+              addWallet('SOL', resp.publicKey.toString());
+            }
+          } catch(e) {}
+        });
+      }
+    }
+    checkSolana();
   })();
   </script>
   ${renderMiniappSdk()}

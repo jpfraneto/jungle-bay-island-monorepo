@@ -215,7 +215,10 @@ export function renderClientScript(): string {
 
     var dpr = window.devicePixelRatio || 1;
     var w = wrap.clientWidth;
-    var h = Math.round(w / 2); // 2:1 aspect ratio
+    // Cap chart to 50% of the tab panel height so holders list is always visible
+    var panel = wrap.closest('.tab-panel');
+    var maxH = panel ? Math.round(panel.clientHeight * 0.5) : 400;
+    var h = Math.min(Math.round(w / 2), maxH);
     canvas.width = w * dpr;
     canvas.height = h * dpr;
     canvas.style.width = w + 'px';

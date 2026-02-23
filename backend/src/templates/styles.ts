@@ -457,10 +457,11 @@ export const BUNGALOW_CSS = `
   /* ── Holder balance chart ── */
   .holder-chart-wrap {
     flex-shrink: 0; width: 100%; position: relative;
+    max-height: 50%; overflow: hidden;
     background: ${COLORS.bg}; border-bottom: 1px solid ${COLORS.border};
   }
   .holder-chart-wrap canvas {
-    width: 100%; aspect-ratio: 2; display: block;
+    width: 100%; display: block;
   }
   .holder-chart-legend {
     display: flex; gap: 12px; flex-wrap: wrap;
@@ -645,6 +646,12 @@ export const USER_PAGE_CSS = `
     font-size: 10px; cursor: pointer; font-family: inherit;
   }
   .copy-btn:hover { border-color: ${COLORS.accent}; color: ${COLORS.accent}; }
+  .arkham-link {
+    display: inline-flex; align-items: center;
+    color: ${COLORS.textMuted}; padding: 1px 6px; border-radius: 3px;
+    border: 1px solid ${COLORS.border}; transition: border-color 0.15s, color 0.15s;
+  }
+  .arkham-link:hover { border-color: ${COLORS.accent}; color: ${COLORS.accent}; text-decoration: none; }
 
   .badge {
     display: inline-flex; align-items: center; gap: 6px;

@@ -1,6 +1,6 @@
 import { COLORS, USER_PAGE_CSS } from "./styles";
 import { getTierFromHeat } from "../services/heat";
-import { renderTopbarAuth } from "./auth-ui";
+import { renderTopbarAuth, renderMiniappSdk, renderMiniappEmbed } from "./auth-ui";
 
 function esc(str: string | null | undefined): string {
   if (!str) return "";
@@ -122,6 +122,7 @@ export function renderUserPage(data: UserPageData): string {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>${pageTitle}</title>
+  ${renderMiniappEmbed({ launchUrl: 'https://memetics.lat/wallet/' + esc(data.wallet) })}
   <style>${USER_PAGE_CSS}</style>
 </head>
 <body>
@@ -167,7 +168,7 @@ export function renderUserPage(data: UserPageData): string {
     </div>
   </div>
 
-  <a href="https://x.com/jpfraneto" target="_blank" rel="noopener" class="beta-banner">this app is in BETA. contact @jpfraneto on X for support</a>
+  <a href="https://x.com/jpfraneto" target="_blank" rel="noopener" class="beta-banner">this app is in BETA. contact @jpfraneto for support</a>
 
   <script>
     var wallet = ${JSON.stringify(data.wallet)};
@@ -337,6 +338,7 @@ export function renderUserPage(data: UserPageData): string {
       });
     }
   </script>
+  ${renderMiniappSdk()}
 </body>
 </html>`;
 }

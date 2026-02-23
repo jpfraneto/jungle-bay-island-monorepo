@@ -19,18 +19,14 @@ import ogRoute from './routes/og'
 import agentRoute from './routes/agent'
 import widgetRoute from './routes/widget'
 import v1BungalowRoute from './routes/v1-bungalow'
-import authRoute from './routes/auth'
-import walletLinkRoute from './routes/wallet-link'
-import { getBulletinPosts, getBungalow, getCustomBungalow, getTokenHolders, getTokenHeatDistribution, getUserByWallet, getLinkedWalletsByWallet } from './db/queries'
+import { getBulletinPosts, getBungalow, getCustomBungalow, getTokenHolders, getTokenHeatDistribution, getUserByWallet, getLinkedWalletsByWallet, getRecentScans } from './db/queries'
 import { getCached, setCached } from './services/cache'
 import { isApiError } from './services/errors'
 import { logError, logInfo, logWarn } from './services/logger'
 import { resolveTokenMetadata } from './services/tokenMetadata'
-import { renderLanding, render404, renderInvalidToken } from './templates/landing'
+import { renderLanding, renderLoginPage, render404, renderInvalidToken } from './templates/landing'
 import { renderBungalow } from './templates/bungalow'
 import { renderUserPage } from './templates/user'
-import { renderProfilePage } from './templates/profile'
-import { getSessionFromRequest } from './services/session'
 import type { AppEnv } from './types'
 
 // Bot user-agent patterns for social media crawlers
@@ -118,8 +114,6 @@ app.route('/api', ogRoute)
 app.route('/api', agentRoute)
 app.route('/api', widgetRoute)
 app.route('/api', v1BungalowRoute)
-app.route('/api', walletLinkRoute)
-app.route('', authRoute)
 
 // --- Solana RPC proxy (browser can't hit public RPC directly due to CORS/403) ---
 app.post('/api/solana-rpc', async (c) => {
@@ -146,6 +140,62 @@ app.post('/api/solana-rpc', async (c) => {
   } catch (err) {
     return c.json({ error: 'RPC proxy failed' }, 502 as any)
   }
+})
+
+// --- Static files from backend/public/ ---
+const STATIC_DIR = path.resolve(import.meta.dir, '../public')
+const MIME_TYPES: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+}
+
+for (const ext of Object.keys(MIME_TYPES)) {
+  app.get(`/*${ext}`, async (c, next) => {
+    const reqPath = new URL(c.req.url).pathname
+    // Only serve top-level files (no path traversal)
+    const filename = reqPath.split('/').pop()
+    if (!filename || filename.includes('..')) return next()
+    const filePath = path.join(STATIC_DIR, filename)
+    const file = Bun.file(filePath)
+    if (!(await file.exists())) return next()
+    c.header('Content-Type', MIME_TYPES[ext] ?? 'application/octet-stream')
+    c.header('Cache-Control', 'public, max-age=86400')
+    return c.body(await file.arrayBuffer())
+  })
+}
+
+// --- Farcaster miniapp manifest ---
+app.get('/.well-known/farcaster.json', (c) => {
+  return c.json({
+    accountAssociation: {
+      header: 'eyJmaWQiOjE2MDk4LCJ0eXBlIjoiY3VzdG9keSIsImtleSI6IjB4YUIyMERlOGY1QTRmOGUxNDdCYWFDOUQxZjZlMjM2ODYxNDg1NTE2QSJ9',
+      payload: 'eyJkb21haW4iOiJtZW1ldGljcy5sYXQifQ',
+      signature: 'FmasqQip1czEw00y9AvF4mktWwc0jB9AlLPSZLVXoscqiaDwIzu9SIZVapsnMJfEWslHgbSQGzRnfY+Zhj/kuxs=',
+    },
+    miniapp: {
+      version: '1',
+      name: 'Memetics',
+      iconUrl: 'https://memetics.lat/icon.png',
+      homeUrl: 'https://memetics.lat',
+      imageUrl: 'https://memetics.lat/og-image.png',
+      buttonTitle: 'Explore Tokens',
+      splashImageUrl: 'https://memetics.lat/splash.png',
+      splashBackgroundColor: '#0a0e14',
+      description: 'The home for your token. Explore holders, charts, and claims for any Base or Solana token.',
+      primaryCategory: 'developer-tools',
+      tags: ['tokens', 'defi', 'memecoins', 'base', 'solana'],
+      webhookUrl: 'https://memetics.lat/api/webhook',
+    },
+  })
+})
+
+// --- Farcaster miniapp webhook (stub) ---
+app.post('/api/webhook', async (c) => {
+  return c.json({ ok: true })
 })
 
 // --- skill.md for AI agents ---
@@ -223,33 +273,13 @@ app.get('/:chain/:ca', async (c, next) => {
 </html>`)
 })
 
-// --- Profile page (logged-in user) ---
-app.get('/profile', async (c) => {
-  const session = await getSessionFromRequest(c.req.header('cookie'))
-  if (!session) {
-    return c.redirect('/auth/twitter?return=/profile')
-  }
-
-  // Fetch linked wallets
-  let wallets: Array<{ wallet: string; wallet_kind: string; linked_at: string }> = []
-  try {
-    await db`ALTER TABLE ${db(CONFIG.SCHEMA)}.user_wallet_links ADD COLUMN IF NOT EXISTS x_id TEXT`
-    wallets = await db<Array<{ wallet: string; wallet_kind: string; linked_at: string }>>`
-      SELECT wallet, wallet_kind, first_seen_at::text AS linked_at
-      FROM ${db(CONFIG.SCHEMA)}.user_wallet_links
-      WHERE x_id = ${session.x_id}
-      ORDER BY first_seen_at ASC
-    `
-  } catch (err) {
-    logError('PROFILE', `wallet query failed: ${err instanceof Error ? err.message : 'unknown'}`)
-  }
-
-  logInfo('PROFILE PAGE', `x=@${session.x_username} wallets=${wallets.length}`)
-  return c.html(renderProfilePage({ session, wallets }))
+// --- User profile page ---
+// Redirect old /user/:wallet URLs
+app.get('/user/:wallet', (c) => {
+  return c.redirect(`/wallet/${c.req.param('wallet')}`, 301)
 })
 
-// --- User profile page ---
-app.get('/user/:wallet', async (c) => {
+app.get('/wallet/:wallet', async (c) => {
   const rawWallet = c.req.param('wallet')
   const wallet = normalizeAddress(rawWallet) ?? normalizeAddress(rawWallet, 'solana') ?? rawWallet.trim()
 
@@ -257,9 +287,8 @@ app.get('/user/:wallet', async (c) => {
     return c.html(render404(), 404 as any)
   }
 
-  const [userData, userSession, linkedWallets] = await Promise.all([
+  const [userData, linkedWallets] = await Promise.all([
     getUserByWallet(wallet),
-    getSessionFromRequest(c.req.header('cookie')),
     getLinkedWalletsByWallet(wallet).catch(() => null),
   ])
   if (!userData) {
@@ -269,16 +298,20 @@ app.get('/user/:wallet', async (c) => {
   logInfo('USER PAGE', `wallet=${wallet} heat=${userData.island_heat} tokens=${userData.token_breakdown.length} linked=${linkedWallets?.wallets?.length ?? 0}`)
   return c.html(renderUserPage({
     ...userData,
-    session: userSession,
     linked_wallets: linkedWallets?.wallets ?? null,
     x_username: linkedWallets?.x_username ?? null,
   }))
 })
 
+// --- Login page ---
+app.get('/login', (c) => {
+  return c.html(renderLoginPage())
+})
+
 // --- Landing page ---
 app.get('/', async (c) => {
-  const session = await getSessionFromRequest(c.req.header('cookie'))
-  return c.html(renderLanding(session))
+  const recentScans = await getRecentScans(10).catch(() => [])
+  return c.html(renderLanding(recentScans))
 })
 
 // --- Bungalow page (human visitors) ---
@@ -298,9 +331,9 @@ app.get('/:chain/:ca', async (c, next) => {
   if (!tokenAddress) return next()
 
   // Fetch all data in parallel (including token validation)
-  const [bungalow, holdersResult, bulletinResult, customHtml, tokenMeta, heatDistribution, session] = await Promise.all([
+  const [bungalow, holdersResult, bulletinResult, customHtml, tokenMeta, heatDistribution] = await Promise.all([
     getBungalow(tokenAddress, supported),
-    getTokenHolders(tokenAddress, 20, 0),
+    getTokenHolders(tokenAddress, 30, 0),
     getBulletinPosts(tokenAddress, 20, 0),
     (async () => {
       const cacheKey = `custom_bungalow:${chain}:${tokenAddress}`
@@ -319,14 +352,13 @@ app.get('/:chain/:ca', async (c, next) => {
     })(),
     resolveTokenMetadata(tokenAddress, supported),
     getTokenHeatDistribution(tokenAddress),
-    getSessionFromRequest(c.req.header('cookie')),
   ])
 
   // If token has no data from any source, show invalid token page
   const hasAnyData = bungalow || holdersResult.total > 0 || tokenMeta.name || tokenMeta.symbol || tokenMeta.market_data
   if (!hasAnyData) {
     logInfo('BUNGALOW PAGE', `chain=${chain} token=${tokenAddress} INVALID — no data found`)
-    return c.html(renderInvalidToken(tokenAddress, chain, session))
+    return c.html(renderInvalidToken(tokenAddress, chain))
   }
 
   logInfo('BUNGALOW PAGE', `chain=${chain} token=${tokenAddress} claimed=${bungalow?.is_claimed ?? false} custom=${!!customHtml}`)
@@ -344,7 +376,6 @@ app.get('/:chain/:ca', async (c, next) => {
     fallbackSymbol: tokenMeta.symbol,
     fallbackImage: tokenMeta.image_url,
     heatDistribution,
-    session,
   }))
 })
 
@@ -438,11 +469,9 @@ async function logStartupStatus(): Promise<void> {
   console.log(`  ${statusDot(dbOk)}  PostgreSQL   ${dbOk ? `${G}connected${R}` : `${RE}failed${R}`}`)
   console.log(`  ${statusDot(baseOk)}  Base RPC     ${baseOk ? `${G}block ${baseHead}${R}` : `${RE}failed${R}`}`)
   console.log(`  ${statusDot(ethOk)}  Ethereum RPC ${ethOk ? `${G}block ${ethHead}${R}` : `${RE}failed${R}`}`)
-  console.log(`  ${statusDot(!!CONFIG.TWITTER_CLIENT_ID)}  Twitter OAuth ${CONFIG.TWITTER_CLIENT_ID ? `${G}configured${R}` : `${Y}not set${R}`}`)
   console.log(`  ${statusDot(!!CONFIG.NEYNAR_API_KEY)}  Neynar       ${CONFIG.NEYNAR_API_KEY ? `${G}configured${R}` : `${Y}not set${R}`}`)
   console.log('')
-  console.log(`  ${D}Routes${R}     /api/*  /skill.md  /:chain/:ca  /user/:wallet  /profile`)
-  console.log(`  ${D}Auth${R}       /auth/twitter  /auth/callback  /auth/logout  /auth/me`)
+  console.log(`  ${D}Routes${R}     /api/*  /skill.md  /:chain/:ca  /wallet/:wallet`)
   console.log(`  ${D}Agents${R}     POST /api/agents/register`)
   console.log(`  ${D}Health${R}     GET  /api/health`)
   console.log('')

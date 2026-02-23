@@ -43,10 +43,6 @@ export function renderClientScript(): string {
     panels.forEach(function(p) {
       p.classList.toggle('active', p.id === 'panel-' + name);
     });
-    // Lazy-load timeline on first visit
-    if (name === 'activity') {
-      loadTimeline();
-    }
     // Lazy-load chart iframe on first visit
     if (name === 'chart' && !chartLoaded && D.dexscreenerUrl) {
       var frame = document.getElementById('chart-frame');
@@ -74,181 +70,28 @@ export function renderClientScript(): string {
     });
   });
 
-  // ── Activity tab: canvas timeline chart ──
-  var timelineLoaded = false;
-
-  function loadTimeline() {
-    if (timelineLoaded) return;
-    timelineLoaded = true;
-    var container = document.getElementById('timeline-container');
-    if (!container) return;
-
-    if (D.chain === 'solana') {
-      container.innerHTML = '<div class="timeline-empty">Transfer timeline is not available for Solana tokens yet.</div>';
-      return;
-    }
-
-    fetch('/api/token/' + D.tokenAddress + '/timeline')
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        if (!data.timeline || data.timeline.length === 0) {
-          container.innerHTML = '<div class="timeline-empty">No transfer data available. Scan this token first.</div>';
-          return;
-        }
-        renderTimelineChart(container, data.timeline);
-      })
-      .catch(function() {
-        container.innerHTML = '<div class="timeline-empty">Failed to load timeline data.</div>';
-      });
-  }
-
-  function renderTimelineChart(container, buckets) {
-    // Build DOM
-    container.innerHTML =
-      '<div class="timeline-header">'
-      + '<div class="timeline-title">' + (D.name || 'Token') + (D.symbol ? ' ($' + D.symbol + ')' : '') + '</div>'
-      + '<div class="timeline-subtitle">Transfer activity over time</div>'
-      + '</div>'
-      + '<div class="timeline-canvas-wrap" id="tl-wrap">'
-      + '<canvas id="tl-canvas"></canvas>'
-      + '<div class="timeline-tooltip" id="tl-tooltip"></div>'
-      + '</div>';
-
-    var wrap = document.getElementById('tl-wrap');
-    var canvas = document.getElementById('tl-canvas');
-    var tooltip = document.getElementById('tl-tooltip');
-    if (!wrap || !canvas) return;
-
-    var ctx = canvas.getContext('2d');
-    var dpr = window.devicePixelRatio || 1;
-
-    function draw() {
-      var w = wrap.clientWidth;
-      var h = wrap.clientHeight;
-      canvas.width = w * dpr;
-      canvas.height = h * dpr;
-      canvas.style.width = w + 'px';
-      canvas.style.height = h + 'px';
-      ctx.scale(dpr, dpr);
-
-      var pad = { top: 20, right: 16, bottom: 36, left: 52 };
-      var cw = w - pad.left - pad.right;
-      var ch = h - pad.top - pad.bottom;
-
-      if (cw < 40 || ch < 40) return;
-
-      // Background
-      ctx.fillStyle = '#0a0a0f';
-      ctx.fillRect(0, 0, w, h);
-
-      var maxCount = 0;
-      for (var i = 0; i < buckets.length; i++) {
-        if (buckets[i].c > maxCount) maxCount = buckets[i].c;
-      }
-      if (maxCount === 0) maxCount = 1;
-
-      // Y-axis grid lines + labels
-      var ySteps = 4;
-      ctx.strokeStyle = '#1a1a24';
-      ctx.lineWidth = 1;
-      ctx.fillStyle = '#71717a';
-      ctx.font = '10px monospace';
-      ctx.textAlign = 'right';
-      ctx.textBaseline = 'middle';
-
-      for (var yi = 0; yi <= ySteps; yi++) {
-        var yVal = Math.round((maxCount / ySteps) * yi);
-        var yPos = pad.top + ch - (ch * yi / ySteps);
-        ctx.beginPath();
-        ctx.moveTo(pad.left, yPos);
-        ctx.lineTo(w - pad.right, yPos);
-        ctx.stroke();
-        var label = yVal >= 1000 ? (yVal / 1000).toFixed(yVal >= 10000 ? 0 : 1) + 'k' : String(yVal);
-        ctx.fillText(label, pad.left - 6, yPos);
-      }
-
-      // Bars
-      var barGap = Math.max(1, Math.floor(cw / buckets.length * 0.15));
-      var barW = Math.max(1, (cw / buckets.length) - barGap);
-
-      for (var bi = 0; bi < buckets.length; bi++) {
-        var bx = pad.left + (cw / buckets.length) * bi + barGap / 2;
-        var ratio = buckets[bi].c / maxCount;
-        var bh = Math.max(ratio > 0 ? 1 : 0, ch * ratio);
-        var by = pad.top + ch - bh;
-
-        // Color gradient by intensity
-        var r = Math.round(14 + (34 - 14) * ratio);
-        var g = Math.round(116 + (211 - 116) * ratio);
-        var b = Math.round(144 + (238 - 144) * ratio);
-        ctx.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')';
-        ctx.fillRect(bx, by, barW, bh);
-      }
-
-      // X-axis date labels
-      ctx.fillStyle = '#71717a';
-      ctx.font = '10px monospace';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      var labelCount = Math.min(6, buckets.length);
-      for (var li = 0; li < labelCount; li++) {
-        var idx = Math.floor((buckets.length - 1) * li / (labelCount - 1 || 1));
-        var ts = buckets[idx].t;
-        var d = new Date(ts * 1000);
-        var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-        var dlabel = months[d.getMonth()] + ' ' + d.getDate() + ', ' + String(d.getFullYear()).slice(2);
-        var dx = pad.left + (cw / buckets.length) * idx + barW / 2;
-        ctx.fillText(dlabel, dx, pad.top + ch + 8);
-      }
-    }
-
-    draw();
-
-    // Resize handler
-    var resizeTimer;
-    window.addEventListener('resize', function() {
-      clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(draw, 150);
-    });
-
-    // Tooltip on click/tap
-    canvas.addEventListener('click', function(e) {
-      var rect = canvas.getBoundingClientRect();
-      var x = e.clientX - rect.left;
-      var pad = { left: 52, right: 16, top: 20, bottom: 36 };
-      var cw = rect.width - pad.left - pad.right;
-      var idx = Math.floor((x - pad.left) / (cw / buckets.length));
-      if (idx < 0 || idx >= buckets.length) {
-        tooltip.style.display = 'none';
-        return;
-      }
-      var bucket = buckets[idx];
-      var d = new Date(bucket.t * 1000);
-      var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-      var dateStr = months[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
-      tooltip.innerHTML = '<strong>' + bucket.c.toLocaleString() + '</strong> transfers<br>' + dateStr;
-      tooltip.style.display = 'block';
-
-      // Position tooltip
-      var tx = e.clientX - rect.left;
-      var ty = e.clientY - rect.top;
-      if (tx + 120 > rect.width) tx = tx - 120;
-      tooltip.style.left = tx + 'px';
-      tooltip.style.top = (ty - 50) + 'px';
-    });
-
-    // Hide tooltip when leaving
-    canvas.addEventListener('mouseleave', function() {
-      tooltip.style.display = 'none';
-    });
-  }
-
   // ════════════════════════════════════════════════════════
   // ── Holder balance history chart (click heat to toggle) ──
   // ════════════════════════════════════════════════════════
 
   var HOLDER_COLORS = ['#22d3ee', '#f87171', '#4ade80', '#facc15', '#fb923c', '#a78bfa', '#f472b6', '#38bdf8'];
   var selectedHolders = []; // [{wallet, color, points, label}]
+
+  function showSkeleton() {
+    var wrap = document.getElementById('holder-chart-wrap');
+    var skel = document.getElementById('holder-chart-skeleton');
+    var canvas = document.getElementById('holder-chart-canvas');
+    if (wrap) wrap.style.display = 'block';
+    if (skel) skel.style.display = 'flex';
+    if (canvas) canvas.style.display = 'none';
+  }
+
+  function hideSkeleton() {
+    var skel = document.getElementById('holder-chart-skeleton');
+    var canvas = document.getElementById('holder-chart-canvas');
+    if (skel) skel.style.display = 'none';
+    if (canvas) canvas.style.display = 'block';
+  }
 
   function toggleHolderHistory(wallet, label) {
     var idx = -1;
@@ -268,19 +111,51 @@ export function renderClientScript(): string {
     // Mark loading
     markHeatCell(wallet, color, true);
 
+    // Show skeleton immediately for visual feedback
+    if (selectedHolders.length === 0) {
+      showSkeleton();
+    }
+
     fetch('/api/token/' + D.chain + '/' + D.tokenAddress + '/holder/' + wallet + '/history')
       .then(function(r) { return r.json(); })
       .then(function(data) {
         if (!data.points || data.points.length === 0) {
           markHeatCell(wallet, null, false);
+          if (selectedHolders.length === 0) {
+            var wrap = document.getElementById('holder-chart-wrap');
+            if (wrap) wrap.style.display = 'none';
+          }
           return;
         }
         selectedHolders.push({ wallet: wallet, color: color, points: data.points, label: label || shortAddr(wallet) });
+        ensureHolderRow(wallet, label || shortAddr(wallet));
         updateHolderChartUI();
       })
       .catch(function() {
         markHeatCell(wallet, null, false);
+        if (selectedHolders.length === 0) {
+          var wrap = document.getElementById('holder-chart-wrap');
+          if (wrap) wrap.style.display = 'none';
+        }
       });
+  }
+
+  function ensureHolderRow(wallet, label) {
+    // If the wallet already has a row in the table, nothing to do
+    var existing = document.querySelector('tr.holder-row[data-wallet="' + wallet + '"]');
+    if (existing) return;
+    // Find the holders table tbody and append a row
+    var tbody = document.querySelector('#holders-list .holders-table tbody');
+    if (!tbody) return;
+    var rowCount = tbody.querySelectorAll('tr.holder-row').length;
+    var displayLabel = label || shortAddr(wallet);
+    var tr = document.createElement('tr');
+    tr.className = 'holder-row';
+    tr.setAttribute('data-wallet', wallet);
+    tr.innerHTML = '<td class="rank">' + (rowCount + 1) + '</td>'
+      + '<td><a class="holder-link" href="/wallet/' + wallet + '"><span class="holder-wallet">' + displayLabel + '</span></a></td>'
+      + '<td class="heat" data-wallet="' + wallet + '">—</td>';
+    tbody.appendChild(tr);
   }
 
   function markHeatCell(wallet, color, loading) {
@@ -336,6 +211,7 @@ export function renderClientScript(): string {
     var canvas = document.getElementById('holder-chart-canvas');
     var legend = document.getElementById('holder-chart-legend');
     if (!wrap || !canvas || !legend) return;
+    hideSkeleton();
 
     var dpr = window.devicePixelRatio || 1;
     var w = wrap.clientWidth;
@@ -424,14 +300,15 @@ export function renderClientScript(): string {
       ctx.stroke();
     }
 
-    // Legend
+    // Legend (preserve search button)
     legend.innerHTML = selectedHolders.map(function(h) {
       return '<span class="holder-chart-legend-item" data-wallet="' + h.wallet + '">'
         + '<span class="holder-chart-legend-dot" style="background:' + h.color + '"></span>'
         + h.label
         + ' \\u2715'
         + '</span>';
-    }).join('');
+    }).join('')
+      + '<button class="holder-chart-search-btn" id="holder-search-btn" title="Search wallet">\\uD83D\\uDD0D</button>';
 
     // Click legend item to deselect
     legend.querySelectorAll('.holder-chart-legend-item').forEach(function(el) {
@@ -440,6 +317,15 @@ export function renderClientScript(): string {
         if (w) toggleHolderHistory(w);
       });
     });
+
+    // Re-bind search button (was recreated in innerHTML)
+    var newSearchBtn = document.getElementById('holder-search-btn');
+    if (newSearchBtn) {
+      newSearchBtn.addEventListener('click', function() {
+        var overlay = document.getElementById('holder-search-overlay');
+        if (overlay) overlay.classList.add('active');
+      });
+    }
   }
 
   // ── Click handler for heat cells ──
@@ -473,6 +359,70 @@ export function renderClientScript(): string {
       hcResizeTimer = setTimeout(drawHolderChart, 150);
     }
   });
+
+  // ── Holder search ──
+  var searchBtn = document.getElementById('holder-search-btn');
+  var searchOverlay = document.getElementById('holder-search-overlay');
+  var searchInput = document.getElementById('holder-search-input');
+  var searchGo = document.getElementById('holder-search-go');
+  var searchClose = document.getElementById('holder-search-close');
+  var searchMsg = document.getElementById('holder-search-msg');
+
+  if (searchBtn) {
+    searchBtn.addEventListener('click', function() {
+      if (searchOverlay) {
+        searchOverlay.classList.add('active');
+      }
+    });
+  }
+  if (searchClose) {
+    searchClose.addEventListener('click', function() {
+      if (searchOverlay) searchOverlay.classList.remove('active');
+      if (searchMsg) { searchMsg.classList.remove('active'); searchMsg.textContent = ''; }
+      if (searchInput) searchInput.value = '';
+    });
+  }
+  function doHolderSearch() {
+    if (!searchInput) return;
+    var addr = searchInput.value.trim();
+    if (!addr) return;
+    if (searchMsg) { searchMsg.classList.remove('active'); searchMsg.textContent = ''; }
+
+    // Check if already selected
+    for (var i = 0; i < selectedHolders.length; i++) {
+      if (selectedHolders[i].wallet.toLowerCase() === addr.toLowerCase()) {
+        if (searchOverlay) searchOverlay.classList.remove('active');
+        if (searchInput) searchInput.value = '';
+        return;
+      }
+    }
+
+    // Check if wallet exists in the loaded holder rows
+    var row = document.querySelector('tr.holder-row[data-wallet="' + addr + '"]')
+      || document.querySelector('tr.holder-row[data-wallet="' + addr.toLowerCase() + '"]');
+    var label = addr;
+    if (row) {
+      var un = row.querySelector('.holder-username');
+      if (un) label = un.textContent;
+      else {
+        var wa = row.querySelector('.holder-wallet');
+        if (wa) label = wa.textContent;
+      }
+    }
+
+    // Try to load history regardless (wallet may exist but not be in current page)
+    if (searchOverlay) searchOverlay.classList.remove('active');
+    if (searchInput) searchInput.value = '';
+    toggleHolderHistory(addr, label);
+  }
+  if (searchGo) {
+    searchGo.addEventListener('click', doHolderSearch);
+  }
+  if (searchInput) {
+    searchInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') doHolderSearch();
+    });
+  }
 
   // ── Helper: short address ──
   function shortAddr(addr) {

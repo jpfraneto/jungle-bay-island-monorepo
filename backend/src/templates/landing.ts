@@ -1,30 +1,30 @@
 import { COLORS, RESET } from "./styles";
-import { renderTopbarAuth } from './auth-ui';
-import type { RecentScanRow } from '../db/queries';
+import { renderTopbarAuth, renderMiniappSdk, renderMiniappEmbed } from "./auth-ui";
+import type { RecentScanRow } from "../db/queries";
 
 function esc(str: string | null | undefined): string {
-  if (!str) return ''
+  if (!str) return "";
   return str
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/'/g, '&#39;')
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/'/g, "&#39;");
 }
 
 function shortAddr(addr: string): string {
-  if (addr.length <= 10) return addr
-  return addr.slice(0, 6) + '\u2026' + addr.slice(-4)
+  if (addr.length <= 10) return addr;
+  return addr.slice(0, 6) + "\u2026" + addr.slice(-4);
 }
 
 function timeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours}h ago`
-  return `${Math.floor(hours / 24)}d ago`
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "1m ago";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
 }
 
 const LANDING_CSS = `
@@ -54,7 +54,7 @@ const LANDING_CSS = `
     .wrap { max-width: 480px; margin: 0 auto; padding: 60px 20px; text-align: center; }
     @media (max-width: 480px) { .wrap { padding: 40px 16px; } }
     h1 { font-size: 28px; font-weight: 700; color: ${COLORS.accent}; margin-bottom: 8px; letter-spacing: 2px; }
-    .tagline { color: ${COLORS.textMuted}; font-size: 13px; margin-bottom: 48px; }
+    .tagline { color: ${COLORS.textMuted}; font-size: 13px; margin-bottom: 8px; }
     .form-group { display: flex; gap: 8px; margin-bottom: 8px; }
     input[type="text"] {
       flex: 1; min-width: 0;
@@ -89,13 +89,13 @@ const LANDING_CSS = `
     .paste-btn svg { flex-shrink: 0; }
     .hint { color: ${COLORS.textMuted}; font-size: 11px; }
     .status-msg {
-      font-size: 12px; min-height: 20px; margin-bottom: 8px;
+      font-size: 12px; min-height: 0; margin: 0; padding: 0;
       transition: color 0.15s;
     }
     .status-msg.error { color: ${COLORS.red}; }
     .status-msg.checking { color: ${COLORS.textMuted}; }
     .status-msg.success { color: ${COLORS.green}; }
-    .footer { margin-top: 40px; color: ${COLORS.textMuted}; font-size: 11px; }
+    .footer { margin-top: 8px; color: ${COLORS.textMuted}; font-size: 11px; }
     .footer a { color: ${COLORS.accentDim}; }
     .feed { margin-top: 32px; text-align: left; }
     .feed-item {
@@ -242,25 +242,31 @@ const PASTE_SCRIPT = `
 
 function renderForm(): string {
   return `<div class="form-group">
-        <input type="text" id="ca-input" placeholder="contract address" autocomplete="off" spellcheck="false" readonly />
+        <input type="text" id="ca-input" placeholder="base or solana CA" autocomplete="off" spellcheck="false" readonly />
         <button type="button" class="paste-btn" id="paste-btn">${PASTE_ICON} PASTE</button>
       </div>
-      <div class="status-msg" id="status-msg"></div>
-      <p class="hint">Base &amp; Solana tokens</p>`;
+      <div class="status-msg" id="status-msg"></div>`;
 }
 
 function renderFeed(scans: RecentScanRow[]): string {
-  if (scans.length === 0) return ''
-  const items = scans.map((s) => {
-    const who = `<a href="/wallet/${esc(s.requested_by)}">${shortAddr(s.requested_by)}</a>`
-    const sym = s.symbol ? `$${esc(s.symbol)}` : shortAddr(s.token_address)
-    const token = `<a href="/${esc(s.chain)}/${esc(s.token_address)}">${sym}</a>`
-    const ca = shortAddr(s.token_address)
-    const chain = s.chain === 'solana' ? 'solana' : s.chain === 'base' ? 'base' : 'ethereum'
-    const ago = timeAgo(s.completed_at)
-    return `<div class="feed-item">${who} scanned ${token} (<span class="feed-ca" data-ca="${esc(s.token_address)}">${ca}</span> on ${chain}) <span class="feed-time">${ago}</span></div>`
-  }).join('')
-  return `<div class="feed">${items}</div>`
+  if (scans.length === 0) return "";
+  const items = scans
+    .map((s) => {
+      const who = `<a href="/wallet/${esc(s.requested_by)}">${shortAddr(s.requested_by)}</a>`;
+      const sym = s.symbol ? `$${esc(s.symbol)}` : shortAddr(s.token_address);
+      const token = `<a href="/${esc(s.chain)}/${esc(s.token_address)}">${sym}</a>`;
+      const ca = shortAddr(s.token_address);
+      const chain =
+        s.chain === "solana"
+          ? "solana"
+          : s.chain === "base"
+            ? "base"
+            : "ethereum";
+      const ago = timeAgo(s.completed_at);
+      return `<div class="feed-item">${who} claimed ${token} <span class="feed-ca" data-ca="${esc(s.token_address)}">${ca}</span><span class="feed-time">${ago}</span></div>`;
+    })
+    .join("");
+  return `<div class="feed">${items}</div>`;
 }
 
 export function renderLanding(recentScans: RecentScanRow[] = []): string {
@@ -274,6 +280,7 @@ export function renderLanding(recentScans: RecentScanRow[] = []): string {
   <meta property="og:title" content="Memetics \u2014 the home for your token" />
   <meta property="og:description" content="The home for your token. Claim your bungalow." />
   <meta property="og:type" content="website" />
+  ${renderMiniappEmbed()}
   <style>${LANDING_CSS}</style>
 </head>
 <body>
@@ -293,13 +300,17 @@ export function renderLanding(recentScans: RecentScanRow[] = []): string {
     </div>
     ${renderFeed(recentScans)}
   </div>
-  <a href="https://x.com/jpfraneto" target="_blank" rel="noopener" class="beta-banner">this app is in BETA. contact @jpfraneto on X for support</a>
+  <a href="https://x.com/jpfraneto" target="_blank" rel="noopener" class="beta-banner">this app is in BETA. contact @jpfraneto for support</a>
   ${PASTE_SCRIPT}
+  ${renderMiniappSdk()}
 </body>
 </html>`;
 }
 
-export function renderInvalidToken(tokenAddress: string, chain: string): string {
+export function renderInvalidToken(
+  tokenAddress: string,
+  chain: string,
+): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -320,15 +331,117 @@ export function renderInvalidToken(tokenAddress: string, chain: string): string 
 
   <div class="wrap">
     <h1>MEMETICS</h1>
-    <p class="tagline">We couldn't find a token at that address on ${chain === 'solana' ? 'Solana' : chain === 'base' ? 'Base' : 'Ethereum'}.</p>
+    <p class="tagline">We couldn't find a token at that address on ${chain === "solana" ? "Solana" : chain === "base" ? "Base" : "Ethereum"}.</p>
     <p class="hint" style="margin-bottom:32px;word-break:break-all;color:#71717a">${tokenAddress}</p>
     ${renderForm()}
     <div class="footer">
       powered by <a href="${process.env.SERVER_URL || "https://memetics.lat"}/base/0x3313338fe4bb2a166b81483bfcb2d4a6a1ebba8d">jungle bay memes</a>
     </div>
   </div>
-  <a href="https://x.com/jpfraneto" target="_blank" rel="noopener" class="beta-banner">this app is in BETA. contact @jpfraneto on X for support</a>
+  <a href="https://x.com/jpfraneto" target="_blank" rel="noopener" class="beta-banner">this app is in BETA. contact @jpfraneto for support</a>
   ${PASTE_SCRIPT}
+  ${renderMiniappSdk()}
+</body>
+</html>`;
+}
+
+export function renderLoginPage(): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Login \u2014 Memetics</title>
+  <style>${LANDING_CSS}
+    .login-card {
+      background: ${COLORS.surface}; border: 1px solid ${COLORS.border};
+      border-radius: 8px; padding: 32px 24px; margin-top: 8px;
+      text-align: left;
+    }
+    .login-card h2 {
+      font-size: 16px; font-weight: 700; color: ${COLORS.text};
+      margin-bottom: 16px; text-align: center;
+    }
+    .login-step {
+      display: flex; gap: 12px; margin-bottom: 16px;
+      font-size: 13px; color: ${COLORS.text}; line-height: 1.6;
+    }
+    .login-step-num {
+      flex-shrink: 0; width: 24px; height: 24px;
+      display: flex; align-items: center; justify-content: center;
+      background: ${COLORS.accent}; color: ${COLORS.bg};
+      border-radius: 50%; font-size: 12px; font-weight: 700;
+      margin-top: 2px;
+    }
+    .login-wallets {
+      display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px;
+    }
+    .login-wallet-pill {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 6px 14px; border-radius: 20px;
+      background: ${COLORS.bg}; border: 1px solid ${COLORS.border};
+      color: ${COLORS.textMuted}; font-size: 12px; font-weight: 500;
+    }
+    .login-divider {
+      text-align: center; color: ${COLORS.textMuted}; font-size: 11px;
+      margin: 20px 0; position: relative;
+    }
+    .login-divider::before, .login-divider::after {
+      content: ''; position: absolute; top: 50%;
+      width: calc(50% - 20px); height: 1px;
+      background: ${COLORS.border};
+    }
+    .login-divider::before { left: 0; }
+    .login-divider::after { right: 0; }
+    .login-desktop {
+      font-size: 13px; color: ${COLORS.textMuted}; text-align: center;
+      line-height: 1.6;
+    }
+    .login-desktop strong { color: ${COLORS.text}; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <a href="/" class="topbar-logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 20V4l5 8 4-6 4 6 5-8v16" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+  </header>
+
+  <div class="wrap">
+    <h1>MEMETICS</h1>
+    <p class="tagline">connect your wallet to log in</p>
+
+    <div class="login-card">
+      <h2>How to log in</h2>
+
+      <div class="login-step">
+        <span class="login-step-num">1</span>
+        <div>Open <strong>memetics.lat</strong> in your wallet's built-in browser. Your wallet connects automatically \u2014 no popups, no seed phrases.</div>
+      </div>
+
+      <div class="login-wallets">
+        <span class="login-wallet-pill">\uD83D\uDC7B Phantom</span>
+        <span class="login-wallet-pill">\uD83C\uDF08 Rainbow</span>
+        <span class="login-wallet-pill">\uD83E\uDDA8 MetaMask</span>
+        <span class="login-wallet-pill">\u2600\uFE0F Solflare</span>
+      </div>
+
+      <div class="login-step" style="margin-top:20px">
+        <span class="login-step-num">2</span>
+        <div>Browse any bungalow and your wallet address will appear in the top bar. That's it \u2014 you're logged in.</div>
+      </div>
+
+      <div class="login-divider">or</div>
+
+      <div class="login-desktop">
+        On <strong>desktop</strong>, install a browser extension like MetaMask or Phantom and visit any bungalow. Your connected wallet is your identity.
+      </div>
+    </div>
+
+    <div class="footer" style="margin-top:16px">
+      <a href="/">\u2190 back to home</a>
+    </div>
+  </div>
+  <a href="https://x.com/jpfraneto" target="_blank" rel="noopener" class="beta-banner">this app is in BETA. contact @jpfraneto for support</a>
+  ${renderMiniappSdk()}
 </body>
 </html>`;
 }
@@ -357,8 +470,9 @@ export function render404(): string {
       powered by <a href="${process.env.SERVER_URL || "https://memetics.lat"}/base/0x3313338fe4bb2a166b81483bfcb2d4a6a1ebba8d">jungle bay memes</a>
     </div>
   </div>
-  <a href="https://x.com/jpfraneto" target="_blank" rel="noopener" class="beta-banner">this app is in BETA. contact @jpfraneto on X for support</a>
+  <a href="https://x.com/jpfraneto" target="_blank" rel="noopener" class="beta-banner">this app is in BETA. contact @jpfraneto for support</a>
   ${PASTE_SCRIPT}
+  ${renderMiniappSdk()}
 </body>
 </html>`;
 }

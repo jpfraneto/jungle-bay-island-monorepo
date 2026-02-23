@@ -262,7 +262,7 @@ export const BUNGALOW_CSS = `
     text-align: left; font-size: 10px; text-transform: uppercase;
     letter-spacing: 1px; color: ${COLORS.textMuted}; padding: 8px 10px;
     border-bottom: 1px solid ${COLORS.border};
-    position: sticky; top: 0; background: ${COLORS.bg};
+    background: ${COLORS.bg};
   }
   .holders-table td {
     padding: 10px; border-bottom: 1px solid ${COLORS.border};
@@ -460,7 +460,7 @@ export const BUNGALOW_CSS = `
     background: ${COLORS.bg}; border-bottom: 1px solid ${COLORS.border};
   }
   .holder-chart-wrap canvas {
-    width: 100%; aspect-ratio: 1; display: block;
+    width: 100%; aspect-ratio: 2; display: block;
   }
   .holder-chart-legend {
     display: flex; gap: 12px; flex-wrap: wrap;
@@ -481,6 +481,72 @@ export const BUNGALOW_CSS = `
   .holders-table td.heat.selected {
     font-weight: 700; border-radius: 3px;
   }
+
+  /* ── Holder chart skeleton ── */
+  .holder-chart-skeleton {
+    width: 100%; aspect-ratio: 2; display: flex;
+    flex-direction: column; justify-content: flex-end;
+    padding: 40px 60px 40px 60px; gap: 8px;
+    background: ${COLORS.bg}; position: relative;
+    overflow: hidden;
+  }
+  .holder-chart-skeleton::after {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.03) 50%, transparent 100%);
+    animation: shimmer 1.5s infinite;
+  }
+  @keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+  .skeleton-bar {
+    height: 3px; border-radius: 2px;
+    background: ${COLORS.border}; opacity: 0.5;
+  }
+
+  /* ── Holder chart search ── */
+  .holder-chart-search-btn {
+    margin-left: auto; background: none; border: 1px solid ${COLORS.border};
+    color: ${COLORS.textMuted}; padding: 2px 8px; border-radius: 4px;
+    font-size: 12px; cursor: pointer; font-family: inherit;
+    display: flex; align-items: center; gap: 4px;
+    transition: border-color 0.15s, color 0.15s;
+    flex-shrink: 0;
+  }
+  .holder-chart-search-btn:hover { border-color: ${COLORS.accent}; color: ${COLORS.accent}; }
+  .holder-search-overlay {
+    display: none; position: absolute; top: 0; left: 0; right: 0;
+    background: ${COLORS.surface}; border-bottom: 1px solid ${COLORS.border};
+    padding: 8px 16px; z-index: 5;
+    flex-direction: row; align-items: center; gap: 8px;
+  }
+  .holder-search-overlay.active { display: flex; }
+  .holder-search-input {
+    flex: 1; min-width: 0; background: ${COLORS.bg};
+    border: 1px solid ${COLORS.border}; color: ${COLORS.text};
+    padding: 6px 10px; font-size: 12px; font-family: inherit;
+    border-radius: 4px; outline: none;
+  }
+  .holder-search-input:focus { border-color: ${COLORS.accent}; }
+  .holder-search-input::placeholder { color: ${COLORS.textMuted}; }
+  .holder-search-go {
+    background: ${COLORS.accent}; color: ${COLORS.bg};
+    border: none; padding: 6px 14px; border-radius: 4px;
+    font-size: 12px; font-weight: 600; font-family: inherit;
+    cursor: pointer; white-space: nowrap;
+  }
+  .holder-search-go:hover { opacity: 0.9; }
+  .holder-search-close {
+    background: none; border: none; color: ${COLORS.textMuted};
+    font-size: 16px; cursor: pointer; padding: 2px 4px;
+  }
+  .holder-search-close:hover { color: ${COLORS.text}; }
+  .holder-search-msg {
+    font-size: 11px; color: ${COLORS.red};
+    padding: 0 16px 6px; display: none;
+    background: ${COLORS.surface};
+  }
+  .holder-search-msg.active { display: block; }
 
   /* ── Beta banner ── */
   .beta-banner {

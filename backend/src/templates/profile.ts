@@ -1,24 +1,25 @@
-import { COLORS, USER_PAGE_CSS } from './styles'
-import type { SessionUser } from '../services/session'
+import { COLORS, USER_PAGE_CSS } from "./styles";
+import { renderMiniappSdk } from "./auth-ui";
+import type { SessionUser } from "../services/session";
 
 function esc(str: string | null | undefined): string {
-  if (!str) return ''
+  if (!str) return "";
   return str
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/'/g, '&#39;')
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/'/g, "&#39;");
 }
 
 function shortAddr(addr: string): string {
-  if (addr.length <= 10) return addr
-  return addr.slice(0, 6) + '\u2026' + addr.slice(-4)
+  if (addr.length <= 10) return addr;
+  return addr.slice(0, 6) + "\u2026" + addr.slice(-4);
 }
 
 interface ProfilePageData {
-  session: SessionUser
-  wallets: Array<{ wallet: string; wallet_kind: string; linked_at: string }>
+  session: SessionUser;
+  wallets: Array<{ wallet: string; wallet_kind: string; linked_at: string }>;
 }
 
 const PROFILE_EXTRA_CSS = `
@@ -60,19 +61,23 @@ const PROFILE_EXTRA_CSS = `
   }
   .status-msg.error { color: ${COLORS.red}; }
   .status-msg.success { color: ${COLORS.green}; }
-`
+`;
 
 export function renderProfilePage(data: ProfilePageData): string {
-  const { session, wallets } = data
+  const { session, wallets } = data;
 
-  const walletItems = wallets.map((w) => `
+  const walletItems = wallets
+    .map(
+      (w) => `
     <div class="wallet-item" data-wallet="${esc(w.wallet)}">
       <span class="kind">${w.wallet_kind}</span>
       <span class="addr">${shortAddr(w.wallet)}</span>
       <a href="/wallet/${esc(w.wallet)}" style="color:${COLORS.accent};font-size:12px">view</a>
       <button class="unlink-btn" data-unlink="${esc(w.wallet)}">unlink</button>
     </div>
-  `).join('')
+  `,
+    )
+    .join("");
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -87,7 +92,7 @@ export function renderProfilePage(data: ProfilePageData): string {
     <a href="/" class="topbar-logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 20V4l5 8 4-6 4 6 5-8v16" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
     <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
       <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:${COLORS.text}">
-        ${session.x_pfp ? `<img src="${esc(session.x_pfp)}" alt="" style="width:22px;height:22px;border-radius:50%;border:1px solid ${COLORS.border}" />` : ''}
+        ${session.x_pfp ? `<img src="${esc(session.x_pfp)}" alt="" style="width:22px;height:22px;border-radius:50%;border:1px solid ${COLORS.border}" />` : ""}
         <span>@${esc(session.x_username)}</span>
       </div>
       <a href="/auth/logout?return=/profile" style="color:${COLORS.textMuted};font-size:11px">logout</a>
@@ -96,7 +101,7 @@ export function renderProfilePage(data: ProfilePageData): string {
 
   <div class="wrap">
     <div class="user-header">
-      ${session.x_pfp ? `<img class="user-pfp" src="${esc(session.x_pfp)}" alt="" />` : ''}
+      ${session.x_pfp ? `<img class="user-pfp" src="${esc(session.x_pfp)}" alt="" />` : ""}
       <div class="user-info">
         <div class="user-name">${esc(session.x_name)}</div>
         <div class="user-wallet-line">
@@ -118,7 +123,7 @@ export function renderProfilePage(data: ProfilePageData): string {
     <div class="status-msg" id="connect-status"></div>
   </div>
 
-  <a href="https://x.com/jpfraneto" target="_blank" rel="noopener" class="beta-banner">this app is in BETA. contact @jpfraneto on X for support</a>
+  <a href="https://x.com/jpfraneto" target="_blank" rel="noopener" class="beta-banner">this app is in BETA. contact @jpfraneto for support</a>
 
   <script>
   (function() {
@@ -270,6 +275,7 @@ export function renderProfilePage(data: ProfilePageData): string {
     });
   })();
   </script>
+  ${renderMiniappSdk()}
 </body>
-</html>`
+</html>`;
 }

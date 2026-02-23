@@ -1,6 +1,6 @@
 import { COLORS, BUNGALOW_CSS } from "./styles";
 import { renderClientScript } from "./client";
-import { renderTopbarAuth } from "./auth-ui";
+import { renderTopbarAuth, renderMiniappSdk, renderMiniappEmbed } from "./auth-ui";
 import type {
   BungalowRow,
   TokenHolderRow,
@@ -26,12 +26,12 @@ function fmtNumber(val: string | number | null | undefined): string {
   if (val === null || val === undefined || val === "") return "—";
   const n = Number(val);
   if (!Number.isFinite(n)) return "—";
-  if (n >= 1_000_000_000) return `$${(n / 1_000_000_000).toFixed(2)}B`;
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
-  if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
-  if (n >= 1) return `$${n.toFixed(2)}`;
-  if (n >= 0.0001) return `$${n.toFixed(4)}`;
-  return `$${n.toExponential(2)}`;
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(2)}B`;
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  if (n >= 1) return `${n.toFixed(2)}`;
+  if (n >= 0.0001) return `${n.toFixed(4)}`;
+  return `${n.toExponential(2)}`;
 }
 
 function fmtHeat(val: string | number): string {
@@ -173,6 +173,11 @@ export function renderBungalow(data: BungalowPageData): string {
   <meta property="og:title" content="${pageTitle} — Memetics" />
   <meta property="og:type" content="website" />
   ${imageUrl ? `<meta property="og:image" content="${esc(imageUrl)}" />` : ""}
+  ${renderMiniappEmbed({
+    imageUrl: `https://memetics.lat/api/og-image/${data.chain}/${data.tokenAddress}`,
+    buttonTitle: symbol ? `View $${symbol}` : 'View Token',
+    launchUrl: `https://memetics.lat/${data.chain}/${data.tokenAddress}`,
+  })}
   <style>${BUNGALOW_CSS}</style>
   <script>window.__DATA__ = ${escJson(JSON.stringify(clientData))};</script>
 </head>
@@ -195,7 +200,6 @@ export function renderBungalow(data: BungalowPageData): string {
     <nav class="tab-bar">
       <button class="tab-btn" data-tab="miniapp">Miniapp</button>
       <button class="tab-btn" data-tab="chart">Chart</button>
-      <button class="tab-btn" data-tab="activity">Activity</button>
       <button class="tab-btn active" data-tab="holders">Holders</button>
     </nav>
 
@@ -244,18 +248,26 @@ export function renderBungalow(data: BungalowPageData): string {
         </div>
       </div>
 
-      <!-- Activity -->
-      <div class="tab-panel" id="panel-activity">
-        <div class="timeline-container" id="timeline-container">
-          <div class="timeline-loading">Loading transfer activity...</div>
-        </div>
-      </div>
-
       <!-- Holders -->
       <div class="tab-panel active" id="panel-holders">
         <div id="holder-chart-wrap" class="holder-chart-wrap" style="display:none">
+          <div id="holder-chart-skeleton" class="holder-chart-skeleton">
+            <div class="skeleton-bar" style="width:80%"></div>
+            <div class="skeleton-bar" style="width:55%"></div>
+            <div class="skeleton-bar" style="width:70%"></div>
+            <div class="skeleton-bar" style="width:40%"></div>
+            <div class="skeleton-bar" style="width:90%"></div>
+          </div>
           <canvas id="holder-chart-canvas"></canvas>
-          <div id="holder-chart-legend" class="holder-chart-legend"></div>
+          <div id="holder-chart-legend" class="holder-chart-legend">
+            <button class="holder-chart-search-btn" id="holder-search-btn" title="Search wallet">&#x1F50D; Search</button>
+          </div>
+          <div class="holder-search-overlay" id="holder-search-overlay">
+            <input class="holder-search-input" id="holder-search-input" type="text" placeholder="Paste wallet address..." spellcheck="false" autocomplete="off" />
+            <button class="holder-search-go" id="holder-search-go">Add</button>
+            <button class="holder-search-close" id="holder-search-close">&times;</button>
+          </div>
+          <div class="holder-search-msg" id="holder-search-msg"></div>
         </div>
         <div class="panel-scroll" id="holders-scroll">
           <div class="panel-inner">
@@ -267,8 +279,9 @@ export function renderBungalow(data: BungalowPageData): string {
     </main>
   </div>
 
-  <a href="https://x.com/jpfraneto" target="_blank" rel="noopener" class="beta-banner">this app is in BETA. contact @jpfraneto on X for support</a>
+  <a href="https://x.com/jpfraneto" target="_blank" rel="noopener" class="beta-banner">this app is in BETA. contact @jpfraneto for support</a>
   ${renderClientScript()}
+  ${renderMiniappSdk()}
 </body>
 </html>`;
 }
@@ -329,7 +342,7 @@ function renderHolders(
     })
     .join("");
 
-  return `<p class="holder-count" id="holder-count">${total} holder${total !== 1 ? "s" : ""}</p>
+  return `<p class="holder-count" id="holder-count">${total} holder${total !== 1 ? "s" : ""} &middot; <span style="opacity:0.5">tap a heat score to chart it</span></p>
   <div id="holders-list">
     <table class="holders-table">
       <thead><tr><th>#</th><th>Holder</th><th style="text-align:right">Heat Score</th></tr></thead>

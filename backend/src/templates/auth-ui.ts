@@ -1,24 +1,40 @@
 import { COLORS } from './styles'
-import type { SessionUser } from '../services/session'
 
-function esc(str: string | null | undefined): string {
-  if (!str) return ''
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/'/g, '&#39;')
+export function renderTopbarAuth(): string {
+  return `<div id="wallet-display" class="topbar-wallet"></div>
+    <a href="/login" class="auth-btn" style="text-decoration:none">Login</a>`
 }
 
-export function renderTopbarAuth(session: SessionUser | null, returnUrl?: string): string {
-  if (session) {
-    return `<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:${COLORS.text}">
-      ${session.x_pfp ? `<a href="/profile"><img src="${esc(session.x_pfp)}" alt="" style="width:22px;height:22px;border-radius:50%;border:1px solid ${COLORS.border}" /></a>` : ''}
-      <a href="/profile" style="color:${COLORS.text};text-decoration:none">@${esc(session.x_username)}</a>
-    </div>`
-  }
+export function renderMiniappSdk(): string {
+  return `<script type="module">
+  import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk'
+  sdk.actions.ready()
+</script>`
+}
 
-  const returnParam = returnUrl ? `?return=${encodeURIComponent(returnUrl)}` : ''
-  return `<a href="/auth/twitter${returnParam}" class="auth-btn" style="display:inline-flex;align-items:center;gap:5px;background:${COLORS.accent};color:${COLORS.bg};border:none;padding:5px 14px;border-radius:4px;font-size:12px;font-weight:600;text-decoration:none">Login with X</a>`
+export function renderMiniappEmbed(opts?: {
+  imageUrl?: string
+  buttonTitle?: string
+  launchUrl?: string
+}): string {
+  const image = opts?.imageUrl ?? 'https://memetics.lat/og-image.png'
+  const title = opts?.buttonTitle ?? 'Explore Tokens'
+  const url = opts?.launchUrl ?? 'https://memetics.lat'
+  const meta = {
+    version: '1',
+    imageUrl: image,
+    button: {
+      title,
+      action: {
+        type: 'launch_miniapp',
+        name: 'Memetics',
+        url,
+        splashImageUrl: 'https://memetics.lat/splash.png',
+        splashBackgroundColor: '#0a0e14',
+      },
+    },
+  }
+  // Escape for HTML attribute
+  const json = JSON.stringify(meta).replace(/&/g, '&amp;').replace(/'/g, '&#39;').replace(/</g, '&lt;')
+  return `<meta name="fc:miniapp" content='${json}' />`
 }

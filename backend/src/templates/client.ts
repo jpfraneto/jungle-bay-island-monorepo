@@ -109,7 +109,7 @@ export function renderClientScript(): string {
       return;
     }
 
-    if (D.chain === 'solana') { console.log('[toggle] skipping — solana chain'); return; }
+    // Solana history may or may not be available — try anyway
 
     var color = HOLDER_COLORS[selectedHolders.length % HOLDER_COLORS.length];
     markHeatCell(wallet, color, true);
@@ -181,12 +181,25 @@ export function renderClientScript(): string {
       if (color) {
         cells[i].classList.add('selected');
         cells[i].style.color = color;
-        if (loading) cells[i].style.opacity = '0.5';
-        else cells[i].style.opacity = '1';
+        if (loading) {
+          // Save original text and show spinner
+          if (!cells[i].getAttribute('data-orig')) {
+            cells[i].setAttribute('data-orig', cells[i].textContent);
+          }
+          cells[i].innerHTML = '<span class="heat-spinner"></span>';
+        } else {
+          cells[i].style.opacity = '1';
+        }
       } else {
         cells[i].classList.remove('selected');
         cells[i].style.color = '';
         cells[i].style.opacity = '1';
+        // Restore original text
+        var orig = cells[i].getAttribute('data-orig');
+        if (orig) {
+          cells[i].textContent = orig;
+          cells[i].removeAttribute('data-orig');
+        }
       }
     }
   }
@@ -202,6 +215,14 @@ export function renderClientScript(): string {
       var found = null;
       for (var s = 0; s < selectedHolders.length; s++) {
         if (selectedHolders[s].wallet === w) { found = selectedHolders[s]; break; }
+      }
+      // Restore spinner to original text if needed
+      var orig = allCells[c].getAttribute('data-orig');
+      if (orig && !allCells[c].querySelector('.heat-spinner')) {
+        // Already restored
+      } else if (orig) {
+        allCells[c].textContent = orig;
+        allCells[c].removeAttribute('data-orig');
       }
       if (found) {
         allCells[c].classList.add('selected');

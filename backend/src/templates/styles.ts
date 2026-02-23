@@ -498,6 +498,13 @@ export const BUNGALOW_CSS = `
   .holders-table td.heat.selected {
     font-weight: 700; border-radius: 3px;
   }
+  .heat-spinner {
+    display: inline-block; width: 14px; height: 14px;
+    border: 2px solid currentColor; border-top-color: transparent;
+    border-radius: 50%; animation: heat-spin 0.6s linear infinite;
+    vertical-align: middle;
+  }
+  @keyframes heat-spin { to { transform: rotate(360deg); } }
 
   /* ── Holder chart skeleton ── */
   .holder-chart-skeleton {

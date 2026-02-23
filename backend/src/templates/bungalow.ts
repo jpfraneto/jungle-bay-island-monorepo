@@ -122,8 +122,8 @@ export function renderBungalow(data: BungalowPageData): string {
 
   const displayTitle = `${esc(name)}${symbol ? ` ($${esc(symbol)})` : ""}`;
   const pageTitle = symbol
-    ? `$${esc(symbol)} ${data.tokenAddress}`
-    : `${data.tokenAddress}`;
+    ? `Memetics \u00B7 $${esc(symbol)} \u00B7 ${data.tokenAddress}`
+    : `Memetics \u00B7 ${data.tokenAddress}`;
   const dexUrl = `https://dexscreener.com/${dexscreenerChain(data.chain)}/${data.tokenAddress}?embed=1&theme=dark&info=0`;
 
   const links: { url: string; label: string }[] = [];
@@ -169,8 +169,8 @@ export function renderBungalow(data: BungalowPageData): string {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>${pageTitle} — Memetics</title>
-  <meta property="og:title" content="${pageTitle} — Memetics" />
+  <title>${pageTitle}</title>
+  <meta property="og:title" content="${pageTitle}" />
   <meta property="og:type" content="website" />
   ${imageUrl ? `<meta property="og:image" content="${esc(imageUrl)}" />` : ""}
   ${renderMiniappEmbed({
@@ -185,7 +185,7 @@ export function renderBungalow(data: BungalowPageData): string {
   <div class="shell">
     <!-- Top bar -->
     <header class="topbar">
-      <a href="/" class="topbar-logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 20V4l5 8 4-6 4 6 5-8v16" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+      <a href="/" class="topbar-logo"><img src="/logo.svg" alt="Memetics" style="width:20px;height:20px" /></a>
       ${imageUrl ? `<img class="topbar-token-img" src="${esc(imageUrl)}" alt="" />` : ""}
       ${symbol ? `<span class="topbar-token-ticker">$${esc(symbol)}</span>` : ""}
       ${b?.price_usd ? `<span class="topbar-token-price">$${fmtNumber(b.price_usd)}</span>` : ""}

@@ -1,5 +1,9 @@
 import { COLORS, RESET } from "./styles";
-import { renderTopbarAuth, renderMiniappSdk, renderMiniappEmbed } from "./auth-ui";
+import {
+  renderTopbarAuth,
+  renderMiniappSdk,
+  renderMiniappEmbed,
+} from "./auth-ui";
 import type { RecentScanRow } from "../db/queries";
 
 function esc(str: string | null | undefined): string {
@@ -99,12 +103,13 @@ const LANDING_CSS = `
     .footer a { color: ${COLORS.accentDim}; }
     .feed { margin-top: 32px; text-align: left; }
     .feed-item {
+      display: flex; align-items: baseline; gap: 4px;
       font-size: 12px; color: ${COLORS.textMuted};
       padding: 6px 0; border-bottom: 1px solid ${COLORS.border};
       line-height: 1.5;
     }
     .feed-item a { color: ${COLORS.accent}; }
-    .feed-item .feed-time { color: ${COLORS.textMuted}; opacity: 0.6; }
+    .feed-item .feed-time { margin-left: auto; flex-shrink: 0; color: ${COLORS.textMuted}; opacity: 0.6; white-space: nowrap; }
     .feed-ca { cursor: pointer; transition: color 0.15s; }
     .feed-ca:hover { color: ${COLORS.accent}; }
     .feed-ca.copied { color: ${COLORS.green}; }
@@ -263,7 +268,7 @@ function renderFeed(scans: RecentScanRow[]): string {
             ? "base"
             : "ethereum";
       const ago = timeAgo(s.completed_at);
-      return `<div class="feed-item">${who} claimed ${token} <span class="feed-ca" data-ca="${esc(s.token_address)}">${ca}</span><span class="feed-time">${ago}</span></div>`;
+      return `<div class="feed-item"><span>${who} claimed ${token} <span class="feed-ca" data-ca="${esc(s.token_address)}">${ca}</span></span><span class="feed-time">${ago}</span></div>`;
     })
     .join("");
   return `<div class="feed">${items}</div>`;
@@ -285,7 +290,7 @@ export function renderLanding(recentScans: RecentScanRow[] = []): string {
 </head>
 <body>
   <header class="topbar">
-    <a href="/" class="topbar-logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 20V4l5 8 4-6 4 6 5-8v16" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+    <a href="/" class="topbar-logo"><img src="/logo.svg" alt="Memetics" style="width:20px;height:20px" /></a>
     <div class="topbar-right">
       ${renderTopbarAuth()}
     </div>
@@ -321,7 +326,7 @@ export function renderInvalidToken(
 </head>
 <body>
   <header class="topbar">
-    <a href="/" class="topbar-logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 20V4l5 8 4-6 4 6 5-8v16" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+    <a href="/" class="topbar-logo"><img src="/logo.svg" alt="Memetics" style="width:20px;height:20px" /></a>
     <div class="topbar-right">
       ${renderTopbarAuth()}
     </div>
@@ -398,30 +403,38 @@ export function renderLoginPage(): string {
       line-height: 1.6;
     }
     .login-desktop strong { color: ${COLORS.text}; }
+    .login-copy-link {
+      font-weight: 600;
+      color: ${COLORS.accent};
+      cursor: pointer;
+      text-decoration: underline;
+    }
+    .login-copy-link:hover { opacity: 0.9; }
+    .login-copy-msg {
+      margin-left: 6px;
+      font-size: 11px;
+      color: ${COLORS.green};
+    }
   </style>
 </head>
 <body>
   <header class="topbar">
-    <a href="/" class="topbar-logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 20V4l5 8 4-6 4 6 5-8v16" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+    <a href="/" class="topbar-logo"><img src="/logo.svg" alt="Memetics" style="width:20px;height:20px" /></a>
   </header>
 
   <div class="wrap">
-    <h1>MEMETICS</h1>
-    <p class="tagline">connect your wallet to log in</p>
 
     <div class="login-card">
       <h2>How to log in</h2>
 
       <div class="login-step">
         <span class="login-step-num">1</span>
-        <div>Open <strong>memetics.lat</strong> in your wallet's built-in browser. Your wallet connects automatically \u2014 no popups, no seed phrases.</div>
-      </div>
-
-      <div class="login-wallets">
-        <span class="login-wallet-pill">\uD83D\uDC7B Phantom</span>
-        <span class="login-wallet-pill">\uD83C\uDF08 Rainbow</span>
-        <span class="login-wallet-pill">\uD83E\uDDA8 MetaMask</span>
-        <span class="login-wallet-pill">\u2600\uFE0F Solflare</span>
+        <div>
+          Open
+          <a href="https://memetics.lat" id="memetics-login-link" class="login-copy-link">memetics.lat</a>
+          in your wallet's built-in browser. Your wallet connects automatically \u2014 no popups, no seed phrases.
+          <span id="memetics-login-msg" class="login-copy-msg"></span>
+        </div>
       </div>
 
       <div class="login-step" style="margin-top:20px">
@@ -441,6 +454,34 @@ export function renderLoginPage(): string {
     </div>
   </div>
   <a href="https://x.com/jpfraneto" target="_blank" rel="noopener" class="beta-banner">this app is in BETA. contact @jpfraneto for support</a>
+  <script>
+  (function() {
+    var link = document.getElementById('memetics-login-link');
+    var msg = document.getElementById('memetics-login-msg');
+    if (!link) return;
+    link.addEventListener('click', function(e) {
+      e.preventDefault();
+      var url = 'https://memetics.lat';
+      if (!navigator.clipboard || !navigator.clipboard.writeText) {
+        if (msg) {
+          msg.textContent = 'copied';
+          setTimeout(function() { msg.textContent = ''; }, 1200);
+        }
+        return;
+      }
+      navigator.clipboard.writeText(url).then(function() {
+        if (!msg) return;
+        msg.textContent = 'copied';
+        setTimeout(function() { msg.textContent = ''; }, 1200);
+      }).catch(function() {
+        if (msg) {
+          msg.textContent = 'copied';
+          setTimeout(function() { msg.textContent = ''; }, 1200);
+        }
+      });
+    });
+  })();
+  </script>
   ${renderMiniappSdk()}
 </body>
 </html>`;
@@ -457,7 +498,7 @@ export function render404(): string {
 </head>
 <body>
   <header class="topbar">
-    <a href="/" class="topbar-logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 20V4l5 8 4-6 4 6 5-8v16" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+    <a href="/" class="topbar-logo"><img src="/logo.svg" alt="Memetics" style="width:20px;height:20px" /></a>
   </header>
 
   <div class="error-banner">404 NOT FOUND</div>

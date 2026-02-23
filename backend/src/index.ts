@@ -153,20 +153,20 @@ const MIME_TYPES: Record<string, string> = {
   '.ico': 'image/x-icon',
 }
 
-for (const ext of Object.keys(MIME_TYPES)) {
-  app.get(`/*${ext}`, async (c, next) => {
-    const reqPath = new URL(c.req.url).pathname
-    // Only serve top-level files (no path traversal)
-    const filename = reqPath.split('/').pop()
-    if (!filename || filename.includes('..')) return next()
-    const filePath = path.join(STATIC_DIR, filename)
-    const file = Bun.file(filePath)
-    if (!(await file.exists())) return next()
-    c.header('Content-Type', MIME_TYPES[ext] ?? 'application/octet-stream')
-    c.header('Cache-Control', 'public, max-age=86400')
-    return c.body(await file.arrayBuffer())
-  })
-}
+app.use('*', async (c, next) => {
+  const reqPath = new URL(c.req.url).pathname
+  const ext = reqPath.substring(reqPath.lastIndexOf('.'))
+  if (!MIME_TYPES[ext]) return next()
+  // Only serve top-level files (no path traversal)
+  const filename = reqPath.split('/').pop()
+  if (!filename || filename.includes('..')) return next()
+  const filePath = path.join(STATIC_DIR, filename)
+  const file = Bun.file(filePath)
+  if (!(await file.exists())) return next()
+  c.header('Content-Type', MIME_TYPES[ext])
+  c.header('Cache-Control', 'public, max-age=86400')
+  return c.body(await file.arrayBuffer())
+})
 
 // --- Farcaster miniapp manifest ---
 app.get('/.well-known/farcaster.json', (c) => {

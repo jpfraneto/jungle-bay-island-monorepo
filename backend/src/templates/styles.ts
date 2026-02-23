@@ -456,9 +456,11 @@ export const BUNGALOW_CSS = `
 
   /* ── Holder balance chart ── */
   .holder-chart-wrap {
+    display: none;
     flex-shrink: 0; width: 100%; position: relative;
     background: ${COLORS.bg}; border-bottom: 1px solid ${COLORS.border};
   }
+  .holder-chart-wrap.visible { display: block; }
   .holder-chart-wrap canvas {
     width: 100%; display: block;
   }
@@ -467,7 +469,7 @@ export const BUNGALOW_CSS = `
     #panel-holders.has-chart {
       flex-direction: row;
     }
-    #panel-holders.has-chart .holder-chart-wrap {
+    #panel-holders.has-chart .holder-chart-wrap.visible {
       width: 50%; flex-shrink: 0; border-bottom: none;
       border-left: 1px solid ${COLORS.border};
       order: 1; display: flex; flex-direction: column;

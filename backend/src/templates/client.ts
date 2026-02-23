@@ -81,7 +81,9 @@ export function renderClientScript(): string {
     var wrap = document.getElementById('holder-chart-wrap');
     var skel = document.getElementById('holder-chart-skeleton');
     var canvas = document.getElementById('holder-chart-canvas');
-    if (wrap) wrap.style.display = 'block';
+    var holderPanel = document.getElementById('panel-holders');
+    if (wrap) wrap.classList.add('visible');
+    if (holderPanel) holderPanel.classList.add('has-chart');
     if (skel) skel.style.display = 'flex';
     if (canvas) canvas.style.display = 'none';
   }
@@ -123,7 +125,7 @@ export function renderClientScript(): string {
           markHeatCell(wallet, null, false);
           if (selectedHolders.length === 0) {
             var wrap = document.getElementById('holder-chart-wrap');
-            if (wrap) wrap.style.display = 'none';
+            if (wrap) wrap.classList.remove('visible');
           }
           return;
         }
@@ -135,7 +137,7 @@ export function renderClientScript(): string {
         markHeatCell(wallet, null, false);
         if (selectedHolders.length === 0) {
           var wrap = document.getElementById('holder-chart-wrap');
-          if (wrap) wrap.style.display = 'none';
+          if (wrap) wrap.classList.remove('visible');
         }
       });
   }
@@ -199,12 +201,12 @@ export function renderClientScript(): string {
 
     var holderPanel = document.getElementById('panel-holders');
     if (selectedHolders.length === 0) {
-      wrap.style.display = 'none';
+      wrap.classList.remove('visible');
       if (holderPanel) holderPanel.classList.remove('has-chart');
       return;
     }
 
-    wrap.style.display = 'block';
+    wrap.classList.add('visible');
     if (holderPanel) holderPanel.classList.add('has-chart');
     drawHolderChart();
   }

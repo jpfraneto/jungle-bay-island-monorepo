@@ -250,7 +250,7 @@ export function renderBungalow(data: BungalowPageData): string {
 
       <!-- Holders -->
       <div class="tab-panel active" id="panel-holders">
-        <div id="holder-chart-wrap" class="holder-chart-wrap" style="display:none">
+        <div id="holder-chart-wrap" class="holder-chart-wrap">
           <div id="holder-chart-skeleton" class="holder-chart-skeleton">
             <div class="skeleton-bar" style="width:80%"></div>
             <div class="skeleton-bar" style="width:55%"></div>

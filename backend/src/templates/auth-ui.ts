@@ -1,8 +1,7 @@
 import { COLORS } from './styles'
 
 export function renderTopbarAuth(): string {
-  return `<div id="wallet-display" class="topbar-wallet"></div>
-    <a href="/info" class="auth-btn" style="text-decoration:none">Info</a>`
+  return `<a href="/info" class="auth-btn" style="text-decoration:none">Info</a>`
 }
 
 export function renderMiniappSdk(): string {

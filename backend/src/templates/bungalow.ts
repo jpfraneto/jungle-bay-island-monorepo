@@ -196,7 +196,6 @@ export function renderBungalow(data: BungalowPageData): string {
       <a href="/" class="topbar-logo"><img src="/logo.svg" alt="Memetics" style="width:20px;height:20px" /></a>
       ${imageUrl ? `<img class="topbar-token-img" src="${esc(imageUrl)}" alt="" />` : ""}
       ${symbol ? `<span class="topbar-token-ticker">$${esc(symbol)}</span>` : ""}
-      ${b?.price_usd ? `<span class="topbar-token-price">$${fmtNumber(b.price_usd)}</span>` : ""}
       <span class="topbar-ca" id="copy-ca" title="Click to copy">${shortAddr(data.tokenAddress)}</span>
       <span class="topbar-chain">${chainSvg(data.chain)}</span>
       <div class="topbar-right">

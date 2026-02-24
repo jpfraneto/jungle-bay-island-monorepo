@@ -1,10 +1,11 @@
 import { Hono } from 'hono'
 import { normalizeAddress, toSupportedChain } from '../config'
-import { getTokenHolders, getTokenSummary, getTransferTimeline, VALID_TIERS } from '../db/queries'
+import { getTokenHolders, getTokenSummary, getTransferTimeline, getHolderBalanceHistory, getTokenRegistry, VALID_TIERS } from '../db/queries'
 import { getTierFromHeat } from '../services/heat'
 import { logInfo } from '../services/logger'
 import { ApiError } from '../services/errors'
 import { fetchHolderBalanceHistory } from '../services/scanner'
+import { fetchHolderHistory, deriveATA } from '../services/solanaScanner'
 
 const tokenRoute = new Hono()
 
@@ -68,21 +69,86 @@ tokenRoute.get('/token/:ca/timeline', async (c) => {
 
 tokenRoute.get('/token/:chain/:ca/holder/:wallet/history', async (c) => {
   const chain = toSupportedChain(c.req.param('chain'))
-  if (!chain || chain === 'solana') {
-    throw new ApiError(400, 'unsupported_chain', 'Balance history is only available for EVM tokens')
+  if (!chain) {
+    throw new ApiError(400, 'invalid_chain', 'Invalid chain')
   }
   const tokenAddress = normalizeAddress(c.req.param('ca'), chain)
   if (!tokenAddress) {
     throw new ApiError(400, 'invalid_token', 'Invalid token address')
   }
-  const wallet = c.req.param('wallet')?.toLowerCase()
-  if (!wallet || !/^0x[0-9a-f]{40}$/.test(wallet)) {
+  const walletParam = c.req.param('wallet') ?? ''
+  // Accept both EVM (0x...) and Solana (base58) wallet addresses
+  const wallet = chain === 'solana' ? walletParam.trim() : walletParam.toLowerCase()
+  if (!wallet) {
+    throw new ApiError(400, 'invalid_wallet', 'Invalid wallet address')
+  }
+  if (chain !== 'solana' && !/^0x[0-9a-f]{40}$/.test(wallet)) {
     throw new ApiError(400, 'invalid_wallet', 'Invalid wallet address')
   }
 
+  const reqStart = Date.now()
   logInfo('HOLDER HISTORY', `chain=${chain} token=${tokenAddress} wallet=${wallet}`)
-  const result = await fetchHolderBalanceHistory(chain, tokenAddress, wallet)
-  return c.json(result)
+
+  // Try DB snapshots first
+  const dbSnapshots = await getHolderBalanceHistory(tokenAddress, wallet)
+  logInfo('HOLDER HISTORY', `DB query returned ${dbSnapshots.length} snapshots in ${Date.now() - reqStart}ms`)
+
+  if (dbSnapshots.length > 0) {
+    // Get token decimals for conversion
+    const tokenInfo = await getTokenRegistry(tokenAddress, chain)
+    const decimals = tokenInfo?.decimals ?? (chain === 'solana' ? 9 : 18)
+    const divisor = 10 ** decimals
+
+    const points = dbSnapshots.map((s) => ({
+      t: s.ts,
+      b: Number(BigInt(s.balance)) / divisor,
+    }))
+
+    // Add current-time point if last snapshot is >1hr old
+    const now = Math.floor(Date.now() / 1000)
+    if (points.length > 0 && now - points[points.length - 1].t > 3600) {
+      points.push({ t: now, b: points[points.length - 1].b })
+    }
+
+    logInfo('HOLDER HISTORY', `Serving ${points.length} points from DB (decimals=${decimals}) in ${Date.now() - reqStart}ms`)
+    return c.json({ points, decimals })
+  }
+
+  // Fallback: for EVM tokens scanned before this feature, use Alchemy
+  if (chain !== 'solana') {
+    logInfo('HOLDER HISTORY', `No DB snapshots, falling back to Alchemy live fetch`)
+    const result = await fetchHolderBalanceHistory(chain, tokenAddress, wallet)
+    logInfo('HOLDER HISTORY', `Alchemy fallback returned ${result.points.length} points in ${Date.now() - reqStart}ms`)
+    return c.json(result)
+  }
+
+  // Fallback: for Solana tokens, use Helius
+  logInfo('HOLDER HISTORY', `No DB snapshots for Solana wallet, falling back to Helius`)
+  try {
+    const tokenInfo = await getTokenRegistry(tokenAddress, chain)
+    const decimals = tokenInfo?.decimals ?? 9
+    const ata = deriveATA(wallet, tokenAddress)
+    const rpcCounter = { count: 0 }
+    const snapshots = await fetchHolderHistory(ata, tokenAddress, wallet, rpcCounter)
+
+    if (snapshots.length > 0) {
+      const divisor = 10 ** decimals
+      const points = snapshots.map((s) => ({
+        t: s.ts,
+        b: Number(BigInt(s.balance)) / divisor,
+      }))
+      const now = Math.floor(Date.now() / 1000)
+      if (now - points[points.length - 1].t > 3600) {
+        points.push({ t: now, b: points[points.length - 1].b })
+      }
+      logInfo('HOLDER HISTORY', `Helius fallback returned ${points.length} points in ${Date.now() - reqStart}ms`)
+      return c.json({ points, decimals })
+    }
+  } catch (err) {
+    logInfo('HOLDER HISTORY', `Helius fallback failed: ${err}`)
+  }
+
+  return c.json({ points: [], decimals: 9 })
 })
 
 export default tokenRoute

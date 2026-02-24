@@ -138,6 +138,11 @@ export function renderClientScript(): string {
             var holderPanel = document.getElementById('panel-holders');
             if (holderPanel) holderPanel.classList.remove('has-chart');
           }
+          if (searchMsg) {
+            searchMsg.textContent = 'This wallet hasn\\u2019t interacted with this token.';
+            searchMsg.classList.add('active');
+            setTimeout(function() { searchMsg.classList.remove('active'); searchMsg.textContent = ''; }, 4000);
+          }
           return;
         }
         selectedHolders.push({ wallet: wallet, color: color, points: data.points, label: label || shortAddr(wallet) });
@@ -482,6 +487,13 @@ export function renderClientScript(): string {
     return addr.slice(0, 6) + '\\u2026' + addr.slice(-4);
   }
 
+  // ── Helper: Arkham link ──
+  function arkhamLink(wallet) {
+    return '<a class="arkham-holder-link" href="https://intel.arkm.com/explorer/address/' + wallet + '" target="_blank" rel="noopener" title="View on Arkham">'
+      + '<svg width="12" height="12" viewBox="0 0 761 703" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M114.48 515.486L380.133 703L471.864 638.119L149.705 410.677L114.48 515.486ZM272.991 465.577L380.133 541.153L471.864 476.272L308.216 360.769L272.991 465.577ZM403.616 557.552L495.347 622.433L761 434.919L725.775 330.111L403.616 557.552ZM402.882 395.705L494.613 460.586L601.755 384.297L566.53 279.489C567.264 279.489 402.882 395.705 402.882 395.705ZM199.607 262.377L158.511 385.01L250.242 449.178L312.619 262.377H199.607ZM101.271 131.189L0 434.919L91.731 499.8L214.284 131.902L101.271 131.189ZM242.904 131.189L207.679 235.997H410.221L374.996 131.189H242.904ZM403.616 131.189L466.727 317.99L558.458 253.108L517.363 130.476C517.363 131.189 403.616 131.189 403.616 131.189ZM145.302 0.712982L110.077 105.521H508.556L473.332 0L145.302 0.712982ZM614.964 0H501.952L625.238 367.899L716.969 303.017L614.964 0Z" fill="currentColor"/></svg>'
+      + '</a>';
+  }
+
   // ── Helper: format heat ──
   function fmtHeat(val) {
     return Number(val).toFixed(1) + '\\u00B0';
@@ -523,7 +535,7 @@ export function renderClientScript(): string {
               + '<span class="holder-username">' + h.farcaster.username + '</span></span>'
             : '<span class="holder-wallet">' + shortAddr(h.wallet) + '</span>';
           return '<tr class="holder-row" data-wallet="' + h.wallet + '"><td class="rank">' + rank + '</td>'
-            + '<td><a class="holder-link" href="/wallet/' + h.wallet + '">' + identity + '</a></td>'
+            + '<td><a class="holder-link" href="/wallet/' + h.wallet + '">' + identity + '</a>' + arkhamLink(h.wallet) + '</td>'
             + '<td class="heat" data-wallet="' + h.wallet + '">' + fmtHeat(h.heat_degrees) + '</td></tr>';
         }).join('');
 
@@ -934,31 +946,37 @@ export function renderClientScript(): string {
     container.innerHTML =
       '<div class="scan-progress">'
       + '<div class="scan-progress-phase" id="sp-phase">Starting scan...</div>'
-      + '<div class="scan-progress-detail" id="sp-detail">This usually takes 1\\u20132 minutes</div>'
       + '<div class="scan-progress-bar"><div class="scan-progress-fill" id="sp-fill" style="width:0%"></div></div>'
       + '<div class="scan-progress-pct" id="sp-pct"></div>'
+      + '<div class="scan-logs" id="sp-logs"></div>'
       + '</div>';
+    lastLogCount = 0;
   }
 
-  function updateScanProgressUI(phase, pct, detail) {
+  var lastLogCount = 0;
+
+  function updateScanProgressUI(phase, pct, detail, logs) {
     var phaseEl = document.getElementById('sp-phase');
-    var detailEl = document.getElementById('sp-detail');
     var fillEl = document.getElementById('sp-fill');
     var pctEl = document.getElementById('sp-pct');
     if (phaseEl) phaseEl.textContent = phaseLabel(phase);
-    if (detailEl) {
-      if (detail) {
-        detailEl.textContent = detail;
-      } else if (pct != null && pct < 30) {
-        detailEl.textContent = 'Analyzing on-chain data...';
-      } else if (pct != null && pct < 95) {
-        detailEl.textContent = 'Crunching the numbers...';
-      } else {
-        detailEl.textContent = '';
-      }
-    }
     if (fillEl && pct != null) fillEl.style.width = Math.round(pct) + '%';
     if (pctEl && pct != null) pctEl.textContent = Math.round(pct) + '%';
+
+    // Render activity feed logs
+    if (logs && logs.length > lastLogCount) {
+      var logsEl = document.getElementById('sp-logs');
+      if (logsEl) {
+        for (var li = lastLogCount; li < logs.length; li++) {
+          var entry = document.createElement('div');
+          entry.className = 'scan-log-entry';
+          entry.textContent = logs[li];
+          logsEl.appendChild(entry);
+        }
+        lastLogCount = logs.length;
+        logsEl.scrollTop = logsEl.scrollHeight;
+      }
+    }
   }
 
   function showScanDone(container, holdersFound) {
@@ -1060,11 +1078,11 @@ export function renderClientScript(): string {
                 }
 
                 if (container) {
-                  updateScanProgressUI(phase, pct, detail);
+                  updateScanProgressUI(phase, pct, detail, sd.logs || []);
                   // Stall warning
                   if (Date.now() - lastUpdate > STALL_TIMEOUT) {
-                    var detailEl = document.getElementById('sp-detail');
-                    if (detailEl) detailEl.textContent = 'Taking longer than usual. Hang tight...';
+                    var phaseStall = document.getElementById('sp-phase');
+                    if (phaseStall) phaseStall.textContent = 'Taking longer than usual. Hang tight...';
                   }
                 } else if (btn) {
                   btn.textContent = phaseLabel(phase) + (pct != null ? ' ' + Math.round(pct) + '%' : '...');
@@ -1073,7 +1091,7 @@ export function renderClientScript(): string {
             } catch(e) {}
           }, 3000);
         } else {
-          if (container) updateScanProgressUI('metadata', 5);
+          if (container) updateScanProgressUI('metadata', 5, null, []);
           else if (btn) btn.textContent = 'Scan started...';
         }
       });

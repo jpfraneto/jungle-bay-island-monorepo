@@ -270,11 +270,19 @@ export const BUNGALOW_CSS = `
   }
   .holders-table tr:hover td { background: ${COLORS.surfaceHover}; }
   .holders-table .rank { color: ${COLORS.textMuted}; width: 36px; }
-  .holders-table .heat { color: ${COLORS.orange}; font-weight: 600; text-align: right; }
+  .holders-table .heat { color: ${COLORS.textMuted}; font-weight: 600; text-align: right; }
   .holder-identity { display: flex; align-items: center; gap: 8px; }
   .holder-pfp { width: 22px; height: 22px; border-radius: 50%; }
   .holder-username { color: ${COLORS.accent}; font-size: 13px; }
   .holder-wallet { color: ${COLORS.textMuted}; font-size: 13px; }
+  .arkham-holder-link {
+    display: inline-flex; align-items: center;
+    color: ${COLORS.textMuted}; margin-left: 6px;
+    opacity: 0.4; transition: opacity 0.15s, color 0.15s;
+    vertical-align: middle;
+  }
+  .arkham-holder-link:hover { opacity: 1; color: ${COLORS.accent}; text-decoration: none; }
+  .holder-row:hover .arkham-holder-link { opacity: 0.7; }
   .holder-count {
     color: ${COLORS.textMuted}; font-size: 12px; margin-bottom: 16px;
   }
@@ -309,6 +317,29 @@ export const BUNGALOW_CSS = `
   .scan-progress-done {
     font-size: 16px; font-weight: 700; color: ${COLORS.green};
     margin-bottom: 4px;
+  }
+  .scan-logs {
+    max-height: 180px; overflow-y: auto;
+    margin: 16px auto 0; max-width: 360px;
+    text-align: left; width: 100%;
+  }
+  .scan-logs::-webkit-scrollbar { width: 4px; }
+  .scan-logs::-webkit-scrollbar-track { background: transparent; }
+  .scan-logs::-webkit-scrollbar-thumb { background: ${COLORS.border}; border-radius: 2px; }
+  .scan-log-entry {
+    font-size: 12px; color: ${COLORS.textMuted}; padding: 3px 0;
+    animation: logFadeIn 0.3s ease;
+    border-bottom: 1px solid ${COLORS.border};
+  }
+  .scan-log-entry:last-child { color: ${COLORS.text}; font-weight: 500; }
+  @keyframes logFadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @media (max-width: 767px) {
+    .scan-progress { padding: 24px 12px; }
+    .scan-logs { max-width: 100%; padding: 0 4px; max-height: 160px; }
+    .scan-log-entry { font-size: 11px; padding: 2px 0; }
   }
   .scan-btn {
     display: inline-block; background: ${COLORS.accent}; color: ${COLORS.bg};
@@ -548,7 +579,7 @@ export const BUNGALOW_CSS = `
   .holder-search-input {
     flex: 1; min-width: 0; background: ${COLORS.bg};
     border: 1px solid ${COLORS.border}; color: ${COLORS.text};
-    padding: 6px 10px; font-size: 12px; font-family: inherit;
+    padding: 6px 10px; font-size: 16px; font-family: inherit;
     border-radius: 4px; outline: none;
   }
   .holder-search-input:focus { border-color: ${COLORS.accent}; }

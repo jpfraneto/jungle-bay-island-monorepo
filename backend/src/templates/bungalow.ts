@@ -1,6 +1,9 @@
 import { COLORS, BUNGALOW_CSS } from "./styles";
 import { renderClientScript } from "./client";
-import { renderTopbarAuth, renderMiniappSdk, renderMiniappEmbed } from "./auth-ui";
+import {
+  renderTopbarAuth,
+  renderMiniappEmbed,
+} from "./auth-ui";
 import type {
   BungalowRow,
   TokenHolderRow,
@@ -42,6 +45,10 @@ function fmtHeat(val: string | number): string {
 function shortAddr(addr: string): string {
   if (addr.length <= 10) return addr;
   return addr.slice(0, 6) + "\u2026" + addr.slice(-4);
+}
+
+function arkhamSvg(size = 12): string {
+  return `<svg width="${size}" height="${size}" viewBox="0 0 761 703" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M114.48 515.486L380.133 703L471.864 638.119L149.705 410.677L114.48 515.486ZM272.991 465.577L380.133 541.153L471.864 476.272L308.216 360.769L272.991 465.577ZM403.616 557.552L495.347 622.433L761 434.919L725.775 330.111L403.616 557.552ZM402.882 395.705L494.613 460.586L601.755 384.297L566.53 279.489C567.264 279.489 402.882 395.705 402.882 395.705ZM199.607 262.377L158.511 385.01L250.242 449.178L312.619 262.377H199.607ZM101.271 131.189L0 434.919L91.731 499.8L214.284 131.902L101.271 131.189ZM242.904 131.189L207.679 235.997H410.221L374.996 131.189H242.904ZM403.616 131.189L466.727 317.99L558.458 253.108L517.363 130.476C517.363 131.189 403.616 131.189 403.616 131.189ZM145.302 0.712982L110.077 105.521H508.556L473.332 0L145.302 0.712982ZM614.964 0H501.952L625.238 367.899L716.969 303.017L614.964 0Z" fill="currentColor"/></svg>`;
 }
 
 function chainLabel(chain: string): string {
@@ -169,13 +176,14 @@ export function renderBungalow(data: BungalowPageData): string {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <link rel="icon" type="image/svg+xml" href="/logo.svg" />
   <title>${pageTitle}</title>
   <meta property="og:title" content="${pageTitle}" />
   <meta property="og:type" content="website" />
   ${imageUrl ? `<meta property="og:image" content="${esc(imageUrl)}" />` : ""}
   ${renderMiniappEmbed({
     imageUrl: `https://memetics.lat/api/og-image/${data.chain}/${data.tokenAddress}`,
-    buttonTitle: symbol ? `View $${symbol}` : 'View Token',
+    buttonTitle: symbol ? `View $${symbol}` : "View Token",
     launchUrl: `https://memetics.lat/${data.chain}/${data.tokenAddress}`,
   })}
   <style>${BUNGALOW_CSS}</style>
@@ -196,59 +204,8 @@ export function renderBungalow(data: BungalowPageData): string {
       </div>
     </header>
 
-    <!-- Tab bar -->
-    <nav class="tab-bar">
-      <button class="tab-btn" data-tab="miniapp">Miniapp</button>
-      <button class="tab-btn" data-tab="chart">Chart</button>
-      <button class="tab-btn active" data-tab="holders">Holders</button>
-    </nav>
-
-    <!-- Tab content -->
+    <!-- Main content -->
     <main class="tab-content">
-      <!-- Miniapp -->
-      <div class="tab-panel" id="panel-miniapp">
-        ${renderMarketStrip(b)}
-        ${
-          data.customHtml
-            ? `<iframe class="home-frame" srcdoc="${esc(data.customHtml)}" sandbox="allow-scripts allow-same-origin" loading="lazy"></iframe>`
-            : data.holderTotal === 0 && !isClaimed
-              ? `<div class="unclaimed-cta">
-                <p>This token hasn't been scanned yet.</p>
-                <p>Scan to see holders &amp; heat &mdash; you'll also claim this bungalow.</p>
-                <button class="cta-link claim-btn" id="scan-claim-btn">Scan &amp; Claim &mdash; 1 USDC</button>
-                ${renderWalletChoice()}
-                <div id="scan-claim-status" class="claim-status"></div>
-              </div>`
-              : !isClaimed
-                ? `<div class="unclaimed-cta">
-                <p>This bungalow hasn't been claimed yet.</p>
-                <p>Are you the founder? Claim it for 1 USDC.</p>
-                <button class="cta-link claim-btn" id="claim-btn">Claim Bungalow &mdash; 1 USDC</button>
-                ${renderWalletChoice()}
-                <div id="claim-status" class="claim-status"></div>
-              </div>`
-                : `<div class="unclaimed-cta">
-                <p>This bungalow has been claimed${ownerWallet ? ` by <span style="color:${COLORS.accent}">${shortAddr(ownerWallet)}</span>` : ""}.</p>
-                <p>They can customize this page with their own HTML anytime.</p>
-                <div class="claim-form" id="owner-update-form" style="display:none;max-width:480px;width:100%;margin-top:12px">
-                  <p style="color:${COLORS.textMuted};font-size:12px;margin-bottom:8px">Paste a link to a raw GitHub Gist with your HTML and click Update.</p>
-                  <input type="text" id="update-url" class="claim-input" placeholder="https://gist.githubusercontent.com/.../raw/.../index.html" spellcheck="false" autocomplete="off" style="width:100%;background:${COLORS.surface};border:1px solid ${COLORS.border};color:${COLORS.text};padding:10px 14px;font-size:13px;font-family:inherit;border-radius:6px;outline:none;margin-bottom:8px" />
-                  <button class="cta-link" id="update-btn" style="cursor:pointer;border:none;text-align:center;font-family:inherit;width:100%">Update Page &mdash; 1 USDC</button>
-                  <div id="update-status" style="font-size:12px;text-align:center;min-height:20px;margin-top:8px"></div>
-                </div>
-              </div>`
-        }
-        ${links.length > 0 ? `<div class="token-links">${links.map((l) => `<a href="${esc(l.url)}" target="_blank" rel="noopener">${l.label}</a>`).join("")}</div>` : ""}
-      </div>
-
-      <!-- Chart -->
-      <div class="tab-panel" id="panel-chart">
-        <div class="chart-layout">
-          <iframe class="chart-frame" id="chart-frame" src="" loading="lazy" allow="clipboard-write"></iframe>
-        </div>
-      </div>
-
-      <!-- Holders -->
       <div class="tab-panel active" id="panel-holders">
         <div id="holder-chart-wrap" class="holder-chart-wrap">
           <div id="holder-chart-skeleton" class="holder-chart-skeleton">
@@ -260,7 +217,7 @@ export function renderBungalow(data: BungalowPageData): string {
           </div>
           <canvas id="holder-chart-canvas"></canvas>
           <div id="holder-chart-legend" class="holder-chart-legend">
-            <button class="holder-chart-search-btn" id="holder-search-btn" title="Search wallet">&#x1F50D; Search</button>
+            <button class="holder-chart-search-btn" id="holder-search-btn" title="Search wallet">&#x1F50D; </button>
           </div>
           <div class="holder-search-overlay" id="holder-search-overlay">
             <input class="holder-search-input" id="holder-search-input" type="text" placeholder="Paste wallet address..." spellcheck="false" autocomplete="off" />
@@ -275,13 +232,11 @@ export function renderBungalow(data: BungalowPageData): string {
           </div>
         </div>
       </div>
-
     </main>
   </div>
 
   <a href="https://x.com/jpfraneto" target="_blank" rel="noopener" class="beta-banner">this app is in BETA. contact @jpfraneto for support</a>
   ${renderClientScript()}
-  ${renderMiniappSdk()}
 </body>
 </html>`;
 }
@@ -333,10 +288,11 @@ function renderHolders(
           <span class="holder-username">${esc(h.username)}</span>
         </span>`
           : `<span class="holder-wallet">${shortAddr(h.wallet)}</span>`;
+      const arkham = `<a class="arkham-holder-link" href="https://intel.arkm.com/explorer/address/${esc(h.wallet)}" target="_blank" rel="noopener" title="View on Arkham">${arkhamSvg(12)}</a>`;
 
       return `<tr class="holder-row" data-wallet="${esc(h.wallet)}">
       <td class="rank">${i + 1}</td>
-      <td><a class="holder-link" href="/wallet/${esc(h.wallet)}">${identity}</a></td>
+      <td><a class="holder-link" href="/wallet/${esc(h.wallet)}">${identity}</a>${arkham}</td>
       <td class="heat" data-wallet="${esc(h.wallet)}">${fmtHeat(h.heat_degrees)}</td>
     </tr>`;
     })

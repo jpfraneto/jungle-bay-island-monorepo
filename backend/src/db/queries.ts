@@ -290,6 +290,45 @@ export async function incrementDailyAllowance(wallet: string, date: string): Pro
   `
 }
 
+// ─── Holder Balance Snapshots ────────────────────────────────
+let holderBalanceSnapshotsTablePromise: Promise<void> | null = null
+
+async function ensureHolderBalanceSnapshotsTable(): Promise<void> {
+  if (!holderBalanceSnapshotsTablePromise) {
+    holderBalanceSnapshotsTablePromise = (async () => {
+      await db`
+        CREATE TABLE IF NOT EXISTS ${db(CONFIG.SCHEMA)}.holder_balance_snapshots (
+          token_address TEXT NOT NULL,
+          wallet TEXT NOT NULL,
+          ts INTEGER NOT NULL,
+          balance TEXT NOT NULL,
+          PRIMARY KEY (token_address, wallet, ts)
+        )
+      `
+      await db`
+        CREATE INDEX IF NOT EXISTS idx_hbs_token_wallet
+        ON ${db(CONFIG.SCHEMA)}.holder_balance_snapshots (token_address, wallet)
+      `
+    })()
+  }
+  await holderBalanceSnapshotsTablePromise
+}
+
+export async function getHolderBalanceHistory(
+  tokenAddress: string,
+  wallet: string,
+): Promise<Array<{ ts: number; balance: string }>> {
+  await ensureHolderBalanceSnapshotsTable()
+
+  const rows = await db<Array<{ ts: number; balance: string }>>`
+    SELECT ts, balance
+    FROM ${db(CONFIG.SCHEMA)}.holder_balance_snapshots
+    WHERE token_address = ${tokenAddress} AND wallet = ${wallet}
+    ORDER BY ts ASC
+  `
+  return rows
+}
+
 let timelineColumnPromise: Promise<void> | null = null
 
 async function ensureTimelineColumn(): Promise<void> {
@@ -436,9 +475,10 @@ export async function updateScanProgress(
   `
 }
 
-export async function writeScanResult(scanId: number, result: ScanResult): Promise<void> {
+export async function writeScanResult(scanId: number, result: ScanResult, onProgress?: (progress: { phase: string; pct: number; detail?: string }) => void): Promise<void> {
   await ensureScanLogProgressColumns()
   await ensureTimelineColumn()
+  await ensureHolderBalanceSnapshotsTable()
 
   await db`
     INSERT INTO ${db(CONFIG.SCHEMA)}.token_registry (
@@ -518,6 +558,52 @@ export async function writeScanResult(scanId: number, result: ScanResult): Promi
       )}
     `
   }
+
+  // Persist holder balance snapshots
+  onProgress?.({ phase: 'saving', pct: 85, detail: 'Saving balance snapshots' })
+  if (result.holderSnapshots && result.holderSnapshots.size > 0) {
+    const snapStart = Date.now()
+    await db`
+      DELETE FROM ${db(CONFIG.SCHEMA)}.holder_balance_snapshots
+      WHERE token_address = ${result.tokenAddress}
+    `
+
+    const snapshotRows: Array<{ token_address: string; wallet: string; ts: number; balance: string }> = []
+    for (const [wallet, snaps] of result.holderSnapshots.entries()) {
+      for (const snap of snaps) {
+        snapshotRows.push({
+          token_address: result.tokenAddress,
+          wallet,
+          ts: snap.ts,
+          balance: snap.balance,
+        })
+      }
+    }
+
+    const SNAP_BATCH_SIZE = 2000
+    for (let i = 0; i < snapshotRows.length; i += SNAP_BATCH_SIZE) {
+      const batch = snapshotRows.slice(i, i + SNAP_BATCH_SIZE)
+      if (batch.length === 0) break
+      await db`
+        INSERT INTO ${db(CONFIG.SCHEMA)}.holder_balance_snapshots ${db(
+          batch,
+          'token_address',
+          'wallet',
+          'ts',
+          'balance',
+        )}
+        ON CONFLICT (token_address, wallet, ts) DO UPDATE SET
+          balance = EXCLUDED.balance
+      `
+      // Update progress: 85% to 95% across snapshot batches
+      const pct = Math.round(85 + 10 * ((i + batch.length) / snapshotRows.length))
+      onProgress?.({ phase: 'saving', pct, detail: `${Math.round((i + batch.length) / 1000)}k / ${Math.round(snapshotRows.length / 1000)}k snapshots saved` })
+    }
+    console.log(`[SNAPSHOTS DB] Persisted ${snapshotRows.length} snapshot rows for ${result.holderSnapshots.size} wallets in ${Date.now() - snapStart}ms`)
+  } else {
+    console.log(`[SNAPSHOTS DB] No holderSnapshots to persist (size=${result.holderSnapshots?.size ?? 0})`)
+  }
+  onProgress?.({ phase: 'saving', pct: 97, detail: 'Finalizing' })
 
   await db`
     INSERT INTO ${db(CONFIG.SCHEMA)}.bungalows (

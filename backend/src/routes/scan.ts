@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { CONFIG, normalizeAddress, toSupportedChain } from '../config'
+import { CONFIG, db, normalizeAddress, toSupportedChain } from '../config'
 import {
   createScanLog,
   getDailyAllowanceUsed,
@@ -29,6 +29,7 @@ import {
   SCAN_COST_RAW,
 } from '../services/payment'
 import { logError, logEvent, logInfo, logSuccess } from '../services/logger'
+import { addScanLog, getScanLogs, scheduleLogCleanup } from '../services/scanLogs'
 import { scanToken } from '../services/scanner'
 import { scanSolanaToken } from '../services/solanaScanner'
 import type { AppEnv } from '../types'
@@ -43,12 +44,15 @@ const scanBurstLimit = createRateLimit({
 
 scanRoute.post('/scan/:chain/:ca', optionalWalletContext, scanBurstLimit, async (c) => {
   const chain = toSupportedChain(c.req.param('chain'))
-  const tokenAddress = normalizeAddress(c.req.param('ca'))
+  const tokenAddress = chain ? normalizeAddress(c.req.param('ca'), chain) : null
   // Accept wallet from auth context OR from X-Wallet-Address header (for paid scans)
   const walletHeader = c.req.header('X-Wallet-Address')
-  const requester = c.get('walletAddress') ?? (walletHeader ? normalizeAddress(walletHeader) : null)
+  const requester = c.get('walletAddress') ?? (walletHeader ? normalizeAddress(walletHeader, walletHeader.startsWith('0x') ? undefined : 'solana') : null)
+
+  logInfo('SCAN REQUEST DEBUG', `chain=${chain} ca_raw=${c.req.param('ca')} tokenAddress=${tokenAddress} walletHeader=${walletHeader} requester=${requester}`)
 
   if (!chain || !tokenAddress || !requester) {
+    logError('SCAN VALIDATION', `failed: chain=${chain} tokenAddress=${tokenAddress} requester=${requester}`)
     throw new ApiError(400, 'invalid_params', 'Invalid scan parameters')
   }
   logInfo('SCAN REQUEST', `wallet=${requester} chain=${chain} token=${tokenAddress}`)
@@ -68,12 +72,45 @@ scanRoute.post('/scan/:chain/:ca', optionalWalletContext, scanBurstLimit, async 
     })
   }
 
+  // Check if this is a free retry (previous scan failed, requester already paid/owns)
+  let isFreeRetry = false
+  if (registry?.scan_status === 'failed') {
+    // Check if requester is the bungalow owner (i.e. they already paid)
+    const bungalow = await db<{ current_owner: string }[]>`
+      SELECT current_owner FROM ${db(CONFIG.SCHEMA)}.bungalows
+      WHERE token_address = ${tokenAddress} AND is_claimed = true
+      LIMIT 1
+    `
+    if (bungalow.length > 0 && bungalow[0].current_owner?.toLowerCase() === requester.toLowerCase()) {
+      isFreeRetry = true
+      logInfo('SCAN RETRY', `free retry for wallet=${requester} token=${tokenAddress} (previous scan failed, owner match)`)
+    }
+
+    // Also allow free retry if the same payment proof was already used for this token
+    if (!isFreeRetry) {
+      const paymentProof = c.req.header('X-Payment-Proof')
+      if (paymentProof) {
+        const existingTx = await db<{ tx_hash: string }[]>`
+          SELECT tx_hash FROM ${db(CONFIG.SCHEMA)}.used_tx_hashes
+          WHERE tx_hash = ${paymentProof} AND mint_address = ${tokenAddress}
+          LIMIT 1
+        `
+        if (existingTx.length > 0) {
+          isFreeRetry = true
+          logInfo('SCAN RETRY', `free retry for wallet=${requester} token=${tokenAddress} (same payment proof, previous scan failed)`)
+        }
+      }
+    }
+  }
+
   const profile = await getViewerProfile(requester)
   const islandHeat = profile?.islandHeat ?? 0
   const isResidentPlus = islandHeat >= 80
 
   const today = new Date().toISOString().slice(0, 10)
-  if (isResidentPlus) {
+  if (isFreeRetry) {
+    // Skip payment — already paid on previous attempt
+  } else if (isResidentPlus) {
     const scansUsed = await getDailyAllowanceUsed(requester, today)
     logInfo('SCAN GATE', `wallet=${requester} tier=${profile?.tier ?? 'Drifter'} scans_used_today=${scansUsed}`)
     if (scansUsed >= CONFIG.RESIDENT_DAILY_SCANS) {
@@ -107,7 +144,7 @@ scanRoute.post('/scan/:chain/:ca', optionalWalletContext, scanBurstLimit, async 
     logInfo('SCAN PAYMENT', `verified ${payment.chain} tx=${paymentProof.slice(0, 10)}... from=${payment.from} for=${tokenAddress}`)
   }
 
-  const isPaid = !isResidentPlus
+  const isPaid = !isResidentPlus && !isFreeRetry
   await setTokenStatus(tokenAddress, chain, 'scanning')
 
   const scanId = await createScanLog({
@@ -130,18 +167,29 @@ scanRoute.post('/scan/:chain/:ca', optionalWalletContext, scanBurstLimit, async 
 
   logEvent('SCAN STARTED', `scan_id=${scanId} wallet=${requester} token=${tokenAddress}`)
 
+  const SCAN_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes max
+
   void (async () => {
     try {
-      const progressCb = (progress: { phase: string; pct: number }) => {
+      const progressCb = (progress: { phase: string; pct: number; detail?: string }) => {
         void updateScanProgress(scanId, progress).catch(() => undefined)
-        logInfo('SCAN PROGRESS', `scan_id=${scanId} token=${tokenAddress} phase=${progress.phase} pct=${progress.pct}`)
+        logInfo('SCAN PROGRESS', `scan_id=${scanId} token=${tokenAddress} phase=${progress.phase} pct=${progress.pct}${progress.detail ? ` detail="${progress.detail}"` : ''}`)
       }
 
-      const result = chain === 'solana'
-        ? await scanSolanaToken(tokenAddress, progressCb)
-        : await scanToken(chain, tokenAddress, progressCb)
+      const logCb = (msg: string) => addScanLog(scanId, msg)
 
-      await writeScanResult(scanId, result)
+      const scanPromise = chain === 'solana'
+        ? scanSolanaToken(tokenAddress, progressCb, logCb)
+        : scanToken(chain, tokenAddress, progressCb, logCb)
+
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Scan timed out after 5 minutes')), SCAN_TIMEOUT_MS),
+      )
+
+      const result = await Promise.race([scanPromise, timeoutPromise])
+
+      await writeScanResult(scanId, result, progressCb)
+      scheduleLogCleanup(scanId)
       logSuccess(
         'SCAN COMPLETE',
         `scan_id=${scanId} token=${tokenAddress} holders=${result.holderCount} events=${result.eventsFetched} rpc_calls=${result.rpcCallsMade}`,
@@ -163,6 +211,7 @@ scanRoute.post('/scan/:chain/:ca', optionalWalletContext, scanBurstLimit, async 
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown scanner error'
       await markScanFailed(scanId, tokenAddress, message)
+      scheduleLogCleanup(scanId)
       logError('SCAN FAILED', `scan_id=${scanId} token=${tokenAddress} error="${message}"`)
     }
   })()
@@ -186,7 +235,7 @@ scanRoute.get('/scan/:scanId/status', async (c) => {
     throw new ApiError(404, 'scan_not_found', 'Scan not found')
   }
 
-  return c.json({
+  const statusResponse = {
     id: scan.id,
     scan_id: scan.id,
     token_address: scan.token_address,
@@ -194,13 +243,19 @@ scanRoute.get('/scan/:scanId/status', async (c) => {
     status: scan.scan_status,
     progress_phase: scan.progress_phase ?? null,
     progress_pct: scan.progress_pct === null ? null : Number(scan.progress_pct),
+    progress_detail: scan.progress_detail ?? null,
     events_fetched: scan.events_fetched,
     holders_found: scan.holders_found,
     rpc_calls_made: scan.rpc_calls_made,
     started_at: scan.started_at,
     completed_at: scan.completed_at,
     error_message: scan.error_message,
-  })
+    logs: getScanLogs(scanId),
+  }
+
+  logInfo('SCAN STATUS', `scan_id=${scan.id} status=${scan.scan_status} phase=${scan.progress_phase ?? 'null'} pct=${scan.progress_pct ?? 'null'}`)
+
+  return c.json(statusResponse)
 })
 
 export default scanRoute

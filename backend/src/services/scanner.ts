@@ -32,11 +32,13 @@ export interface ScanResult {
     firstSeenAt: number
     lastTransferAt: number
   }[]
+  holderSnapshots?: Map<string, Array<{ ts: number; balance: string }>>
 }
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
 const MAX_RETRIES = 3
 const ALCHEMY_PAGE_SIZE = '0x3e8' // 1000 per page
+const MAX_TRANSFER_PAGES = 200   // Cap at 200k transfers to avoid runaway scans
 
 const erc20ReadAbi = [
   { name: 'name', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'string' }] },
@@ -154,23 +156,75 @@ interface AlchemyTransfer {
   hash: string
 }
 
+async function findDeployBlock(
+  rpcUrl: string,
+  tokenAddress: string,
+  rpcCounter: { count: number },
+): Promise<string> {
+  // Find the first mint (transfer from 0x0) to determine deploy block
+  rpcCounter.count += 1
+  try {
+    const res = await withRetry(async () => {
+      const r = await fetch(rpcUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'alchemy_getAssetTransfers',
+          params: [{
+            fromBlock: '0x0',
+            toBlock: 'latest',
+            contractAddresses: [tokenAddress],
+            fromAddress: ZERO_ADDRESS,
+            category: ['erc20', 'erc721'],
+            withMetadata: false,
+            maxCount: '0x1',
+            order: 'asc',
+          }],
+        }),
+      })
+      if (!r.ok) throw new Error(`Alchemy API error: ${r.status}`)
+      const data = await r.json()
+      if (data.error) throw new Error(data.error.message)
+      return data.result as { transfers: AlchemyTransfer[] }
+    })
+
+    if (res.transfers.length > 0) {
+      const deployBlock = res.transfers[0].blockNum
+      logInfo('DEPLOY BLOCK', `token=${tokenAddress} deployBlock=${deployBlock} (${parseInt(deployBlock, 16)})`)
+      return deployBlock
+    }
+  } catch (e) {
+    logInfo('DEPLOY BLOCK', `Failed to find deploy block for ${tokenAddress}, falling back to 0x0: ${e}`)
+  }
+  return '0x0'
+}
+
 async function fetchAllTransfers(
   rpcUrl: string,
   tokenAddress: string,
   isNft: boolean,
   rpcCounter: { count: number },
   onProgress?: (progress: { phase: string; pct: number; detail?: string }) => void,
+  onLog?: (message: string) => void,
 ): Promise<TransferEvent[]> {
   const category = isNft ? ['erc721'] : ['erc20']
   const events: TransferEvent[] = []
   let pageKey: string | undefined
   let page = 0
 
+  // Find deploy block to scope the query
+  const deployBlock = await findDeployBlock(rpcUrl, tokenAddress, rpcCounter)
+  if (deployBlock !== '0x0') {
+    onLog?.(`Token deployed at block ${parseInt(deployBlock, 16).toLocaleString()} — scanning from there`)
+  }
+
   do {
     rpcCounter.count += 1
 
     const params: Record<string, unknown> = {
-      fromBlock: '0x0',
+      fromBlock: deployBlock,
       toBlock: 'latest',
       contractAddresses: [tokenAddress],
       category,
@@ -234,13 +288,25 @@ async function fetchAllTransfers(
     page++
     logInfo('ALCHEMY TRANSFERS', `token=${tokenAddress} page=${page} got=${response.transfers.length} total=${events.length} hasMore=${!!pageKey}`)
 
-    // Progress: 15% to 70% across pages using asymptotic curve
+    // Progress: 15% to 70% across pages using asymptotic curve (steeper so it doesn't stall)
     if (onProgress) {
       const pct = pageKey
-        ? Math.round(15 + 55 * (1 - 1 / (1 + page / 10)))
+        ? Math.round(15 + 55 * (1 - 1 / (1 + page / 5)))
         : 70
       const detail = `${events.length.toLocaleString()} transfers fetched`
       onProgress({ phase: 'transfers', pct, detail })
+    }
+
+    // Log every ~5 pages during fetch
+    if (onLog && page % 5 === 0 && pageKey) {
+      onLog(`${events.length.toLocaleString()} transfers found so far...`)
+    }
+
+    // Cap transfers to avoid runaway scans on mega-tokens
+    if (page >= MAX_TRANSFER_PAGES && pageKey) {
+      logInfo('ALCHEMY TRANSFERS', `token=${tokenAddress} HIT PAGE CAP (${MAX_TRANSFER_PAGES}) with ${events.length} transfers — proceeding with partial data`)
+      onLog?.(`Capped at ${events.length.toLocaleString()} transfers (large token)`)
+      break
     }
   } while (pageKey)
 
@@ -321,19 +387,24 @@ export async function scanToken(
   chain: 'base' | 'ethereum',
   tokenAddress: string,
   onProgress?: (progress: { phase: string; pct: number; detail?: string }) => void,
+  onLog?: (message: string) => void,
 ): Promise<ScanResult> {
   const client = getClient(chain)
   const rpcUrl = getRpcUrl(chain)
   const checksumAddress = tokenAddress.toLowerCase() as `0x${string}`
   const rpcCounter = { count: 0 }
+  const chainLabel = chain === 'base' ? 'Base' : 'Ethereum'
 
   // Phase 1: metadata (5%)
   onProgress?.({ phase: 'metadata', pct: 5, detail: 'Reading token contract' })
+  onLog?.('Reading token contract...')
   const metadata = await getTokenMetadata(client, checksumAddress, rpcCounter)
+  onLog?.(`Found ${metadata.name} ($${metadata.symbol}) on ${chainLabel}`)
 
   // Phase 2: fetch all transfers via Alchemy API (15-70%)
   onProgress?.({ phase: 'transfers', pct: 15, detail: 'Starting transfer fetch' })
-  const events = await fetchAllTransfers(rpcUrl, checksumAddress, metadata.isNft, rpcCounter, onProgress)
+  onLog?.('Searching for transfers...')
+  const events = await fetchAllTransfers(rpcUrl, checksumAddress, metadata.isNft, rpcCounter, onProgress, onLog)
 
   if (events.length === 0) {
     throw new Error('No Transfer events found for token')
@@ -346,12 +417,14 @@ export async function scanToken(
   // Enhanced progress: show date range
   const dateRange = `${events.length.toLocaleString()} transfers (${formatDateShort(deployTimestamp)} \u2192 ${formatDateShort(Math.floor(Date.now() / 1000))})`
   onProgress?.({ phase: 'transfers', pct: 72, detail: dateRange })
+  onLog?.(`${events.length.toLocaleString()} total transfers spanning ${formatDateShort(deployTimestamp)} \u2013 ${formatDateShort(Math.floor(Date.now() / 1000))}`)
 
   // Build transfer timeline
   const timeline = buildTransferTimeline(events, deployTimestamp)
 
   // Phase 3: build wallet ledgers (75%)
   onProgress?.({ phase: 'balances', pct: 75, detail: `Processing ${events.length.toLocaleString()} transfers` })
+  onLog?.(`Processing balances for all wallets...`)
   const ledgers = new Map<string, WalletLedger>()
 
   for (const event of events) {
@@ -386,11 +459,42 @@ export async function scanToken(
     }
   }
 
+  // Deduplicate snapshots: when multiple transfers happen in the same block (same timestamp),
+  // keep only the final balance at that timestamp. This ensures TWAB precision and prevents
+  // duplicate key issues when persisting to DB.
+  for (const [, ledger] of ledgers.entries()) {
+    const snaps = ledger.snapshots
+    if (snaps.length <= 1) continue
+    const deduped: BalanceSnapshot[] = []
+    for (let i = 0; i < snaps.length; i++) {
+      // Keep this snapshot only if it's the last one at this timestamp
+      if (i === snaps.length - 1 || snaps[i].timestamp !== snaps[i + 1].timestamp) {
+        deduped.push(snaps[i])
+      }
+    }
+    ledger.snapshots = deduped
+  }
+
   // Phase 4: compute heat (90%)
   onProgress?.({ phase: 'heat', pct: 90, detail: `Scoring ${ledgers.size.toLocaleString()} wallets` })
+  onLog?.(`Calculating heat scores for ${ledgers.size.toLocaleString()} wallets...`)
   const holders = computeHolderHeat(ledgers, deployTimestamp, metadata.totalSupply, metadata.decimals)
+  onLog?.(`${holders.length.toLocaleString()} wallets earned heat scores`)
 
+  // Extract per-holder balance snapshots from ledgers for DB persistence
+  const holderSnapshots = new Map<string, Array<{ ts: number; balance: string }>>()
+  for (const [wallet, ledger] of ledgers.entries()) {
+    if (ledger.snapshots.length > 0) {
+      holderSnapshots.set(
+        wallet,
+        ledger.snapshots.map((s) => ({ ts: s.timestamp, balance: s.balance.toString() })),
+      )
+    }
+  }
+
+  onLog?.('Capturing balance history for top holders...')
   onProgress?.({ phase: 'complete', pct: 100 })
+  onLog?.(`Scan complete \u2014 ${holders.length.toLocaleString()} holders scored`)
   return {
     tokenAddress: checksumAddress,
     chain,
@@ -405,6 +509,7 @@ export async function scanToken(
     rpcCallsMade: rpcCounter.count,
     timeline,
     holders,
+    holderSnapshots,
   }
 }
 

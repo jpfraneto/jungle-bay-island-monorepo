@@ -1,0 +1,48 @@
+.wallSection {
+  margin-top: 18px;
+  background: rgba(20, 43, 26, 0.8);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.header h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-style: italic;
+}
+
+.addButton {
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: #2a8f58;
+  color: #f0fff5;
+  cursor: pointer;
+}
+
+.addButton:hover {
+  filter: brightness(1.08);
+}
+
+.empty {
+  border: 1px dashed var(--border-subtle);
+  border-radius: 10px;
+  padding: 18px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}

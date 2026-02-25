@@ -1,0 +1,43 @@
+.page {
+  min-height: calc(100vh - 52px);
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 48% 42%, rgba(76, 133, 87, 0.4), rgba(10, 22, 15, 0.96) 58%),
+    linear-gradient(180deg, #0b1a12 0%, #070f0a 100%);
+}
+
+.card {
+  text-align: center;
+  padding: 30px;
+  border-radius: 16px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(12, 28, 18, 0.82);
+}
+
+.title {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 88px;
+  color: #f1c40f;
+  line-height: 1;
+}
+
+.subtitle {
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+}
+
+.palm {
+  font-size: 44px;
+  margin: 18px 0;
+}
+
+.button {
+  border: 0;
+  border-radius: 999px;
+  background: #2a8f58;
+  color: #f4fff7;
+  padding: 10px 16px;
+  cursor: pointer;
+}

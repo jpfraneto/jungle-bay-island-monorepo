@@ -1,100 +1,94 @@
-# ─── Jungle Bay Island ───────────────────────────────────────
-# make dev       → run backend + frontend in dev mode
-# make build     → build frontend + typecheck both
-# make deploy    → build, commit, push, deploy to Railway
-# make setup     → first-time: init git, create GitHub repo, link Railway
-# ─────────────────────────────────────────────────────────────
+SHELL := /bin/bash
 
-REPO     := jpfraneto/jungle-bay-island-v2
-BRANCH   := main
-SERVICE  := jungle-bay-backend
+RAILWAY_SERVICE ?= jungle-bay-backend
+RAILWAY_ENV ?= production
+BACKEND_ENV_FILE ?= backend/.env.local
+FRONTEND_ENV_FILE ?= island/.env
+DEPLOY_MSG ?= chore: deploy
 
-.PHONY: dev dev-backend dev-frontend build typecheck deploy push setup clean logs status
+REQUIRED_BACKEND_VARS := DATABASE_URL PONDER_RPC_URL_8453 PONDER_RPC_URL_1 PRIVY_APP_ID PRIVY_APP_SECRET PRIVY_VERIFICATION_KEY TREASURY_ADDRESS CLAIM_SIGNER_PRIVATE_KEY CLAIM_CONTRACT_ADDRESS
+OPTIONAL_BACKEND_VARS := CORS_ORIGIN SERVER_URL NEYNAR_API_KEY HELIUS_API_KEY X_CLIENT_SECRET_ID X_CLIENT_SECRET X_CONSUMER_KEY X_SECRET_KEY X_BEARER_TOKEN
+REQUIRED_FRONTEND_VARS := VITE_TREASURY_ADDRESS VITE_CLAIM_CONTRACT_ADDRESS VITE_JBM_ADDRESS
 
-# ─── Development ─────────────────────────────────────────────
+.PHONY: help check-tools build-frontend git-upload sync-railway-env railway-deploy deploy
 
-dev:
-	@echo "\n  Starting dev servers...\n"
-	@make -j2 dev-backend dev-frontend
-
-dev-backend:
-	@cd backend && bun run dev
-
-dev-frontend:
-	@cd frontend && bun run dev
-
-# ─── Build ───────────────────────────────────────────────────
-
-build: typecheck
-	@echo "\n  Building frontend..."
-	@cd frontend && bun run build
-	@echo "  Done. Output in frontend/dist/\n"
-
-typecheck:
-	@echo "  Typechecking backend..."
-	@cd backend && bunx tsc --noEmit
-	@echo "  Typechecking frontend..."
-	@cd frontend && bunx tsc --noEmit
-	@echo "  All clear.\n"
-
-# ─── Deploy ──────────────────────────────────────────────────
-
-deploy: build
-	@echo "\n  Deploying Jungle Bay Island...\n"
-	@git add -A
-	@git diff --cached --quiet && echo "  No changes to commit." || \
-		git commit -m "deploy: $$(date '+%Y-%m-%d %H:%M')"
-	@git push origin $(BRANCH)
-	@echo "\n  Pushed to GitHub. Deploying to Railway...\n"
-	@railway up --service $(SERVICE) --detach
-	@echo "\n  Deploy triggered."
-	@echo "  Railway:  https://jungle-bay-backend-production.up.railway.app"
-	@echo "  GitHub:   https://github.com/$(REPO)\n"
-
-push:
-	@git add -A
-	@git diff --cached --quiet && echo "  No changes to commit." || \
-		git commit -m "update: $$(date '+%Y-%m-%d %H:%M')"
-	@git push origin $(BRANCH)
-	@echo "  Pushed to GitHub."
-
-# ─── First-time setup ───────────────────────────────────────
-
-setup:
-	@echo "\n  Setting up Jungle Bay Island...\n"
-	@# Init git if needed
-	@[ -d .git ] || git init
-	@git add -A
-	@git commit -m "initial commit" 2>/dev/null || true
-	@# Create GitHub repo if it doesn't exist
-	@gh repo view $(REPO) >/dev/null 2>&1 || \
-		gh repo create $(REPO) --private --source=. --push --remote=origin
-	@# Ensure remote is set
-	@git remote get-url origin >/dev/null 2>&1 || \
-		git remote add origin git@github.com:$(REPO).git
-	@git branch -M $(BRANCH)
-	@git push -u origin $(BRANCH)
-	@echo "\n  GitHub repo: https://github.com/$(REPO)"
-	@echo "  Railway is already linked to: $(SERVICE)"
-	@echo "  Run 'make deploy' to ship.\n"
-
-# ─── Utilities ───────────────────────────────────────────────
-
-logs:
-	@railway logs --service $(SERVICE)
-
-status:
+help:
+	@echo "Targets:"
+	@echo "  make deploy            Build frontend, push to GitHub, sync Railway env, deploy Railway"
+	@echo "  make build-frontend    Build island assets into backend/public/island"
+	@echo "  make sync-railway-env  Sync required env vars from local env files to Railway"
+	@echo "  make railway-deploy    Deploy current repo state to Railway"
 	@echo ""
-	@railway status
-	@echo ""
-	@git log --oneline -5
-	@echo ""
+	@echo "Optional vars:"
+	@echo "  DEPLOY_MSG='your commit message'"
+	@echo "  RAILWAY_SERVICE=jungle-bay-backend"
+	@echo "  RAILWAY_ENV=production"
 
-clean:
-	@rm -rf frontend/dist
-	@echo "  Cleaned frontend/dist/"
+check-tools:
+	@command -v bun >/dev/null || (echo "Missing required tool: bun" && exit 1)
+	@command -v git >/dev/null || (echo "Missing required tool: git" && exit 1)
+	@command -v railway >/dev/null || (echo "Missing required tool: railway" && exit 1)
 
-install:
-	@cd backend && bun install
-	@cd frontend && bun install
-	@echo "  Dependencies installed."
+build-frontend:
+	@echo "Building island frontend..."
+	@cd island && bun install --frozen-lockfile && bun run build
+
+git-upload:
+	@set -euo pipefail; \
+	branch="$$(git rev-parse --abbrev-ref HEAD)"; \
+	if [ "$$branch" = "HEAD" ]; then \
+		echo "Cannot deploy from detached HEAD."; \
+		exit 1; \
+	fi; \
+	git add -A; \
+	if git diff --cached --quiet; then \
+		echo "No staged changes to commit."; \
+	else \
+		git commit -m "$(DEPLOY_MSG)"; \
+	fi; \
+	git push origin "$$branch"
+
+sync-railway-env:
+	@test -f "$(BACKEND_ENV_FILE)" || (echo "Missing $(BACKEND_ENV_FILE)" && exit 1)
+	@test -f "$(FRONTEND_ENV_FILE)" || (echo "Missing $(FRONTEND_ENV_FILE)" && exit 1)
+	@set -euo pipefail; \
+	get_var() { \
+		local key="$$1" file="$$2"; \
+		awk -F= -v key="$$key" '$$1 == key { sub(/^[^=]*=/, "", $$0); print $$0; exit }' "$$file"; \
+	}; \
+	set_required() { \
+		local key="$$1" file="$$2" value; \
+		value="$$(get_var "$$key" "$$file")"; \
+		if [ -z "$$value" ]; then \
+			echo "Missing required $$key in $$file"; \
+			exit 1; \
+		fi; \
+		printf '%s' "$$value" | railway variable set "$$key" --stdin -s "$(RAILWAY_SERVICE)" -e "$(RAILWAY_ENV)" --skip-deploys >/dev/null; \
+		echo "Synced $$key"; \
+	}; \
+	set_optional() { \
+		local key="$$1" file="$$2" value; \
+		value="$$(get_var "$$key" "$$file")"; \
+		if [ -n "$$value" ]; then \
+			printf '%s' "$$value" | railway variable set "$$key" --stdin -s "$(RAILWAY_SERVICE)" -e "$(RAILWAY_ENV)" --skip-deploys >/dev/null; \
+			echo "Synced $$key"; \
+		fi; \
+	}; \
+	for key in $(REQUIRED_BACKEND_VARS); do set_required "$$key" "$(BACKEND_ENV_FILE)"; done; \
+	for key in $(OPTIONAL_BACKEND_VARS); do set_optional "$$key" "$(BACKEND_ENV_FILE)"; done; \
+	for key in $(REQUIRED_FRONTEND_VARS); do set_required "$$key" "$(FRONTEND_ENV_FILE)"; done; \
+	jbm_value="$$(get_var JBM_TOKEN_ADDRESS "$(BACKEND_ENV_FILE)")"; \
+	if [ -z "$$jbm_value" ]; then \
+		jbm_value="$$(get_var VITE_JBM_ADDRESS "$(FRONTEND_ENV_FILE)")"; \
+	fi; \
+	if [ -z "$$jbm_value" ]; then \
+		echo "Missing JBM_TOKEN_ADDRESS in $(BACKEND_ENV_FILE) and VITE_JBM_ADDRESS in $(FRONTEND_ENV_FILE)"; \
+		exit 1; \
+	fi; \
+	printf '%s' "$$jbm_value" | railway variable set JBM_TOKEN_ADDRESS --stdin -s "$(RAILWAY_SERVICE)" -e "$(RAILWAY_ENV)" --skip-deploys >/dev/null; \
+	echo "Synced JBM_TOKEN_ADDRESS"
+
+railway-deploy:
+	@railway up --service "$(RAILWAY_SERVICE)" --environment "$(RAILWAY_ENV)" --ci
+
+deploy: check-tools build-frontend git-upload sync-railway-env railway-deploy

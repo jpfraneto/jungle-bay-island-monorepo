@@ -1,6 +1,10 @@
 import { COLORS, USER_PAGE_CSS } from "./styles";
 import { getTierFromHeat } from "../services/heat";
-import { renderTopbarAuth, renderMiniappSdk, renderMiniappEmbed } from "./auth-ui";
+import {
+  renderTopbarAuth,
+  renderMiniappSdk,
+  renderMiniappEmbed,
+} from "./auth-ui";
 
 function esc(str: string | null | undefined): string {
   if (!str) return "";
@@ -21,9 +25,17 @@ function fmtHeat(val: number): string {
   return val.toFixed(1) + "\u00B0";
 }
 
+function arkhamSvg(size = 14): string {
+  return `<svg width="${size}" height="${size}" viewBox="0 0 761 703" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M114.48 515.486L380.133 703L471.864 638.119L149.705 410.677L114.48 515.486ZM272.991 465.577L380.133 541.153L471.864 476.272L308.216 360.769L272.991 465.577ZM403.616 557.552L495.347 622.433L761 434.919L725.775 330.111L403.616 557.552ZM402.882 395.705L494.613 460.586L601.755 384.297L566.53 279.489C567.264 279.489 402.882 395.705 402.882 395.705ZM199.607 262.377L158.511 385.01L250.242 449.178L312.619 262.377H199.607ZM101.271 131.189L0 434.919L91.731 499.8L214.284 131.902L101.271 131.189ZM242.904 131.189L207.679 235.997H410.221L374.996 131.189H242.904ZM403.616 131.189L466.727 317.99L558.458 253.108L517.363 130.476C517.363 131.189 403.616 131.189 403.616 131.189ZM145.302 0.712982L110.077 105.521H508.556L473.332 0L145.302 0.712982ZM614.964 0H501.952L625.238 367.899L716.969 303.017L614.964 0Z" fill="currentColor"/></svg>`;
+}
+
+function isEvmAddress(addr: string): boolean {
+  return /^0x[0-9a-fA-F]{40}$/.test(addr);
+}
+
 function chainSvg(chain: string | null, size = 14): string {
   if (chain === "base") {
-    return `<svg class="chain-icon" width="${size}" height="${size}" viewBox="0 0 111 111" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="55.5" cy="55.5" r="55.5" fill="#0052FF"/><path d="M55.4 93.5c20.9 0 37.9-17 37.9-37.9 0-20.9-17-37.9-37.9-37.9-19.7 0-35.9 15.1-37.7 34.3h50v7.2h-50C19.5 78.4 35.7 93.5 55.4 93.5z" fill="#fff"/></svg>`;
+    return `<svg class="chain-icon" width="${size}" height="${size}" viewBox="0 0 249 249" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M0 19.671C0 12.9332 0 9.56425 1.26956 6.97276C2.48511 4.49151 4.49151 2.48511 6.97276 1.26956C9.56425 0 12.9332 0 19.671 0H229.329C236.067 0 239.436 0 242.027 1.26956C244.508 2.48511 246.515 4.49151 247.73 6.97276C249 9.56425 249 12.9332 249 19.671V229.329C249 236.067 249 239.436 247.73 242.027C246.515 244.508 244.508 246.515 242.027 247.73C239.436 249 236.067 249 229.329 249H19.671C12.9332 249 9.56425 249 6.97276 247.73C4.49151 246.515 2.48511 244.508 1.26956 242.027C0 239.436 0 236.067 0 229.329V19.671Z" fill="#0000FF"/></svg>`;
   }
   if (chain === "solana") {
     return `<svg class="chain-icon" width="${size}" height="${size}" viewBox="0 0 397 312" xmlns="http://www.w3.org/2000/svg"><linearGradient id="sg2" x1="360" y1="350" x2="40" y2="-30" gradientUnits="userSpaceOnUse"><stop stop-color="#00FFA3"/><stop offset="1" stop-color="#DC1FFF"/></linearGradient><path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1l62.7-62.7z" fill="url(#sg2)"/><path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#sg2)"/><path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#sg2)"/></svg>`;
@@ -58,6 +70,10 @@ export function renderUserPage(data: UserPageData): string {
   const pfp = data.farcaster?.pfp_url ?? null;
   const displayName = data.farcaster?.display_name ?? null;
   const username = data.farcaster?.username ?? null;
+
+  const arkhamLink = isEvmAddress(data.wallet)
+    ? `<a href="https://intel.arkm.com/explorer/address/${esc(data.wallet)}" target="_blank" rel="noopener" class="arkham-link" title="View on Arkham">${arkhamSvg(14)}</a>`
+    : "";
 
   const fcProfileUrl = data.farcaster?.username
     ? `https://warpcast.com/${esc(data.farcaster.username)}`
@@ -121,13 +137,14 @@ export function renderUserPage(data: UserPageData): string {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <link rel="icon" type="image/svg+xml" href="/logo.svg" />
   <title>${pageTitle}</title>
-  ${renderMiniappEmbed({ launchUrl: 'https://memetics.lat/wallet/' + esc(data.wallet) })}
+  ${renderMiniappEmbed({ launchUrl: "https://memetics.lat/wallet/" + esc(data.wallet) })}
   <style>${USER_PAGE_CSS}</style>
 </head>
 <body>
   <header class="topbar">
-    <a href="/" class="topbar-logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 20V4l5 8 4-6 4 6 5-8v16" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+    <a href="/" class="topbar-logo"><img src="/logo.svg" alt="Memetics" style="width:20px;height:20px" /></a>
     <div style="margin-left:auto;display:flex;align-items:center">
       ${renderTopbarAuth()}
     </div>
@@ -144,11 +161,13 @@ export function renderUserPage(data: UserPageData): string {
                <span class="wallet-full" id="wallet-addr">${esc(data.wallet)}</span>
                <span class="wallet-short" id="wallet-addr-short">${shortAddr(data.wallet)}</span>
                <button class="copy-btn" id="copy-wallet">copy</button>
+               ${arkhamLink}
              </div>`
             : `<div class="user-wallet-line user-wallet-primary">
                <span class="wallet-full" id="wallet-addr">${esc(data.wallet)}</span>
                <span class="wallet-short" id="wallet-addr-short">${shortAddr(data.wallet)}</span>
                <button class="copy-btn" id="copy-wallet">copy</button>
+               ${arkhamLink}
              </div>`
         }
       </div>
@@ -160,11 +179,10 @@ export function renderUserPage(data: UserPageData): string {
     <div class="scan-another" style="margin-top:32px">
       <h3 class="section-title">Scan Another Token</h3>
       <div class="scan-form-group">
-        <input type="text" id="ca-input" placeholder="contract address" autocomplete="off" spellcheck="false" readonly />
+        <input type="text" id="ca-input" placeholder="base or solana CA" autocomplete="off" spellcheck="false" readonly />
         <button type="button" class="scan-paste-btn" id="paste-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M9 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-2"/></svg> PASTE</button>
       </div>
       <div class="scan-status-msg" id="status-msg"></div>
-      <p class="scan-hint">Base &amp; Solana tokens</p>
     </div>
   </div>
 
@@ -295,23 +313,29 @@ export function renderUserPage(data: UserPageData): string {
       if (caInput) caInput.value = addr;
       setStatus2('Checking token...', 'checking');
       if (pasteBtn) pasteBtn.disabled = true;
-      try {
-        var resp = await fetch('https://api.dexscreener.com/latest/dex/tokens/' + addr);
-        var data = await resp.json();
-        if (data.pairs && data.pairs.length > 0) {
-          var pair = data.pairs[0];
-          if (pair.chainId === 'solana') chain = 'solana';
-          else if (pair.chainId === 'base') chain = 'base';
-          else if (pair.chainId === 'ethereum') chain = 'ethereum';
-          setStatus2('Token found! Redirecting...', 'success');
-          setTimeout(function() { window.location.href = '/' + chain + '/' + addr; }, 300);
-          return;
-        }
-        setStatus2('Token not listed on DexScreener. Loading anyway...', 'checking');
+
+      var chainsToTry = chain === 'solana' ? ['solana'] : ['base', 'ethereum'];
+      var found = false;
+      for (var i = 0; i < chainsToTry.length; i++) {
+        try {
+          var resp = await fetch('https://api.dexscreener.com/tokens/v1/' + chainsToTry[i] + '/' + addr);
+          if (resp.ok) {
+            var pairs = await resp.json();
+            if (Array.isArray(pairs) && pairs.length > 0) {
+              chain = chainsToTry[i];
+              found = true;
+              break;
+            }
+          }
+        } catch(e) {}
+      }
+
+      if (found) {
+        setStatus2('Token found! Redirecting...', 'success');
+        setTimeout(function() { window.location.href = '/' + chain + '/' + addr; }, 300);
+      } else {
+        setStatus2('Token not on DexScreener. Loading anyway...', 'checking');
         setTimeout(function() { window.location.href = '/' + chain + '/' + addr; }, 800);
-      } catch(e) {
-        setStatus2('Could not verify token. Loading...', 'checking');
-        setTimeout(function() { window.location.href = '/' + chain + '/' + addr; }, 500);
       }
     }
 

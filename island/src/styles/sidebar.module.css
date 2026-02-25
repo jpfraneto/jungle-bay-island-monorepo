@@ -1,0 +1,101 @@
+.backdrop {
+  position: fixed;
+  inset: 52px 0 0;
+  background: rgba(0, 0, 0, 0.42);
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  z-index: 30;
+}
+
+.backdropOpen {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  background: linear-gradient(180deg, #102315 0%, #0c1b12 100%);
+  border-right: 1px solid var(--border-subtle);
+  padding: 14px 12px;
+  overflow-y: auto;
+}
+
+.section + .section {
+  margin-top: 18px;
+}
+
+.heading {
+  margin: 0 0 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+}
+
+.itemButton,
+.bungalowButton {
+  width: 100%;
+  text-align: left;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 8px 9px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.itemButton:hover,
+.bungalowButton:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.bungalowList {
+  display: grid;
+  gap: 4px;
+}
+
+.empty {
+  border: 1px dashed var(--border-subtle);
+  border-radius: 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 10px;
+}
+
+.imageRing {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.tokenImage {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  object-fit: cover;
+}
+
+@media (max-width: 900px) {
+  .sidebar {
+    position: fixed;
+    top: 52px;
+    bottom: 0;
+    left: -235px;
+    z-index: 31;
+    transition: left 0.2s ease;
+  }
+
+  .sidebarOpen {
+    left: 0;
+  }
+}

@@ -64,16 +64,18 @@ scanRoute.post('/scan/:chain/:ca', optionalWalletContext, scanBurstLimit, async 
     })
   }
 
+  let isFreeRetry = false
+
   if (registry?.scan_status === 'scanning') {
     const latest = await getLatestScanByToken(tokenAddress)
-    return c.json({
-      status: 'scanning',
-      scan_id: latest?.id,
-    })
+    if (latest) {
+      logInfo('SCAN RESTART', `scan_id=${latest.id} token=${tokenAddress} — marking old scan as failed, starting fresh`)
+      await markScanFailed(latest.id, tokenAddress, 'Replaced by new scan request')
+    }
+    isFreeRetry = true
   }
 
   // Check if this is a free retry (previous scan failed, requester already paid/owns)
-  let isFreeRetry = false
   if (registry?.scan_status === 'failed') {
     // Check if requester is the bungalow owner (i.e. they already paid)
     const bungalow = await db<{ current_owner: string }[]>`
@@ -167,7 +169,7 @@ scanRoute.post('/scan/:chain/:ca', optionalWalletContext, scanBurstLimit, async 
 
   logEvent('SCAN STARTED', `scan_id=${scanId} wallet=${requester} token=${tokenAddress}`)
 
-  const SCAN_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes max
+  const SCAN_TIMEOUT_MS = 15 * 60 * 1000 // 15 minutes max
 
   void (async () => {
     try {
@@ -183,7 +185,7 @@ scanRoute.post('/scan/:chain/:ca', optionalWalletContext, scanBurstLimit, async 
         : scanToken(chain, tokenAddress, progressCb, logCb)
 
       const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Scan timed out after 5 minutes')), SCAN_TIMEOUT_MS),
+        setTimeout(() => reject(new Error('Scan timed out after 15 minutes')), SCAN_TIMEOUT_MS),
       )
 
       const result = await Promise.race([scanPromise, timeoutPromise])

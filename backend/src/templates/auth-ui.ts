@@ -8,6 +8,17 @@ export function renderMiniappSdk(): string {
   return `<script type="module">
   import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk'
   sdk.actions.ready()
+  // Expose Farcaster embedded wallet provider globally for non-module scripts
+  try {
+    if (sdk.wallet && sdk.wallet.getEthereumProvider) {
+      Promise.resolve(sdk.wallet.getEthereumProvider()).then(function(provider) {
+        if (provider && typeof provider.request === 'function') {
+          window.__FC_PROVIDER__ = provider
+          if (window.__onFcProvider) window.__onFcProvider(provider)
+        }
+      }).catch(function(e) { console.warn('FC wallet provider error:', e) })
+    }
+  } catch(e) { console.warn('FC wallet provider not available:', e) }
 </script>`
 }
 

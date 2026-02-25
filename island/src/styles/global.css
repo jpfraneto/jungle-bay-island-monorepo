@@ -1,0 +1,60 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap");
+
+:root {
+  --bg-deep: #070f0a;
+  --bg-main: #0a1a0f;
+  --bg-sidebar: #0f1f15;
+  --bg-card: #142b1a;
+  --bg-hover: #1a3622;
+
+  --text-primary: #e8f0ea;
+  --text-secondary: #8aaa95;
+  --text-muted: #4a6a55;
+
+  --accent-green: #2ecc71;
+  --accent-teal: #1abc9c;
+  --accent-gold: #f1c40f;
+  --accent-coral: #e74c3c;
+  --accent-blue: #3498db;
+  --accent-purple: #9b59b6;
+  --accent-pink: #e91e63;
+  --accent-orange: #f39c12;
+
+  --border-subtle: rgba(255, 255, 255, 0.05);
+  --font-display: "Instrument Serif", serif;
+  --font-body: "DM Sans", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#island-root {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg-main);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  color: inherit;
+}
+
+button,
+input,
+textarea,
+select {
+  color: inherit;
+  font: inherit;
+}

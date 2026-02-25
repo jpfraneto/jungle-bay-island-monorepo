@@ -84,12 +84,13 @@ export function renderProfilePage(data: ProfilePageData): string {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <link rel="icon" type="image/svg+xml" href="/logo.svg" />
   <title>@${esc(session.x_username)} — Profile — Memetics</title>
   <style>${USER_PAGE_CSS}${PROFILE_EXTRA_CSS}</style>
 </head>
 <body>
   <header class="topbar">
-    <a href="/" class="topbar-logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 20V4l5 8 4-6 4 6 5-8v16" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+    <a href="/" class="topbar-logo"><img src="/logo.svg" alt="Memetics" style="width:20px;height:20px" /></a>
     <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
       <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:${COLORS.text}">
         ${session.x_pfp ? `<img src="${esc(session.x_pfp)}" alt="" style="width:22px;height:22px;border-radius:50%;border:1px solid ${COLORS.border}" />` : ""}
@@ -139,7 +140,7 @@ export function renderProfilePage(data: ProfilePageData): string {
     if (evmBtn) {
       evmBtn.addEventListener('click', async function() {
         if (!window.ethereum) {
-          showStatus('No EVM wallet detected. Install MetaMask.', 'error');
+          showStatus('No EVM wallet detected. Install Rainbow.', 'error');
           return;
         }
         evmBtn.disabled = true;

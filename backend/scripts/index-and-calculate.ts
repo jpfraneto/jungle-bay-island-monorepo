@@ -26,7 +26,10 @@ import { base, mainnet } from "viem/chains";
 
 // ─── Config ────────────────────────────────────────────────────
 const DATABASE_URL = process.env.DATABASE_URL!;
-if (!DATABASE_URL) { console.error("Missing DATABASE_URL"); process.exit(1); }
+if (!DATABASE_URL) {
+  console.error("Missing DATABASE_URL");
+  process.exit(1);
+}
 
 const K = 60; // Heat formula constant
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
@@ -37,10 +40,10 @@ const DELAY_MS = 50; // delay between batches to avoid rate limits
 
 // ─── Transfer event signatures ─────────────────────────────────
 const ERC20_TRANSFER = parseAbiItem(
-  "event Transfer(address indexed from, address indexed to, uint256 value)"
+  "event Transfer(address indexed from, address indexed to, uint256 value)",
 );
 const ERC721_TRANSFER = parseAbiItem(
-  "event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)"
+  "event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)",
 );
 
 // ─── Token Registry ────────────────────────────────────────────
@@ -56,14 +59,86 @@ interface TokenConfig {
 }
 
 const TOKENS: TokenConfig[] = [
-  { address: "0x22af33fe49fd1fa80c7149773dde5890d3c76f3b", name: "BNKR",   chain: "base",     deployBlock: 23_205_873, deployTimestamp: 1733201093, decimals: 18, fallbackSupply: 100_000_000_000,  isNFT: false },
-  { address: "0x58d6e314755c2668f3d7358cc7a7a06c4314b238", name: "RIZZ",   chain: "base",     deployBlock: 24_886_320, deployTimestamp: 1736561987, decimals: 6,  fallbackSupply: 153_118_981,      isNFT: false },
-  { address: "0x279e7cff2dbc93ff1f5cae6cbd072f98d75987ca", name: "TOWELI", chain: "base",     deployBlock: 24_887_072, deployTimestamp: 1736563491, decimals: 18, fallbackSupply: 55_201_546,       isNFT: false },
-  { address: "0x2b5050f01d64fbb3e4ac44dc07f0732bfb5ecadf", name: "QR",     chain: "base",     deployBlock: 26_009_102, deployTimestamp: 1738807551, decimals: 18, fallbackSupply: 100_000_000_000,  isNFT: false },
-  { address: "0x3313338fe4bb2a166b81483bfcb2d4a6a1ebba8d", name: "JBM",    chain: "base",     deployBlock: 26_223_051, deployTimestamp: 1739235449, decimals: 18, fallbackSupply: 100_000_000_000,  isNFT: false },
-  { address: "0x3ec2156d4c0a9cbdab4a016633b7bcf6a8d68ea2", name: "DRB",    chain: "base",     deployBlock: 27_276_095, deployTimestamp: 1741341537, decimals: 18, fallbackSupply: 100_000_000_000,  isNFT: false },
-  { address: "0x3d01fe5a38ddbd307fdd635b4cb0e29681226d6f", name: "ALPHA",  chain: "base",     deployBlock: 33_127_106, deployTimestamp: 1753043559, decimals: 18, fallbackSupply: 100_000_000_000,  isNFT: false },
-  { address: "0xd37264c71e9af940e49795f0d3a8336afaafdda9", name: "JBC",    chain: "ethereum", deployBlock: 13_949_933, deployTimestamp: 1641446071, decimals: 0,  fallbackSupply: 5_555,            isNFT: true  },
+  {
+    address: "0x22af33fe49fd1fa80c7149773dde5890d3c76f3b",
+    name: "BNKR",
+    chain: "base",
+    deployBlock: 23_205_873,
+    deployTimestamp: 1733201093,
+    decimals: 18,
+    fallbackSupply: 100_000_000_000,
+    isNFT: false,
+  },
+  {
+    address: "0x58d6e314755c2668f3d7358cc7a7a06c4314b238",
+    name: "RIZZ",
+    chain: "base",
+    deployBlock: 24_886_320,
+    deployTimestamp: 1736561987,
+    decimals: 6,
+    fallbackSupply: 153_118_981,
+    isNFT: false,
+  },
+  {
+    address: "0x279e7cff2dbc93ff1f5cae6cbd072f98d75987ca",
+    name: "TOWELI",
+    chain: "base",
+    deployBlock: 24_887_072,
+    deployTimestamp: 1736563491,
+    decimals: 18,
+    fallbackSupply: 55_201_546,
+    isNFT: false,
+  },
+  {
+    address: "0x2b5050f01d64fbb3e4ac44dc07f0732bfb5ecadf",
+    name: "QR",
+    chain: "base",
+    deployBlock: 26_009_102,
+    deployTimestamp: 1738807551,
+    decimals: 18,
+    fallbackSupply: 100_000_000_000,
+    isNFT: false,
+  },
+  {
+    address: "0x3313338fe4bb2a166b81483bfcb2d4a6a1ebba8d",
+    name: "JBM",
+    chain: "base",
+    deployBlock: 26_223_051,
+    deployTimestamp: 1739235449,
+    decimals: 18,
+    fallbackSupply: 100_000_000_000,
+    isNFT: false,
+  },
+  {
+    address: "0x3ec2156d4c0a9cbdab4a016633b7bcf6a8d68ea2",
+    name: "DRB",
+    chain: "base",
+    deployBlock: 27_276_095,
+    deployTimestamp: 1741341537,
+    decimals: 18,
+    fallbackSupply: 100_000_000_000,
+    isNFT: false,
+  },
+  {
+    address: "0x3d01fe5a38ddbd307fdd635b4cb0e29681226d6f",
+    name: "ALPHA",
+    chain: "base",
+    deployBlock: 33_127_106,
+    deployTimestamp: 1753043559,
+    decimals: 18,
+    fallbackSupply: 100_000_000_000,
+    isNFT: false,
+  },
+  {
+    address: "0xd37264c71e9af940e49795f0d3a8336afaafdda9",
+    name: "JBC",
+    chain: "ethereum",
+    deployBlock: 13_949_933,
+    deployTimestamp: 1641446071,
+    decimals: 0,
+    fallbackSupply: 5_555,
+    isNFT: true,
+  },
 ];
 
 const TOKEN_BY_ADDRESS = new Map(TOKENS.map((t) => [t.address, t]));
@@ -76,12 +151,30 @@ const liveDecimals = new Map<string, number>();
 
 // ─── ABIs for on-chain queries ─────────────────────────────────
 const erc20Abi = [
-  { name: "decimals", type: "function", inputs: [], outputs: [{ type: "uint8" }], stateMutability: "view" },
-  { name: "totalSupply", type: "function", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
+  {
+    name: "decimals",
+    type: "function",
+    inputs: [],
+    outputs: [{ type: "uint8" }],
+    stateMutability: "view",
+  },
+  {
+    name: "totalSupply",
+    type: "function",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+    stateMutability: "view",
+  },
 ] as const;
 
 const erc721Abi = [
-  { name: "totalSupply", type: "function", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
+  {
+    name: "totalSupply",
+    type: "function",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+    stateMutability: "view",
+  },
 ] as const;
 
 // ─── Helpers ───────────────────────────────────────────────────
@@ -103,22 +196,40 @@ async function fetchLiveTokenData(baseClient: any, ethClient: any) {
 
     try {
       if (token.isNFT) {
-        const supply = await client.readContract({ address: addr, abi: erc721Abi, functionName: "totalSupply" });
+        const supply = await client.readContract({
+          address: addr,
+          abi: erc721Abi,
+          functionName: "totalSupply",
+        });
         liveSupplies.set(addr, Number(supply));
         liveDecimals.set(addr, 0);
-        console.log(`   ${token.name.padEnd(6)} supply=${Number(supply)} (NFT)`);
+        console.log(
+          `   ${token.name.padEnd(6)} supply=${Number(supply)} (NFT)`,
+        );
       } else {
         const [decimals, rawSupply] = await Promise.all([
-          client.readContract({ address: addr, abi: erc20Abi, functionName: "decimals" }),
-          client.readContract({ address: addr, abi: erc20Abi, functionName: "totalSupply" }),
+          client.readContract({
+            address: addr,
+            abi: erc20Abi,
+            functionName: "decimals",
+          }),
+          client.readContract({
+            address: addr,
+            abi: erc20Abi,
+            functionName: "totalSupply",
+          }),
         ]);
         const humanSupply = Number(formatUnits(rawSupply, decimals));
         liveSupplies.set(addr, humanSupply);
         liveDecimals.set(addr, decimals);
-        console.log(`   ${token.name.padEnd(6)} decimals=${decimals} supply=${humanSupply.toLocaleString()}`);
+        console.log(
+          `   ${token.name.padEnd(6)} decimals=${decimals} supply=${humanSupply.toLocaleString()}`,
+        );
       }
     } catch (err) {
-      console.warn(`   ${token.name.padEnd(6)} RPC failed, using fallback: ${(err as Error).message?.slice(0, 60)}`);
+      console.warn(
+        `   ${token.name.padEnd(6)} RPC failed, using fallback: ${(err as Error).message?.slice(0, 60)}`,
+      );
       liveSupplies.set(addr, token.fallbackSupply);
       liveDecimals.set(addr, token.decimals);
     }
@@ -143,7 +254,9 @@ async function fetchBaseTransferLogs(client: any): Promise<TransferEvent[]> {
   const addresses = BASE_TOKENS.map((t) => t.address);
   const totalCalls = Math.ceil((headBlock - earliestBlock) / BLOCK_RANGE);
 
-  console.log(`   Base: blocks ${earliestBlock.toLocaleString()} -> ${headBlock.toLocaleString()} (${totalCalls.toLocaleString()} calls)`);
+  console.log(
+    `   Base: blocks ${earliestBlock.toLocaleString()} -> ${headBlock.toLocaleString()} (${totalCalls.toLocaleString()} calls)`,
+  );
 
   const allEvents: TransferEvent[] = [];
   let callsMade = 0;
@@ -164,13 +277,19 @@ async function fetchBaseTransferLogs(client: any): Promise<TransferEvent[]> {
         fromBlock: BigInt(range.from),
         toBlock: BigInt(range.to),
       });
-      return logs.map((log: { address: string; blockNumber: bigint; args: { from?: string; to?: string; value?: bigint } }) => ({
-        token: log.address.toLowerCase() as `0x${string}`,
-        from: (log.args.from!).toLowerCase(),
-        to: (log.args.to!).toLowerCase(),
-        value: log.args.value!,
-        blockNumber: log.blockNumber,
-      }));
+      return logs.map(
+        (log: {
+          address: string;
+          blockNumber: bigint;
+          args: { from?: string; to?: string; value?: bigint };
+        }) => ({
+          token: log.address.toLowerCase() as `0x${string}`,
+          from: log.args.from!.toLowerCase(),
+          to: log.args.to!.toLowerCase(),
+          value: log.args.value!,
+          blockNumber: log.blockNumber,
+        }),
+      );
     });
 
     const results = await Promise.all(promises);
@@ -180,13 +299,17 @@ async function fetchBaseTransferLogs(client: any): Promise<TransferEvent[]> {
 
     callsMade += batch.length;
     if (callsMade % 100 === 0 || callsMade === ranges.length) {
-      process.stdout.write(`\r   Base: ${callsMade}/${totalCalls} calls, ${allEvents.length.toLocaleString()} events`);
+      process.stdout.write(
+        `\r   Base: ${callsMade}/${totalCalls} calls, ${allEvents.length.toLocaleString()} events`,
+      );
     }
 
     if (i + MAX_CONCURRENT < ranges.length) await sleep(DELAY_MS);
   }
 
-  console.log(`\r   Base: ${callsMade}/${totalCalls} calls, ${allEvents.length.toLocaleString()} events total${"".padEnd(20)}`);
+  console.log(
+    `\r   Base: ${callsMade}/${totalCalls} calls, ${allEvents.length.toLocaleString()} events total${"".padEnd(20)}`,
+  );
   return allEvents;
 }
 
@@ -195,7 +318,9 @@ async function fetchEthTransferLogs(client: any): Promise<TransferEvent[]> {
   const headBlock = Number(await client.getBlockNumber());
   const totalCalls = Math.ceil((headBlock - jbc.deployBlock) / ETH_BLOCK_RANGE);
 
-  console.log(`   Ethereum: blocks ${jbc.deployBlock.toLocaleString()} -> ${headBlock.toLocaleString()} (${totalCalls.toLocaleString()} calls)`);
+  console.log(
+    `   Ethereum: blocks ${jbc.deployBlock.toLocaleString()} -> ${headBlock.toLocaleString()} (${totalCalls.toLocaleString()} calls)`,
+  );
 
   const allEvents: TransferEvent[] = [];
   let callsMade = 0;
@@ -215,13 +340,19 @@ async function fetchEthTransferLogs(client: any): Promise<TransferEvent[]> {
         fromBlock: BigInt(range.from),
         toBlock: BigInt(range.to),
       });
-      return logs.map((log: { address: string; blockNumber: bigint; args: { from?: string; to?: string } }) => ({
-        token: log.address.toLowerCase() as `0x${string}`,
-        from: (log.args.from!).toLowerCase(),
-        to: (log.args.to!).toLowerCase(),
-        value: 1n, // NFT: each transfer = 1 unit
-        blockNumber: log.blockNumber,
-      }));
+      return logs.map(
+        (log: {
+          address: string;
+          blockNumber: bigint;
+          args: { from?: string; to?: string };
+        }) => ({
+          token: log.address.toLowerCase() as `0x${string}`,
+          from: log.args.from!.toLowerCase(),
+          to: log.args.to!.toLowerCase(),
+          value: 1n, // NFT: each transfer = 1 unit
+          blockNumber: log.blockNumber,
+        }),
+      );
     });
 
     const results = await Promise.all(promises);
@@ -231,13 +362,17 @@ async function fetchEthTransferLogs(client: any): Promise<TransferEvent[]> {
 
     callsMade += batch.length;
     if (callsMade % 50 === 0 || callsMade === ranges.length) {
-      process.stdout.write(`\r   Ethereum: ${callsMade}/${totalCalls} calls, ${allEvents.length.toLocaleString()} events`);
+      process.stdout.write(
+        `\r   Ethereum: ${callsMade}/${totalCalls} calls, ${allEvents.length.toLocaleString()} events`,
+      );
     }
 
     if (i + MAX_CONCURRENT < ranges.length) await sleep(DELAY_MS);
   }
 
-  console.log(`\r   Ethereum: ${callsMade}/${totalCalls} calls, ${allEvents.length.toLocaleString()} events total${"".padEnd(20)}`);
+  console.log(
+    `\r   Ethereum: ${callsMade}/${totalCalls} calls, ${allEvents.length.toLocaleString()} events total${"".padEnd(20)}`,
+  );
   return allEvents;
 }
 
@@ -250,13 +385,17 @@ const BASE_ANCHOR_TS = 1733201093;
 const BASE_BLOCK_TIME = 2; // seconds
 
 function estimateBaseTimestamp(blockNumber: bigint): number {
-  return BASE_ANCHOR_TS + Number(blockNumber - BASE_ANCHOR_BLOCK) * BASE_BLOCK_TIME;
+  return (
+    BASE_ANCHOR_TS + Number(blockNumber - BASE_ANCHOR_BLOCK) * BASE_BLOCK_TIME
+  );
 }
 
 function applyBaseTimestamps(events: TransferEvent[]): void {
   const uniqueBlocks = new Set<bigint>();
   for (const e of events) uniqueBlocks.add(e.blockNumber);
-  console.log(`   Base: calculating timestamps for ${uniqueBlocks.size.toLocaleString()} unique blocks (2s block time)`);
+  console.log(
+    `   Base: calculating timestamps for ${uniqueBlocks.size.toLocaleString()} unique blocks (2s block time)`,
+  );
   for (const e of events) {
     e.timestamp = estimateBaseTimestamp(e.blockNumber);
   }
@@ -272,7 +411,9 @@ async function resolveEthTimestamps(
   for (const e of events) uniqueBlocks.add(e.blockNumber);
 
   const blockNumbers = [...uniqueBlocks].sort((a, b) => (a < b ? -1 : 1));
-  console.log(`   Ethereum: resolving ${blockNumbers.length.toLocaleString()} unique block timestamps via RPC...`);
+  console.log(
+    `   Ethereum: resolving ${blockNumbers.length.toLocaleString()} unique block timestamps via RPC...`,
+  );
 
   const blockTimestamps = new Map<bigint, number>();
   let resolved = 0;
@@ -291,13 +432,17 @@ async function resolveEthTimestamps(
 
     resolved += batch.length;
     if (resolved % 200 === 0 || resolved === blockNumbers.length) {
-      process.stdout.write(`\r   Ethereum: ${resolved}/${blockNumbers.length.toLocaleString()} blocks resolved`);
+      process.stdout.write(
+        `\r   Ethereum: ${resolved}/${blockNumbers.length.toLocaleString()} blocks resolved`,
+      );
     }
 
     if (i + MAX_CONCURRENT < blockNumbers.length) await sleep(DELAY_MS);
   }
 
-  console.log(`\r   Ethereum: ${resolved}/${blockNumbers.length.toLocaleString()} blocks resolved${"".padEnd(20)}`);
+  console.log(
+    `\r   Ethereum: ${resolved}/${blockNumbers.length.toLocaleString()} blocks resolved${"".padEnd(20)}`,
+  );
 
   for (const e of events) {
     e.timestamp = blockTimestamps.get(e.blockNumber)!;
@@ -354,7 +499,7 @@ function buildBalanceHistory(events: TransferEvent[]): BalanceHistory {
 function calculateTWAB(
   snapshots: { timestamp: number; balance: bigint }[],
   deployTimestamp: number,
-  nowTimestamp: number
+  nowTimestamp: number,
 ): number {
   if (snapshots.length === 0) return 0;
 
@@ -366,7 +511,8 @@ function calculateTWAB(
   for (let i = 0; i < snapshots.length; i++) {
     const balance = Number(snapshots[i].balance);
     const start = snapshots[i].timestamp;
-    const end = i < snapshots.length - 1 ? snapshots[i + 1].timestamp : nowTimestamp;
+    const end =
+      i < snapshots.length - 1 ? snapshots[i + 1].timestamp : nowTimestamp;
     const duration = end - start;
 
     if (duration > 0 && balance > 0) {
@@ -387,9 +533,11 @@ async function main() {
   const scriptStart = Date.now();
   const now = Math.floor(Date.now() / 1000);
 
-  console.log("=== Jungle Bay Island — Direct Indexer + Heat Calculator ===");
+  console.log("=== Memetics— Direct Indexer + Heat Calculator ===");
   console.log(`   Timestamp: ${new Date().toISOString()}`);
-  console.log(`   Tokens: ${TOKENS.length} (${BASE_TOKENS.length} Base ERC-20, ${ETH_TOKENS.length} Ethereum ERC-721)\n`);
+  console.log(
+    `   Tokens: ${TOKENS.length} (${BASE_TOKENS.length} Base ERC-20, ${ETH_TOKENS.length} Ethereum ERC-721)\n`,
+  );
 
   // ── Create RPC clients ──
   const baseClient = createPublicClient({
@@ -414,7 +562,9 @@ async function main() {
   ]);
 
   const totalEvents = baseEvents.length + ethEvents.length;
-  console.log(`\n   Total: ${totalEvents.toLocaleString()} Transfer events fetched in ${elapsed(fetchStart)}s\n`);
+  console.log(
+    `\n   Total: ${totalEvents.toLocaleString()} Transfer events fetched in ${elapsed(fetchStart)}s\n`,
+  );
 
   // ── Step 3: Resolve block timestamps ──
   console.log("Resolving block timestamps...\n");
@@ -434,7 +584,9 @@ async function main() {
   const allEvents = [...baseEvents, ...ethEvents];
   const history = buildBalanceHistory(allEvents);
 
-  console.log(`   ${history.size.toLocaleString()} wallet-token pairs built in ${elapsed(buildStart)}s\n`);
+  console.log(
+    `   ${history.size.toLocaleString()} wallet-token pairs built in ${elapsed(buildStart)}s\n`,
+  );
 
   // ── Step 5: Calculate Heat ──
   console.log("Calculating TWAB and Heat degrees...\n");
@@ -451,16 +603,22 @@ async function main() {
     const config = TOKEN_BY_ADDRESS.get(token);
     processed++;
 
-    if (!config) { skipped++; continue; }
+    if (!config) {
+      skipped++;
+      continue;
+    }
 
     const supply = liveSupplies.get(token) ?? config.fallbackSupply;
     const decimals = liveDecimals.get(token) ?? config.decimals;
 
     const twab = calculateTWAB(snapshots, config.deployTimestamp, now);
-    const normalizedTwab = decimals > 0 ? twab / (10 ** decimals) : twab;
+    const normalizedTwab = decimals > 0 ? twab / 10 ** decimals : twab;
     const degrees = calculateHeatDegrees(normalizedTwab, supply);
 
-    if (degrees < 0.01) { skipped++; continue; }
+    if (degrees < 0.01) {
+      skipped++;
+      continue;
+    }
 
     if (!walletHeats.has(wallet)) walletHeats.set(wallet, new Map());
     walletHeats.get(wallet)!.set(token, degrees);
@@ -468,11 +626,15 @@ async function main() {
 
     if (processed % 10_000 === 0) {
       const pct = ((processed / history.size) * 100).toFixed(1);
-      process.stdout.write(`\r   ${pct}% (${processed.toLocaleString()}/${history.size.toLocaleString()}) | ${withHeat.toLocaleString()} with heat`);
+      process.stdout.write(
+        `\r   ${pct}% (${processed.toLocaleString()}/${history.size.toLocaleString()}) | ${withHeat.toLocaleString()} with heat`,
+      );
     }
   }
 
-  console.log(`\r   Done: ${processed.toLocaleString()} pairs, ${withHeat.toLocaleString()} with heat, ${skipped.toLocaleString()} skipped (${elapsed(calcStart)}s)${"".padEnd(20)}\n`);
+  console.log(
+    `\r   Done: ${processed.toLocaleString()} pairs, ${withHeat.toLocaleString()} with heat, ${skipped.toLocaleString()} skipped (${elapsed(calcStart)}s)${"".padEnd(20)}\n`,
+  );
 
   // ── Step 6: Calculate Island Heat (sum of per-token heats) ──
   type WalletResult = {
@@ -529,7 +691,13 @@ async function main() {
   await sql`TRUNCATE ${sql(SCHEMA)}.heat_precalculated`;
 
   // Flatten all rows
-  const rows: { wallet: string; token: string; token_name: string; heat_degrees: number; island_heat: number }[] = [];
+  const rows: {
+    wallet: string;
+    token: string;
+    token_name: string;
+    heat_degrees: number;
+    island_heat: number;
+  }[] = [];
   for (const result of results) {
     for (const tkn of result.tokenBreakdown) {
       rows.push({
@@ -550,10 +718,14 @@ async function main() {
       INSERT INTO ${sql(SCHEMA)}.heat_precalculated ${sql(batch, "wallet", "token", "token_name", "heat_degrees", "island_heat")}
     `;
     if ((i / BATCH_SIZE) % 10 === 0 || i + BATCH_SIZE >= rows.length) {
-      process.stdout.write(`\r   Inserted ${Math.min(i + BATCH_SIZE, rows.length).toLocaleString()}/${rows.length.toLocaleString()} rows...`);
+      process.stdout.write(
+        `\r   Inserted ${Math.min(i + BATCH_SIZE, rows.length).toLocaleString()}/${rows.length.toLocaleString()} rows...`,
+      );
     }
   }
-  console.log(`\r   Inserted ${rows.length.toLocaleString()} rows for ${results.length.toLocaleString()} wallets in ${elapsed(writeStart)}s${"".padEnd(20)}\n`);
+  console.log(
+    `\r   Inserted ${rows.length.toLocaleString()} rows for ${results.length.toLocaleString()} wallets in ${elapsed(writeStart)}s${"".padEnd(20)}\n`,
+  );
 
   // ── Step 8: Print summary ──
   console.log("===================================================");
@@ -565,7 +737,9 @@ async function main() {
     const tokens = r.tokenBreakdown
       .map((t) => `${t.name}:${t.degrees.toFixed(1)}`)
       .join(" ");
-    console.log(`  ${r.islandHeat.toFixed(1).padStart(7)}  ${short}  ${tokens}`);
+    console.log(
+      `  ${r.islandHeat.toFixed(1).padStart(7)}  ${short}  ${tokens}`,
+    );
   }
 
   // Tier breakdown
@@ -586,7 +760,9 @@ async function main() {
   console.log(`\n  Total script time: ${elapsed(scriptStart)}s\n`);
 
   await sql.end();
-  console.log("Done. Run resolve-farcaster.ts next to update Farcaster profiles.\n");
+  console.log(
+    "Done. Run resolve-farcaster.ts next to update Farcaster profiles.\n",
+  );
 }
 
 main().catch((err) => {

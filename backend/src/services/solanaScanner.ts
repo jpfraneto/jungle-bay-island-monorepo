@@ -1,6 +1,8 @@
 import { CONFIG } from '../config'
 import { calculateHeatDegrees } from './heat'
 import { fetchSolanaTokenMetadata } from './solanaMetadata'
+import { fetchDexScreenerData } from './dexscreener'
+import { getBungalow } from '../db/queries'
 import { logInfo, logError } from './logger'
 import type { ScanResult } from './scanner'
 import { createHash } from 'crypto'
@@ -157,11 +159,30 @@ export async function scanSolanaToken(
 
   rpcCallsMade.count++
   const meta = await fetchSolanaTokenMetadata(tokenAddress)
-  const name = meta?.name ?? 'Unknown'
-  const symbol = meta?.symbol ?? 'UNKNOWN'
+  let name = meta?.name ?? null
+  let symbol = meta?.symbol ?? null
   const decimals = mintInfo.decimals
   const totalSupplyRaw = mintInfo.supply
   const totalSupply = Number(totalSupplyRaw) / (10 ** decimals)
+
+  // Fallback: check existing DB data, then DexScreener
+  const isPlaceholder = (v: string | null) => !v || v === 'UNKNOWN' || v === 'Unknown'
+  if (isPlaceholder(name) || isPlaceholder(symbol)) {
+    const existing = await getBungalow(tokenAddress, 'solana')
+    if (existing && !isPlaceholder(existing.name)) name = existing.name
+    if (existing && !isPlaceholder(existing.symbol)) symbol = existing.symbol
+  }
+  if (isPlaceholder(name) || isPlaceholder(symbol)) {
+    try {
+      const dex = await fetchDexScreenerData(tokenAddress, 'solana')
+      if (dex) {
+        if (isPlaceholder(name) && dex.tokenName) name = dex.tokenName
+        if (isPlaceholder(symbol) && dex.tokenSymbol) symbol = dex.tokenSymbol
+      }
+    } catch (_) {}
+  }
+  name = name ?? 'Unknown'
+  symbol = symbol ?? 'UNKNOWN'
 
   onProgress?.({ phase: 'metadata', pct: 10 })
   onLog?.(`Found ${name} ($${symbol})`)

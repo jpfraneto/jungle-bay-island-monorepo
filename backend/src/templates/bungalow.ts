@@ -1,9 +1,6 @@
 import { COLORS, BUNGALOW_CSS } from "./styles";
 import { renderClientScript } from "./client";
-import {
-  renderTopbarAuth,
-  renderMiniappEmbed,
-} from "./auth-ui";
+import { renderTopbarAuth, renderMiniappEmbed, renderMiniappSdk } from "./auth-ui";
 import type {
   BungalowRow,
   TokenHolderRow,
@@ -62,7 +59,7 @@ function chainLabel(chain: string): string {
 
 function chainSvg(chain: string, size = 16): string {
   if (chain === "base") {
-    return `<svg class="chain-icon" width="${size}" height="${size}" viewBox="0 0 111 111" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="55.5" cy="55.5" r="55.5" fill="#0052FF"/><path d="M55.4 93.5c20.9 0 37.9-17 37.9-37.9 0-20.9-17-37.9-37.9-37.9-19.7 0-35.9 15.1-37.7 34.3h50v7.2h-50C19.5 78.4 35.7 93.5 55.4 93.5z" fill="#fff"/></svg>`;
+    return `<svg class="chain-icon" width="${size}" height="${size}" viewBox="0 0 249 249" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M0 19.671C0 12.9332 0 9.56425 1.26956 6.97276C2.48511 4.49151 4.49151 2.48511 6.97276 1.26956C9.56425 0 12.9332 0 19.671 0H229.329C236.067 0 239.436 0 242.027 1.26956C244.508 2.48511 246.515 4.49151 247.73 6.97276C249 9.56425 249 12.9332 249 19.671V229.329C249 236.067 249 239.436 247.73 242.027C246.515 244.508 244.508 246.515 242.027 247.73C239.436 249 236.067 249 229.329 249H19.671C12.9332 249 9.56425 249 6.97276 247.73C4.49151 246.515 2.48511 244.508 1.26956 242.027C0 239.436 0 236.067 0 229.329V19.671Z" fill="#0000FF"/></svg>`;
   }
   if (chain === "solana") {
     return `<svg class="chain-icon" width="${size}" height="${size}" viewBox="0 0 397 312" xmlns="http://www.w3.org/2000/svg"><linearGradient id="sg" x1="360" y1="350" x2="40" y2="-30" gradientUnits="userSpaceOnUse"><stop stop-color="#00FFA3"/><stop offset="1" stop-color="#DC1FFF"/></linearGradient><path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1l62.7-62.7z" fill="url(#sg)"/><path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#sg)"/><path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#sg)"/></svg>`;
@@ -111,11 +108,11 @@ function renderWalletChoice(): string {
   return `<div class="wallet-choice" style="display:none">
     <button class="wallet-choice-btn pay-base-btn">
       <span class="wallet-choice-icon">&#x26D3;</span>
-      Pay with Base (MetaMask)
+      Base USDC (EVM Wallet)
     </button>
     <button class="wallet-choice-btn pay-solana-btn">
       <span class="wallet-choice-icon">&#x2600;</span>
-      Pay with Solana (Phantom)
+      Solana USDC (Phantom)
     </button>
   </div>`;
 }
@@ -199,6 +196,7 @@ export function renderBungalow(data: BungalowPageData): string {
       <span class="topbar-ca" id="copy-ca" title="Click to copy">${shortAddr(data.tokenAddress)}</span>
       <span class="topbar-chain">${chainSvg(data.chain)}</span>
       <div class="topbar-right">
+        <button id="share-btn" class="topbar-icon-btn" title="Share"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg></button>
         ${renderTopbarAuth()}
       </div>
     </header>
@@ -236,6 +234,7 @@ export function renderBungalow(data: BungalowPageData): string {
 
   <a href="https://x.com/jpfraneto" target="_blank" rel="noopener" class="beta-banner">this app is in BETA. contact @jpfraneto for support</a>
   ${renderClientScript()}
+  ${renderMiniappSdk()}
 </body>
 </html>`;
 }

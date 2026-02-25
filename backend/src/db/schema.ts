@@ -140,3 +140,26 @@ export interface BungalowWidgetInstallRow {
   installed_by: string
   installed_at: string
 }
+
+export interface BungalowItemRow {
+  id: number
+  token_address: string
+  chain: 'base' | 'ethereum' | 'solana'
+  item_type: 'link' | 'image' | 'frame' | 'portal'
+  content: unknown
+  placed_by: string
+  tx_hash: string
+  jbm_amount: string
+  created_at: string
+}
+
+export interface ClaimHistoryRow {
+  id: number
+  wallet: string
+  token_address: string
+  chain: 'base' | 'ethereum' | 'solana'
+  amount: string
+  nonce: number
+  signature: string
+  claimed_at: string
+}

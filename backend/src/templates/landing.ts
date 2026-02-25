@@ -166,35 +166,35 @@ const PASTE_SCRIPT = `
     setStatus('Checking token...', 'checking');
     pasteBtn.disabled = true;
 
-    try {
-      var resp = await fetch('https://api.dexscreener.com/latest/dex/tokens/' + addr);
-      var data = await resp.json();
+    // Try DexScreener v1 API (chain-specific) — try detected chain first, then others
+    var chainsToTry = chain === 'solana' ? ['solana'] : ['base', 'ethereum'];
+    var found = false;
 
-      if (data.pairs && data.pairs.length > 0) {
-        // Valid token — detect chain from DexScreener data if possible
-        var pair = data.pairs[0];
-        if (pair.chainId === 'solana') chain = 'solana';
-        else if (pair.chainId === 'base') chain = 'base';
-        else if (pair.chainId === 'ethereum') chain = 'ethereum';
+    for (var i = 0; i < chainsToTry.length; i++) {
+      try {
+        var resp = await fetch('https://api.dexscreener.com/tokens/v1/' + chainsToTry[i] + '/' + addr);
+        if (resp.ok) {
+          var pairs = await resp.json();
+          if (Array.isArray(pairs) && pairs.length > 0) {
+            chain = chainsToTry[i];
+            found = true;
+            break;
+          }
+        }
+      } catch(e) {}
+    }
 
-        setStatus('Token found! Redirecting...', 'success');
-        setTimeout(function() {
-          window.location.href = '/' + chain + '/' + addr;
-        }, 300);
-        return;
-      }
-
+    if (found) {
+      setStatus('Token found! Redirecting...', 'success');
+      setTimeout(function() {
+        window.location.href = '/' + chain + '/' + addr;
+      }, 300);
+    } else {
       // DexScreener didn't find it — try going anyway (might be unscanned)
-      setStatus('Token not listed on DexScreener. Loading anyway...', 'checking');
+      setStatus('Token not on DexScreener. Loading anyway...', 'checking');
       setTimeout(function() {
         window.location.href = '/' + chain + '/' + addr;
       }, 800);
-    } catch(e) {
-      // API failed — go anyway with regex-detected chain
-      setStatus('Could not verify token. Loading...', 'checking');
-      setTimeout(function() {
-        window.location.href = '/' + chain + '/' + addr;
-      }, 500);
     }
   }
 
@@ -280,6 +280,7 @@ export function renderLanding(recentScans: RecentScanRow[] = []): string {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" type="image/svg+xml" href="/logo.svg" />
   <title>Memetics \u2014 the home for your token</title>
   <meta name="description" content="The home for your token. Claim your bungalow." />
   <meta property="og:title" content="Memetics \u2014 the home for your token" />
@@ -321,6 +322,7 @@ export function renderInvalidToken(
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" type="image/svg+xml" href="/logo.svg" />
   <title>Not a valid token \u2014 Memetics</title>
   <style>${LANDING_CSS}</style>
 </head>
@@ -356,6 +358,7 @@ export function renderLoginPage(): string {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" type="image/svg+xml" href="/logo.svg" />
   <title>Login \u2014 Memetics</title>
   <style>${LANDING_CSS}
     .login-card {
@@ -425,28 +428,23 @@ export function renderLoginPage(): string {
   <div class="wrap">
 
     <div class="login-card">
-      <h2>How to log in</h2>
+      <h2>How to use Memetics</h2>
 
       <div class="login-step">
-        <span class="login-step-num">1</span>
         <div>
-          Open
+          Mobile: Open
           <a href="https://memetics.lat" id="memetics-login-link" class="login-copy-link">memetics.lat</a>
           in your wallet's built-in browser. Your wallet connects automatically \u2014 no popups, no seed phrases.
           <span id="memetics-login-msg" class="login-copy-msg"></span>
         </div>
-      </div>
-
-      <div class="login-step" style="margin-top:20px">
-        <span class="login-step-num">2</span>
-        <div>Browse any bungalow and your wallet address will appear in the top bar. That's it \u2014 you're logged in.</div>
+        <div>Desktop: Install a browser extension like Rainbow or Phantom and visit any bungalow. Your last connected wallet is your identity on it.</div>
       </div>
 
       <div class="login-divider">or</div>
 
       <div id="wallet-section">
         <div class="login-desktop">
-          On <strong>desktop</strong>, install a browser extension like MetaMask or Phantom and visit any bungalow. Your connected wallet is your identity.
+          On <strong>desktop</strong>, install a browser extension like Rainbow or Phantom and visit any bungalow. Your connected wallet is your identity.
         </div>
       </div>
     </div>
@@ -571,6 +569,7 @@ export function render404(): string {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" type="image/svg+xml" href="/logo.svg" />
   <title>404 \u2014 Memetics</title>
   <style>${LANDING_CSS}</style>
 </head>

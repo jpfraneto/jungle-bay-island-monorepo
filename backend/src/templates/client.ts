@@ -5,6 +5,19 @@ export function renderClientScript(): string {
 (function() {
   var D = window.__DATA__ || {};
 
+  // ── Helper: get best EVM provider ──
+  // Only use Farcaster miniapp provider when actually inside a miniapp frame;
+  // otherwise prefer the injected browser wallet (Rainbow, MetaMask, etc.)
+  function getEvmProvider() {
+    var isMiniApp = !!(window.FarcasterMiniApp || (window.parent !== window && window.__FC_PROVIDER__));
+    if (isMiniApp) {
+      var fc = window.__FC_PROVIDER__;
+      if (fc && typeof fc.request === 'function') return fc;
+    }
+    if (window.ethereum && typeof window.ethereum.request === 'function') return window.ethereum;
+    return null;
+  }
+
   // ── Passive wallet detection (no popup) ──
   (function() {
     var display = document.getElementById('wallet-display');
@@ -17,18 +30,27 @@ export function renderClientScript(): string {
       display.title = addr;
     }
 
-    // EVM: passive check (no connect popup)
-    if (window.ethereum) {
-      window.ethereum.request({ method: 'eth_accounts' }).then(function(accts) {
+    function tryEvmPassive(provider) {
+      if (!provider) return;
+      provider.request({ method: 'eth_accounts' }).then(function(accts) {
         if (accts && accts.length > 0) show(accts[0]);
       }).catch(function() {});
     }
+
+    // EVM: passive check (no connect popup) — try Farcaster provider first, then injected
+    tryEvmPassive(getEvmProvider());
+
     // Solana: Phantom embedded browser exposes publicKey immediately
     if (window.phantom && window.phantom.solana && window.phantom.solana.publicKey) {
       show(window.phantom.solana.publicKey.toString());
     } else if (window.solflare && window.solflare.publicKey) {
       show(window.solflare.publicKey.toString());
     }
+
+    // Farcaster miniapp SDK loads async — handle late arrival
+    window.__onFcProvider = function(provider) {
+      tryEvmPassive(provider);
+    };
   })();
 
   // ── Tab switching ──
@@ -608,17 +630,45 @@ export function renderClientScript(): string {
     });
   }
 
+  // ── Share button ──
+  var shareBtn = document.getElementById('share-btn');
+  if (shareBtn) {
+    shareBtn.addEventListener('click', function() {
+      var url = window.location.href;
+      var title = D.name ? D.name + ' ($' + D.symbol + ')' : 'Check this token on Memetics';
+      if (navigator.share) {
+        navigator.share({ title: title, url: url }).catch(function() {});
+      } else {
+        navigator.clipboard.writeText(url).then(function() {
+          shareBtn.title = 'Link copied!';
+          setTimeout(function() { shareBtn.title = 'Share'; }, 1500);
+        }).catch(function() {});
+      }
+    });
+  }
+
   // ── Show update form only if connected wallet matches owner ──
   var ownerForm = document.getElementById('owner-update-form');
   if (ownerForm && D.ownerWallet) {
-    // Check if EVM wallet matches owner
-    if (window.ethereum) {
-      window.ethereum.request({ method: 'eth_accounts' }).then(function(accounts) {
+    // Check if EVM wallet matches owner (Farcaster miniapp or injected)
+    var ownerProvider = getEvmProvider();
+    if (ownerProvider) {
+      ownerProvider.request({ method: 'eth_accounts' }).then(function(accounts) {
         if (accounts && accounts.length > 0 && accounts[0].toLowerCase() === D.ownerWallet.toLowerCase()) {
           ownerForm.style.display = 'block';
         }
       }).catch(function() {});
     }
+    // Handle late Farcaster provider arrival
+    var origOnFc = window.__onFcProvider;
+    window.__onFcProvider = function(provider) {
+      if (origOnFc) origOnFc(provider);
+      provider.request({ method: 'eth_accounts' }).then(function(accounts) {
+        if (accounts && accounts.length > 0 && accounts[0].toLowerCase() === D.ownerWallet.toLowerCase()) {
+          ownerForm.style.display = 'block';
+        }
+      }).catch(function() {});
+    };
   }
 
   // ── Recently visited bungalows (localStorage) ──
@@ -689,21 +739,36 @@ export function renderClientScript(): string {
 
   // ── payEvmUsdc: connect wallet → switch to Base → send ERC20 transfer → poll receipt ──
   async function payEvmUsdc() {
-    if (!window.ethereum) throw new Error('No EVM wallet detected. Install MetaMask.');
+    var evmProvider = getEvmProvider();
+    console.log('[payEvmUsdc] provider:', evmProvider ? 'found' : 'null', 'isPhantom:', !!(evmProvider && evmProvider.isPhantom), 'isMetaMask:', !!(evmProvider && evmProvider.isMetaMask));
+    if (!evmProvider) throw new Error('No EVM wallet detected. Install an EVM one.');
 
-    var accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-    if (!accounts || accounts.length === 0) throw new Error('No accounts');
+    var accounts;
+    try {
+      accounts = await evmProvider.request({ method: 'eth_requestAccounts' });
+    } catch(connectErr) {
+      console.error('[payEvmUsdc] eth_requestAccounts error:', connectErr, typeof connectErr);
+      var rawMsg = (connectErr && connectErr.message) ? connectErr.message : '';
+      if (rawMsg.includes('User denied') || rawMsg.includes('rejected')) {
+        throw new Error('Wallet connection cancelled.');
+      }
+      throw new Error('EVM wallet failed to connect. Make sure you have MetaMask or a compatible EVM wallet, or use the Solana option instead.');
+    }
+    console.log('[payEvmUsdc] accounts:', accounts);
+    if (!accounts || accounts.length === 0) throw new Error('No accounts returned from wallet');
     var from = accounts[0];
 
     // Switch to Base (chain 8453 = 0x2105)
     try {
-      await window.ethereum.request({
+      await evmProvider.request({
         method: 'wallet_switchEthereumChain',
         params: [{ chainId: '0x2105' }]
       });
+      console.log('[payEvmUsdc] switched to Base');
     } catch (switchErr) {
-      if (switchErr.code === 4902) {
-        await window.ethereum.request({
+      console.log('[payEvmUsdc] switch error:', switchErr);
+      if (switchErr && switchErr.code === 4902) {
+        await evmProvider.request({
           method: 'wallet_addEthereumChain',
           params: [{
             chainId: '0x2105',
@@ -714,23 +779,26 @@ export function renderClientScript(): string {
           }]
         });
       } else {
-        throw switchErr;
+        var switchMsg = (switchErr && switchErr.message) ? switchErr.message : 'Failed to switch to Base network';
+        throw new Error(switchMsg);
       }
     }
 
     // Check USDC balance before sending
     try {
       var balData = '0x70a08231' + from.slice(2).toLowerCase().padStart(64, '0');
-      var balHex = await window.ethereum.request({
+      var balHex = await evmProvider.request({
         method: 'eth_call',
         params: [{ to: USDC_ADDR, data: balData }, 'latest']
       });
+      console.log('[payEvmUsdc] balance hex:', balHex);
       var balance = BigInt(balHex);
       if (balance < BigInt('0x' + CLAIM_AMOUNT)) {
         throw new Error('Insufficient USDC balance on Base');
       }
     } catch(e) {
-      if (e.message.includes('Insufficient')) throw e;
+      console.log('[payEvmUsdc] balance check error:', e);
+      if (e && e.message && e.message.includes('Insufficient')) throw e;
       // If balance check fails, proceed anyway — wallet will reject if insufficient
     }
 
@@ -739,14 +807,23 @@ export function renderClientScript(): string {
       + TREASURY.slice(2).toLowerCase().padStart(64, '0')
       + CLAIM_AMOUNT.padStart(64, '0');
 
-    var txHash = await window.ethereum.request({
-      method: 'eth_sendTransaction',
-      params: [{
-        from: from,
-        to: USDC_ADDR,
-        data: transferData,
-      }]
-    });
+    console.log('[payEvmUsdc] sending tx from:', from);
+    var txHash;
+    try {
+      txHash = await evmProvider.request({
+        method: 'eth_sendTransaction',
+        params: [{
+          from: from,
+          to: USDC_ADDR,
+          data: transferData,
+        }]
+      });
+    } catch(txErr) {
+      console.error('[payEvmUsdc] eth_sendTransaction error:', txErr, typeof txErr);
+      var txMsg = (txErr && txErr.message) ? txErr.message : 'Transaction failed';
+      throw new Error(txMsg);
+    }
+    console.log('[payEvmUsdc] txHash:', txHash);
 
     // Wallet accepted the tx — return immediately, backend will verify on-chain
     return { proof: txHash, from: from, chain: 'base' };
@@ -850,11 +927,11 @@ export function renderClientScript(): string {
   // contextEl is the container near the button (to find the right wallet-choice)
   function payUsdc(statusFn, contextEl) {
     return new Promise(function(resolve, reject) {
-      var hasEvm = !!window.ethereum;
+      var hasEvm = !!getEvmProvider();
       var hasSolana = !!(window.phantom && window.phantom.solana) || !!window.solflare;
 
       if (!hasEvm && !hasSolana) {
-        reject(new Error('No wallet detected. Install MetaMask (Base) or Phantom (Solana).'));
+        reject(new Error('No wallet detected. Install Rainbow (EVM) or Phantom (Solana).'));
         return;
       }
 
@@ -969,7 +1046,8 @@ export function renderClientScript(): string {
       if (logsEl) {
         for (var li = lastLogCount; li < logs.length; li++) {
           var entry = document.createElement('div');
-          entry.className = 'scan-log-entry';
+          var isLargeTokenMsg = logs[li].indexOf('You can close this page') !== -1;
+          entry.className = 'scan-log-entry' + (isLargeTokenMsg ? ' scan-log-highlight' : '');
           entry.textContent = logs[li];
           logsEl.appendChild(entry);
         }
@@ -1019,12 +1097,17 @@ export function renderClientScript(): string {
         'X-Payment-Proof': proof || '',
       },
     }).then(function(scanResp) {
+      var contentType = scanResp.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        throw new Error('Server error (' + scanResp.status + '). Please try again.');
+      }
       return scanResp.json().then(function(scanResult) {
         if (!scanResp.ok) {
+          var errMsg = (scanResult && scanResult.error) ? scanResult.error : 'Scan request failed';
           if (container) {
-            showScanError(container, scanResult.error || 'Scan request failed', btn);
+            showScanError(container, errMsg, btn);
           } else {
-            showError(statusEl, scanResult.error || 'Scan request failed');
+            showError(statusEl, errMsg);
             if (btn) { btn.disabled = false; btn.textContent = 'Retry Scan'; }
           }
           return;
@@ -1040,13 +1123,14 @@ export function renderClientScript(): string {
         var scanId = scanResult.scan_id;
         if (scanId) {
           var lastUpdate = Date.now();
-          var STALL_TIMEOUT = 120000; // 2 minutes with no progress change
+          var STALL_TIMEOUT = 300000; // 5 minutes with no progress change (large tokens need more time)
           var lastPct = -1;
           var lastDetail = null;
 
           var pollScan = setInterval(async function() {
             try {
               var sr = await fetch('/api/scan/' + scanId + '/status');
+              if (!sr.ok || !(sr.headers.get('content-type') || '').includes('application/json')) throw new Error('poll error');
               var sd = await sr.json();
               if (sd.status === 'complete') {
                 clearInterval(pollScan);
@@ -1118,8 +1202,9 @@ export function renderClientScript(): string {
         if (!from) {
           btn.textContent = 'Connecting wallet...';
           try {
-            if (window.ethereum) {
-              var accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+            var retryProvider = getEvmProvider();
+            if (retryProvider) {
+              var accounts = await retryProvider.request({ method: 'eth_requestAccounts' });
               from = accounts && accounts[0];
             }
           } catch(e) {}
@@ -1199,13 +1284,16 @@ export function renderClientScript(): string {
           }),
         });
 
+        if (!(resp.headers.get('content-type') || '').includes('application/json')) {
+          throw new Error('Server error (' + resp.status + '). Please try again.');
+        }
         var claimResult = await resp.json();
 
         if (resp.ok && claimResult.ok) {
           showClaim('Bungalow claimed! Reloading...', 'success');
           setTimeout(function() { window.location.reload(); }, 1500);
         } else {
-          showClaim(claimResult.error || 'Claim failed', 'error');
+          showClaim((claimResult && claimResult.error) || 'Claim failed', 'error');
           claimBtn.disabled = false;
           claimBtn.textContent = 'Claim Bungalow \\u2014 1 USDC';
         }

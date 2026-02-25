@@ -69,8 +69,10 @@ authRoute.get('/auth/twitter', async (c) => {
     code_challenge_method: 'S256',
   })
 
-  logInfo('AUTH', `twitter oauth redirect state=${state} return=${returnUrl}`)
-  return c.redirect(`https://twitter.com/i/oauth2/authorize?${params}`)
+  const redirectUrl = `https://twitter.com/i/oauth2/authorize?${params}`
+  logInfo('AUTH', `twitter oauth redirect state=${state} return=${returnUrl} callback=${callbackUrl} client_id=${CONFIG.TWITTER_CLIENT_ID}`)
+  logInfo('AUTH', `redirect url: ${redirectUrl}`)
+  return c.redirect(redirectUrl)
 })
 
 // GET /auth/callback — Twitter OAuth callback

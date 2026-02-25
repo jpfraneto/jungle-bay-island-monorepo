@@ -47,7 +47,7 @@ async function buildCurrentUserResponse(
   }
 }
 
-userRoute.get('/user/:wallet', async (c) => {
+userRoute.get('/wallet/:wallet', async (c) => {
   const wallet = normalizeAddress(c.req.param('wallet'))
   if (!wallet) {
     throw new ApiError(400, 'invalid_wallet', 'Invalid wallet address')

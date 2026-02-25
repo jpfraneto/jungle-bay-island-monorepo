@@ -7,6 +7,7 @@ import {
   getBungalowOwnerRecord,
   getTokenHeatDistribution,
   getTokenHolders,
+  getTokenRegistry,
   getViewerProfile,
   getWalletTokenHeat,
   updateBungalowCuration,
@@ -83,16 +84,22 @@ bungalowRoute.get("/bungalow/:chain/:ca", async (c) => {
   );
 
   // Fetch holders and heat distribution
-  const [holdersResult, heatDistribution] = await Promise.all([
+  const [holdersResult, heatDistribution, tokenRegistry] = await Promise.all([
     getTokenHolders(tokenAddress, 50, 0),
     getTokenHeatDistribution(tokenAddress),
+    getTokenRegistry(tokenAddress, chain),
   ]);
+
+  const decimals = tokenRegistry?.decimals ?? null;
+  const isNft = decimals === 0;
 
   const response: Record<string, unknown> = {
     token_address: tokenAddress,
     chain,
     name: bungalow.name,
     symbol: bungalow.symbol,
+    decimals,
+    is_nft: isNft,
     exists: true,
     is_claimed: bungalow.is_claimed ?? false,
     is_verified: bungalow.is_verified ?? false,

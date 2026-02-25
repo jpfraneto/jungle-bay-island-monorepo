@@ -116,8 +116,10 @@ tokenRoute.get('/token/:chain/:ca/holder/:wallet/history', async (c) => {
 
   // Fallback: for EVM tokens scanned before this feature, use Alchemy
   if (chain !== 'solana') {
-    logInfo('HOLDER HISTORY', `No DB snapshots, falling back to Alchemy live fetch`)
-    const result = await fetchHolderBalanceHistory(chain, tokenAddress, wallet)
+    const registryInfo = await getTokenRegistry(tokenAddress, chain)
+    const isNft = registryInfo?.decimals === 0
+    logInfo('HOLDER HISTORY', `No DB snapshots, falling back to Alchemy live fetch (isNft=${isNft})`)
+    const result = await fetchHolderBalanceHistory(chain, tokenAddress, wallet, isNft)
     logInfo('HOLDER HISTORY', `Alchemy fallback returned ${result.points.length} points in ${Date.now() - reqStart}ms`)
     return c.json(result)
   }

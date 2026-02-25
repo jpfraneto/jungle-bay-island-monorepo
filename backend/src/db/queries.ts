@@ -776,6 +776,7 @@ export async function getBungalowsDirectory(input: {
     name: string | null
     symbol: string | null
     holder_count: number
+    image_url: string | null
     is_claimed: boolean
     scan_status: string
   }>
@@ -787,6 +788,7 @@ export async function getBungalowsDirectory(input: {
     name: string | null
     symbol: string | null
     holder_count: number
+    image_url: string | null
     is_claimed: boolean
     scan_status: string
   }>>`
@@ -796,6 +798,7 @@ export async function getBungalowsDirectory(input: {
       COALESCE(b.name, tr.name) AS name,
       COALESCE(b.symbol, tr.symbol) AS symbol,
       tr.holder_count,
+      b.image_url,
       COALESCE(b.is_claimed, false) AS is_claimed,
       tr.scan_status
     FROM ${db(CONFIG.SCHEMA)}.token_registry tr

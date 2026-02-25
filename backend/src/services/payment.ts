@@ -41,12 +41,16 @@ async function ensureUsedTxTable(): Promise<void> {
 async function checkAndMarkTxUsed(txId: string, mintAddress: string): Promise<string | null> {
   await ensureUsedTxTable()
 
-  const existing = await db<{ tx_hash: string }[]>`
-    SELECT tx_hash FROM ${db(CONFIG.SCHEMA)}.used_tx_hashes
+  const existing = await db<{ tx_hash: string; mint_address: string }[]>`
+    SELECT tx_hash, mint_address FROM ${db(CONFIG.SCHEMA)}.used_tx_hashes
     WHERE tx_hash = ${txId}
     LIMIT 1
   `
   if (existing.length > 0) {
+    // Allow reuse if it's the same token (legitimate retry after failed scan)
+    if (existing[0].mint_address === mintAddress) {
+      return null
+    }
     return 'Transaction hash already used'
   }
 
@@ -67,13 +71,28 @@ export async function verifyEvmUsdcPayment(
   mintAddress: string,
   requiredAmountRaw: bigint = BUNGALOW_COST_RAW,
 ): Promise<{ valid: boolean; error?: string; from?: string }> {
-  const replayError = await checkAndMarkTxUsed(txHash, mintAddress)
-  if (replayError) return { valid: false, error: replayError }
-
   try {
-    const receipt = await publicClients.base.getTransactionReceipt({
-      hash: txHash as `0x${string}`,
-    })
+    // Retry loop: tx may not be indexed yet if just submitted
+    let receipt: any = null
+    for (let attempt = 0; attempt < 10; attempt++) {
+      try {
+        receipt = await publicClients.base.getTransactionReceipt({
+          hash: txHash as `0x${string}`,
+        })
+      } catch (e) {
+        // getTransactionReceipt throws if tx not found — treat as null
+        receipt = null
+      }
+      if (receipt) break
+      if (attempt < 9) {
+        logInfo('PAYMENT', `EVM tx=${txHash.slice(0, 10)}... not indexed yet, retry ${attempt + 1}/10`)
+        await new Promise(r => setTimeout(r, 3000))
+      }
+    }
+
+    if (!receipt) {
+      return { valid: false, error: 'Transaction not found after 30s — it may still be pending. Please retry.' }
+    }
 
     if (receipt.status !== 'success') {
       return { valid: false, error: 'Transaction failed or reverted' }
@@ -111,6 +130,10 @@ export async function verifyEvmUsdcPayment(
       const usdcAmount = Number(requiredAmountRaw) / 1_000_000
       return { valid: false, error: `No valid USDC transfer of >= $${usdcAmount.toFixed(2)} to treasury found in transaction` }
     }
+
+    // Mark tx as used only after successful verification (so retries work if verification fails)
+    const replayError = await checkAndMarkTxUsed(txHash, mintAddress)
+    if (replayError) return { valid: false, error: replayError }
 
     logInfo('PAYMENT', `verified EVM tx=${txHash.slice(0, 10)}... from=${fromAddress} for=${mintAddress}`)
     return { valid: true, from: fromAddress }
@@ -154,17 +177,23 @@ export async function verifySolanaUsdcPayment(
   mintAddress: string,
   requiredAmountRaw: bigint = BUNGALOW_COST_RAW,
 ): Promise<{ valid: boolean; error?: string; from?: string }> {
-  const replayError = await checkAndMarkTxUsed(txSignature, mintAddress)
-  if (replayError) return { valid: false, error: replayError }
-
   try {
-    const tx = await heliusRpc('getTransaction', [
-      txSignature,
-      { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 },
-    ])
+    // Retry loop: tx may not be indexed yet if just submitted
+    let tx: any = null
+    for (let attempt = 0; attempt < 10; attempt++) {
+      tx = await heliusRpc('getTransaction', [
+        txSignature,
+        { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 },
+      ])
+      if (tx) break
+      if (attempt < 9) {
+        logInfo('PAYMENT', `Solana tx=${txSignature.slice(0, 10)}... not indexed yet, retry ${attempt + 1}/10`)
+        await new Promise(r => setTimeout(r, 3000))
+      }
+    }
 
     if (!tx) {
-      return { valid: false, error: 'Transaction not found on Solana' }
+      return { valid: false, error: 'Transaction not found after 30s — it may still be pending. Please retry.' }
     }
 
     // Check tx succeeded
@@ -231,6 +260,10 @@ export async function verifySolanaUsdcPayment(
         if (fromAddress) break
       }
     }
+
+    // Mark tx as used only after successful verification (so retries work if verification fails)
+    const replayError = await checkAndMarkTxUsed(txSignature, mintAddress)
+    if (replayError) return { valid: false, error: replayError }
 
     logInfo('PAYMENT', `verified Solana tx=${txSignature.slice(0, 10)}... from=${fromAddress} for=${mintAddress} amount=$${(Number(increase) / 1_000_000).toFixed(2)}`)
     return { valid: true, from: fromAddress }

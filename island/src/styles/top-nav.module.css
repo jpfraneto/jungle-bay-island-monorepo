@@ -1,0 +1,102 @@
+.topNav {
+  height: 52px;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 16px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: linear-gradient(180deg, #12291a 0%, #0f2016 100%);
+}
+
+.left,
+.right {
+  display: flex;
+  align-items: center;
+}
+
+.right {
+  justify-content: flex-end;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-style: italic;
+  cursor: pointer;
+  padding: 0;
+}
+
+.palm {
+  font-size: 18px;
+}
+
+.menuButton {
+  display: none;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.03);
+  margin-right: 10px;
+  cursor: pointer;
+}
+
+.menuButton span {
+  display: block;
+  width: 16px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--text-primary);
+  margin: 4px auto;
+}
+
+.center {
+  justify-self: center;
+}
+
+.togglePill {
+  display: inline-flex;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+}
+
+.toggleItem {
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 6px 14px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.active {
+  background: rgba(46, 204, 113, 0.18);
+  color: var(--text-primary);
+}
+
+@media (max-width: 900px) {
+  .topNav {
+    grid-template-columns: auto 1fr auto;
+  }
+
+  .menuButton {
+    display: inline-block;
+  }
+
+  .center {
+    display: none;
+  }
+
+  .brand {
+    font-size: 20px;
+  }
+}

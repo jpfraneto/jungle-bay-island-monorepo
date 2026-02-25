@@ -235,22 +235,30 @@ async function main() {
 
   console.log(`   Seeded ${homeTeam.length} Home Team tokens`);
 
-  // ── 7. Backfill token_holder_heat from heat_precalculated ──
+  // ── 7. Backfill token_holder_heat from heat_precalculated (if exists) ──
   console.log("\n   Backfilling token_holder_heat from heat_precalculated...");
 
-  const backfillResult = await sql`
-    INSERT INTO ${sql(SCHEMA)}.token_holder_heat (token_address, wallet, heat_degrees, calculated_at)
-    SELECT token, wallet, heat_degrees, calculated_at
-    FROM ${sql(SCHEMA)}.heat_precalculated
-    ON CONFLICT (token_address, wallet) DO UPDATE SET
-      heat_degrees = EXCLUDED.heat_degrees,
-      calculated_at = EXCLUDED.calculated_at
-  `;
+  try {
+    await sql`
+      INSERT INTO ${sql(SCHEMA)}.token_holder_heat (token_address, wallet, heat_degrees, calculated_at)
+      SELECT token, wallet, heat_degrees, calculated_at
+      FROM ${sql(SCHEMA)}.heat_precalculated
+      ON CONFLICT (token_address, wallet) DO UPDATE SET
+        heat_degrees = EXCLUDED.heat_degrees,
+        calculated_at = EXCLUDED.calculated_at
+    `;
 
-  const backfillCount = await sql`
-    SELECT COUNT(*) as cnt FROM ${sql(SCHEMA)}.token_holder_heat
-  `;
-  console.log(`   Backfilled ${Number(backfillCount[0].cnt).toLocaleString()} holder-heat rows`);
+    const backfillCount = await sql`
+      SELECT COUNT(*) as cnt FROM ${sql(SCHEMA)}.token_holder_heat
+    `;
+    console.log(`   Backfilled ${Number(backfillCount[0].cnt).toLocaleString()} holder-heat rows`);
+  } catch (e: any) {
+    if (e.code === '42P01') {
+      console.log("   Skipped — heat_precalculated table does not exist (fresh install)");
+    } else {
+      throw e;
+    }
+  }
 
   // ── 8. Seed bungalow stubs for Home Team tokens ──
   console.log("\n   Seeding bungalow stubs for Home Team tokens...");
@@ -284,30 +292,26 @@ async function main() {
   // ── 9. Add indexes on existing tables if missing ──
   console.log("\n   Ensuring indexes on existing tables...");
 
-  await sql`
-    CREATE INDEX IF NOT EXISTS idx_hp_token
-    ON ${sql(SCHEMA)}.heat_precalculated (token)
-  `;
-  await sql`
-    CREATE INDEX IF NOT EXISTS idx_hp_wallet
-    ON ${sql(SCHEMA)}.heat_precalculated (wallet)
-  `;
-  await sql`
-    CREATE INDEX IF NOT EXISTS idx_hp_island_heat
-    ON ${sql(SCHEMA)}.heat_precalculated (island_heat DESC)
-  `;
-  await sql`
-    CREATE INDEX IF NOT EXISTS idx_fip_heat
-    ON ${sql(SCHEMA)}.fid_island_profiles (island_heat DESC)
-  `;
-  await sql`
-    CREATE INDEX IF NOT EXISTS idx_fip_tier
-    ON ${sql(SCHEMA)}.fid_island_profiles (tier)
-  `;
-  await sql`
-    CREATE INDEX IF NOT EXISTS idx_wfp_fid
-    ON ${sql(SCHEMA)}.wallet_farcaster_profiles (fid)
-  `;
+  const indexStatements = [
+    `CREATE INDEX IF NOT EXISTS idx_hp_token ON "${SCHEMA}".heat_precalculated (token)`,
+    `CREATE INDEX IF NOT EXISTS idx_hp_wallet ON "${SCHEMA}".heat_precalculated (wallet)`,
+    `CREATE INDEX IF NOT EXISTS idx_hp_island_heat ON "${SCHEMA}".heat_precalculated (island_heat DESC)`,
+    `CREATE INDEX IF NOT EXISTS idx_fip_heat ON "${SCHEMA}".fid_island_profiles (island_heat DESC)`,
+    `CREATE INDEX IF NOT EXISTS idx_fip_tier ON "${SCHEMA}".fid_island_profiles (tier)`,
+    `CREATE INDEX IF NOT EXISTS idx_wfp_fid ON "${SCHEMA}".wallet_farcaster_profiles (fid)`,
+  ];
+
+  for (const stmt of indexStatements) {
+    try {
+      await sql.unsafe(stmt);
+    } catch (e: any) {
+      if (e.code === '42P01') {
+        // Table doesn't exist — skip silently
+      } else {
+        console.log(`   Warning: ${e.message}`);
+      }
+    }
+  }
 
   console.log("   done");
 

@@ -95,6 +95,12 @@ export const BUNGALOW_CSS = `
     margin-left: auto; display: flex; align-items: center; gap: 8px;
     flex-shrink: 0;
   }
+  .topbar-icon-btn {
+    background: none; border: none; color: ${COLORS.textMuted}; cursor: pointer;
+    padding: 4px; display: flex; align-items: center; justify-content: center;
+    border-radius: 4px; transition: color 0.15s, background 0.15s;
+  }
+  .topbar-icon-btn:hover { color: ${COLORS.text}; background: ${COLORS.border}; }
   #auth-root { display: flex; align-items: center; }
   .auth-btn {
     background: ${COLORS.accent}; color: ${COLORS.bg};
@@ -332,6 +338,7 @@ export const BUNGALOW_CSS = `
     border-bottom: 1px solid ${COLORS.border};
   }
   .scan-log-entry:last-child { color: ${COLORS.text}; font-weight: 500; }
+  .scan-log-highlight { color: ${COLORS.accent}; font-weight: 500; padding: 6px 0; }
   @keyframes logFadeIn {
     from { opacity: 0; transform: translateY(4px); }
     to { opacity: 1; transform: translateY(0); }

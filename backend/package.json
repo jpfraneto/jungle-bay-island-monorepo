@@ -2,7 +2,7 @@
   "name": "backend",
   "scripts": {
     "dev": "bun --env-file=.env.local --hot src/index.ts",
-    "start": "bun --env-file=.env.local src/index.ts",
+    "start": "bun --watch --env-file=.env.local src/index.ts",
     "start:3000": "PORT=3000 bun --env-file=.env.local src/index.ts",
     "typecheck": "bunx tsc --noEmit"
   },

@@ -5,6 +5,8 @@ import {
 } from 'viem'
 import { base, mainnet } from 'viem/chains'
 import { calculateHeatDegrees, calculateTWAB, type BalanceSnapshot } from './heat'
+import { fetchDexScreenerData } from './dexscreener'
+import { getBungalow } from '../db/queries'
 import { logInfo } from './logger'
 
 export interface TimelineBucket {
@@ -38,7 +40,7 @@ export interface ScanResult {
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
 const MAX_RETRIES = 3
 const ALCHEMY_PAGE_SIZE = '0x3e8' // 1000 per page
-const MAX_TRANSFER_PAGES = 200   // Cap at 200k transfers to avoid runaway scans
+const MAX_TRANSFER_PAGES = 1000  // Cap at 1M transfers to avoid runaway scans
 
 const erc20ReadAbi = [
   { name: 'name', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'string' }] },
@@ -183,6 +185,7 @@ async function findDeployBlock(
             order: 'asc',
           }],
         }),
+        signal: AbortSignal.timeout(30_000),
       })
       if (!r.ok) throw new Error(`Alchemy API error: ${r.status}`)
       const data = await r.json()
@@ -220,6 +223,9 @@ async function fetchAllTransfers(
     onLog?.(`Token deployed at block ${parseInt(deployBlock, 16).toLocaleString()} — scanning from there`)
   }
 
+  let fetchStartTime = Date.now()
+  let estimateLogged = false
+
   do {
     rpcCounter.count += 1
 
@@ -247,6 +253,7 @@ async function fetchAllTransfers(
           method: 'alchemy_getAssetTransfers',
           params: [params],
         }),
+        signal: AbortSignal.timeout(30_000),
       })
       if (!res.ok) {
         throw new Error(`Alchemy API error: ${res.status} ${res.statusText}`)
@@ -297,9 +304,26 @@ async function fetchAllTransfers(
       onProgress({ phase: 'transfers', pct, detail })
     }
 
-    // Log every ~5 pages during fetch
+    // Log every ~5 pages during fetch, with time estimation after page 5
     if (onLog && page % 5 === 0 && pageKey) {
-      onLog(`${events.length.toLocaleString()} transfers found so far...`)
+      const elapsed = (Date.now() - fetchStartTime) / 1000
+      const pagesPerSec = page / elapsed
+      const etaDetail = pagesPerSec > 0 ? ` (~${Math.round(page / pagesPerSec)}s elapsed, ${pagesPerSec.toFixed(1)} pages/s)` : ''
+      onLog(`${events.length.toLocaleString()} transfers found so far...${etaDetail}`)
+    }
+
+    // After page 5: estimate total time and warn user if it'll be long
+    if (page === 5 && pageKey && !estimateLogged && onLog) {
+      estimateLogged = true
+      const elapsed = (Date.now() - fetchStartTime) / 1000
+      const pagesPerSec = page / elapsed
+      // Conservative estimate: assume at least 10x more pages for large tokens
+      const estimatedTotalPages = Math.min(MAX_TRANSFER_PAGES, page * 20)
+      const estimatedTotalSec = Math.round(estimatedTotalPages / pagesPerSec)
+      if (estimatedTotalSec > 120) {
+        const estMin = Math.round(estimatedTotalSec / 60)
+        onLog(`This is a large token. Estimated scan time: ~${estMin} minutes. You can close this page and come back — the scan will continue.`)
+      }
     }
 
     // Cap transfers to avoid runaway scans on mega-tokens
@@ -399,6 +423,24 @@ export async function scanToken(
   onProgress?.({ phase: 'metadata', pct: 5, detail: 'Reading token contract' })
   onLog?.('Reading token contract...')
   const metadata = await getTokenMetadata(client, checksumAddress, rpcCounter)
+
+  // Fallback for name/symbol: check existing DB data, then DexScreener
+  const isPlaceholder = (v: string | null) => !v || v === 'UNKNOWN' || v === 'Unknown'
+  if (isPlaceholder(metadata.name) || isPlaceholder(metadata.symbol)) {
+    const existing = await getBungalow(tokenAddress, chain)
+    if (existing?.name && !isPlaceholder(existing.name)) metadata.name = existing.name
+    if (existing?.symbol && !isPlaceholder(existing.symbol)) metadata.symbol = existing.symbol
+  }
+  if (isPlaceholder(metadata.name) || isPlaceholder(metadata.symbol)) {
+    try {
+      const dex = await fetchDexScreenerData(tokenAddress, chain)
+      if (dex) {
+        if (isPlaceholder(metadata.name) && dex.tokenName) metadata.name = dex.tokenName
+        if (isPlaceholder(metadata.symbol) && dex.tokenSymbol) metadata.symbol = dex.tokenSymbol
+      }
+    } catch (_) {}
+  }
+
   onLog?.(`Found ${metadata.name} ($${metadata.symbol}) on ${chainLabel}`)
 
   // Phase 2: fetch all transfers via Alchemy API (15-70%)
@@ -517,9 +559,11 @@ export async function fetchHolderBalanceHistory(
   chain: 'base' | 'ethereum',
   tokenAddress: string,
   walletAddress: string,
+  isNft?: boolean,
 ): Promise<{ points: Array<{ t: number; b: number }>; decimals: number }> {
   const rpcUrl = getRpcUrl(chain)
   const wallet = walletAddress.toLowerCase()
+  const category = isNft ? ['erc721'] : ['erc20']
 
   async function fetchDirection(direction: 'to' | 'from'): Promise<TransferEvent[]> {
     const events: TransferEvent[] = []
@@ -530,9 +574,9 @@ export async function fetchHolderBalanceHistory(
         fromBlock: '0x0',
         toBlock: 'latest',
         contractAddresses: [tokenAddress],
-        category: ['erc20'],
+        category,
         withMetadata: true,
-        excludeZeroValue: true,
+        excludeZeroValue: !isNft,
         maxCount: ALCHEMY_PAGE_SIZE,
         order: 'asc',
       }
@@ -550,6 +594,7 @@ export async function fetchHolderBalanceHistory(
             method: 'alchemy_getAssetTransfers',
             params: [params],
           }),
+          signal: AbortSignal.timeout(30_000),
         })
         if (!res.ok) throw new Error(`Alchemy API error: ${res.status}`)
         const data = await res.json()
@@ -562,7 +607,9 @@ export async function fetchHolderBalanceHistory(
           ? Math.floor(new Date(t.metadata.blockTimestamp).getTime() / 1000)
           : Math.floor(Date.now() / 1000)
         let value: bigint
-        if (t.rawContract?.value) {
+        if (isNft) {
+          value = 1n
+        } else if (t.rawContract?.value) {
           value = BigInt(t.rawContract.value)
         } else {
           const dec = t.rawContract?.decimal ? parseInt(t.rawContract.decimal, 16) : 18
@@ -591,17 +638,19 @@ export async function fetchHolderBalanceHistory(
   const all = [...incoming, ...outgoing]
   all.sort((a, b) => a.timestamp - b.timestamp || a.blockNumber - b.blockNumber)
 
-  // Get decimals
+  // Get decimals (NFTs have no decimals() function)
   const client = getClient(chain)
-  let decimals = 18
-  try {
-    const raw = await client.readContract({
-      address: tokenAddress as `0x${string}`,
-      abi: erc20ReadAbi,
-      functionName: 'decimals',
-    })
-    decimals = Number(raw)
-  } catch {}
+  let decimals = isNft ? 0 : 18
+  if (!isNft) {
+    try {
+      const raw = await client.readContract({
+        address: tokenAddress as `0x${string}`,
+        abi: erc20ReadAbi,
+        functionName: 'decimals',
+      })
+      decimals = Number(raw)
+    } catch {}
+  }
 
   // Reconstruct running balance
   let balance = 0n

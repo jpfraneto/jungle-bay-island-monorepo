@@ -1,0 +1,20 @@
+.connectButton,
+.walletButton {
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  padding: 7px 12px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.connectButton {
+  background: linear-gradient(135deg, #2e8b57 0%, #1f6f46 100%);
+}
+
+.connectButton:hover,
+.walletButton:hover {
+  filter: brightness(1.08);
+}

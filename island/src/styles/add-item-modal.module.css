@@ -1,0 +1,126 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 8, 4, 0.72);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  z-index: 60;
+}
+
+.modal {
+  width: min(680px, 100%);
+  background: #102115;
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.header h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 32px;
+}
+
+.closeButton {
+  border: 0;
+  border-radius: 8px;
+  width: 34px;
+  height: 34px;
+  background: var(--bg-card);
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.typeGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 14px 0;
+}
+
+.typeCard {
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  padding: 10px;
+  display: grid;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.typeCard small {
+  color: var(--text-muted);
+}
+
+.typeCardActive {
+  border-color: rgba(46, 204, 113, 0.6);
+  background: #1d3a26;
+  color: var(--text-primary);
+}
+
+.formBlock {
+  display: grid;
+  gap: 8px;
+}
+
+.formBlock input,
+.formBlock textarea,
+.formBlock select {
+  width: 100%;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: #0d1b12;
+  padding: 10px 12px;
+  color: var(--text-primary);
+}
+
+.formBlock textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.footer {
+  margin-top: 14px;
+  display: grid;
+  gap: 8px;
+}
+
+.summary {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.submitButton {
+  border: 0;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #2e8b57 0%, #1d6f42 100%);
+  color: #f4fff7;
+  padding: 11px;
+  cursor: pointer;
+}
+
+.submitButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.error {
+  color: #ff8e83;
+  font-size: 12px;
+}
+
+@media (max-width: 700px) {
+  .typeGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

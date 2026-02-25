@@ -1,0 +1,67 @@
+.panel {
+  background: rgba(20, 43, 26, 0.86);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 14px;
+  position: sticky;
+  top: 16px;
+}
+
+.panel h3 {
+  margin: 0 0 10px;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 28px;
+}
+
+.panel p {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.metric {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-top: 1px dashed var(--border-subtle);
+}
+
+.metric strong {
+  font-family: var(--font-mono);
+}
+
+.lastClaim {
+  margin-top: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.actionButton {
+  margin-top: 10px;
+  width: 100%;
+  border: 0;
+  border-radius: 10px;
+  background: #2a8f58;
+  color: #f3fff7;
+  padding: 10px;
+  cursor: pointer;
+}
+
+.actionButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.status {
+  margin-top: 10px;
+  color: #9eeec0;
+  font-size: 12px;
+}
+
+.error {
+  margin-top: 10px;
+  color: #ff8e83;
+  font-size: 12px;
+}

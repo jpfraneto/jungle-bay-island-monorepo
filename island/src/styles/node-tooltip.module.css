@@ -1,0 +1,31 @@
+.tooltip {
+  position: absolute;
+  top: 58px;
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 140px;
+  background: rgba(10, 26, 15, 0.95);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 8px 10px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.visible {
+  opacity: 1;
+}
+
+.title {
+  font-size: 12px;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.meta {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}

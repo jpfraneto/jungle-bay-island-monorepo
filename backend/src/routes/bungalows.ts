@@ -24,6 +24,7 @@ bungalowsRoute.get('/bungalows', async (c) => {
       token_symbol: item.symbol,
       symbol: item.symbol,
       holder_count: item.holder_count,
+      image_url: item.image_url ?? null,
       claimed: item.is_claimed,
       is_claimed: item.is_claimed,
       scanned: item.scan_status === 'complete',

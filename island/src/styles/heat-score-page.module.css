@@ -1,7 +1,9 @@
 .page {
   min-height: calc(100vh - 52px);
   padding: 18px;
-  display: grid;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
   align-items: start;
 }
 
@@ -9,26 +11,90 @@
   background: rgba(20, 43, 26, 0.88);
   border: 1px solid var(--border-subtle);
   border-radius: 14px;
-  padding: 18px;
+  padding: 18px 22px;
   max-width: 880px;
+  width: 100%;
 }
 
 .card h1 {
   margin: 0;
   font-family: var(--font-display);
   font-style: italic;
-  font-size: 44px;
+  font-size: 36px;
 }
 
 .card p {
   margin: 10px 0 0;
   color: var(--text-secondary);
-  line-height: 1.6;
+  line-height: 1.7;
+}
+
+.subheading {
+  margin: 20px 0 0;
+  font-size: 20px;
+  font-family: var(--font-display);
+  color: var(--text-primary);
+}
+
+.formula {
+  margin: 14px 0;
+  padding: 14px 18px;
+  background: rgba(10, 26, 15, 0.7);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.formula code {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  color: #a8e6a3;
+  letter-spacing: 0.5px;
+}
+
+.formulaDesc {
+  font-size: 14px;
+  color: var(--text-muted, rgba(255, 255, 255, 0.5));
+  margin: 0 0 10px;
 }
 
 .list {
   margin: 14px 0 0;
   padding-left: 18px;
   color: var(--text-secondary);
-  line-height: 1.6;
+  line-height: 1.7;
+}
+
+.list li {
+  margin-bottom: 6px;
+}
+
+.tierTable {
+  margin: 14px 0 0;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.tierTable th,
+.tierTable td {
+  text-align: left;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.tierTable th {
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.tierTable td {
+  color: var(--text-secondary);
+}
+
+.tierTable tbody tr:last-child td {
+  border-bottom: none;
 }

@@ -23,8 +23,8 @@ homeTeamRoute.get("/home-team", async (c) => {
     SELECT
       tr.token_address,
       tr.chain,
-      tr.name,
-      tr.symbol,
+      COALESCE(b.name, tr.name) AS name,
+      COALESCE(b.symbol, tr.symbol) AS symbol,
       tr.holder_count,
       b.image_url,
       b.is_claimed,

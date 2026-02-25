@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import type { HomeTeamBungalow } from "../hooks/useHomeTeam";
 import { calculateConnections } from "../utils/connections";
-import { getNodePosition } from "../utils/positions";
+import { resolveAllPositions } from "../utils/positions";
 import BungalowNode from "./BungalowNode";
 import ZoomControls from "./ZoomControls";
 import styles from "../styles/island-map.module.css";
@@ -19,19 +19,15 @@ function clampScale(input: number): number {
 export default function IslandMap({ bungalows, isLoading, error }: IslandMapProps) {
   const [scale, setScale] = useState(1);
 
-  const nodes = useMemo(
-    () =>
-      bungalows.map((bungalow, index) => {
-        const pos = getNodePosition(bungalow.symbol ?? "", bungalow.token_address);
-        return {
-          index,
-          bungalow,
-          x: pos.x,
-          y: pos.y,
-        };
-      }),
-    [bungalows],
-  );
+  const nodes = useMemo(() => {
+    const positions = resolveAllPositions(bungalows);
+    return bungalows.map((bungalow, index) => ({
+      index,
+      bungalow,
+      x: positions[index].x,
+      y: positions[index].y,
+    }));
+  }, [bungalows]);
 
   const connections = useMemo(
     () => calculateConnections(nodes.map((node) => ({ x: node.x, y: node.y, index: node.index }))),

@@ -25,7 +25,14 @@ export default function Sidebar({ bungalows, isOpen, onClose }: SidebarProps) {
       <aside className={`${styles.sidebar} ${isOpen ? styles.sidebarOpen : ""}`}>
         <section className={styles.section}>
           <h2 className={styles.heading}>CORE</h2>
-          <button type="button" className={styles.itemButton}>
+          <button
+            type="button"
+            className={styles.itemButton}
+            onClick={() => {
+              navigate("/heat-score");
+              onClose();
+            }}
+          >
             <span>📖</span>
             <span>About</span>
           </button>

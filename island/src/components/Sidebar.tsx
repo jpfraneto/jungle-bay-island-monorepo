@@ -29,7 +29,7 @@ export default function Sidebar({ bungalows, isOpen, onClose }: SidebarProps) {
             type="button"
             className={styles.itemButton}
             onClick={() => {
-              navigate("/heat-score");
+              navigate("/about");
               onClose();
             }}
           >

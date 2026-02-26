@@ -1,0 +1,82 @@
+import { useCallback, useMemo } from "react";
+import { usePrivy, useWallets, type ConnectedWallet } from "@privy-io/react-auth";
+import { createPublicClient, createWalletClient, custom, http } from "viem";
+import { base } from "viem/chains";
+
+const BASE_CAIP_CHAIN_ID = `eip155:${base.id}`;
+const BASE_RPC_URL = "https://mainnet.base.org";
+
+function isHexAddress(value: string): value is `0x${string}` {
+  return /^0x[0-9a-fA-F]{40}$/.test(value);
+}
+
+function pickActiveWallet(
+  wallets: ConnectedWallet[],
+): ConnectedWallet | null {
+  if (wallets.length === 0) return null;
+
+  const orderedWallets = [...wallets].sort((a, b) => b.connectedAt - a.connectedAt);
+
+  return orderedWallets.find((wallet) => wallet.linked) ?? orderedWallets[0] ?? null;
+}
+
+export function usePrivyBaseWallet() {
+  const { authenticated, connectWallet, login } = usePrivy();
+  const { wallets } = useWallets();
+
+  const ethereumWallets = useMemo(
+    () => wallets.filter((wallet): wallet is ConnectedWallet => wallet.type === "ethereum"),
+    [wallets],
+  );
+
+  const activeWallet = useMemo(() => pickActiveWallet(ethereumWallets), [ethereumWallets]);
+
+  const walletAddress = activeWallet?.address ?? null;
+
+  const publicClient = useMemo(
+    () => createPublicClient({ chain: base, transport: http(BASE_RPC_URL) }),
+    [],
+  );
+
+  const requireWallet = useCallback(async () => {
+    if (!authenticated) {
+      login();
+      throw new Error("Connect your wallet first");
+    }
+
+    if (!activeWallet) {
+      connectWallet({ walletChainType: "ethereum-only" });
+      throw new Error("Connect an Ethereum wallet in Privy");
+    }
+
+    if (!isHexAddress(activeWallet.address)) {
+      throw new Error("Connected wallet address is invalid");
+    }
+
+    if (activeWallet.chainId !== BASE_CAIP_CHAIN_ID) {
+      await activeWallet.switchChain(base.id);
+    }
+
+    // Providers are chain-bound; fetch after switching.
+    const provider = await activeWallet.getEthereumProvider();
+
+    const walletClient = createWalletClient({
+      account: activeWallet.address,
+      chain: base,
+      transport: custom(provider),
+    });
+
+    return {
+      address: activeWallet.address,
+      wallet: activeWallet,
+      walletClient,
+    };
+  }, [activeWallet, authenticated, connectWallet, login]);
+
+  return {
+    activeWallet,
+    publicClient,
+    requireWallet,
+    walletAddress,
+  };
+}

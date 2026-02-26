@@ -1,34 +1,16 @@
 import { useCallback, useState } from "react";
 import { erc20Abi, parseUnits } from "viem";
-import { useAccount, useConnect, usePublicClient, useWriteContract } from "wagmi";
 import { JBM_ADDRESS, TREASURY_ADDRESS } from "../utils/constants";
+import { usePrivyBaseWallet } from "./usePrivyBaseWallet";
 
 function isHexAddress(value: string): value is `0x${string}` {
   return /^0x[0-9a-fA-F]{40}$/.test(value);
 }
 
 export function useJBMTransfer() {
-  const { address, isConnected } = useAccount();
-  const { connectAsync, connectors } = useConnect();
-  const { writeContractAsync, isPending } = useWriteContract();
-  const publicClient = usePublicClient({ chainId: 8453 });
+  const { publicClient, requireWallet } = usePrivyBaseWallet();
+  const [isTransferring, setIsTransferring] = useState(false);
   const [isWaiting, setIsWaiting] = useState(false);
-
-  const ensureConnected = useCallback(async () => {
-    if (isConnected && address) return address;
-
-    const connector = connectors.find((item) => item.id.includes("injected")) ?? connectors[0];
-    if (!connector) {
-      throw new Error("No injected wallet connector available");
-    }
-
-    const result = await connectAsync({ connector });
-    if (!result.accounts[0]) {
-      throw new Error("Wallet connection failed");
-    }
-
-    return result.accounts[0];
-  }, [address, connectAsync, connectors, isConnected]);
 
   const transfer = useCallback(async (amountJbm: number | string) => {
     if (!isHexAddress(JBM_ADDRESS)) {
@@ -43,15 +25,21 @@ export function useJBMTransfer() {
       throw new Error("Missing Base public client");
     }
 
-    await ensureConnected();
+    const { address, walletClient } = await requireWallet();
+    setIsTransferring(true);
 
-    const hash = await writeContractAsync({
-      address: JBM_ADDRESS,
-      abi: erc20Abi,
-      functionName: "transfer",
-      args: [TREASURY_ADDRESS, parseUnits(String(amountJbm), 18)],
-      chainId: 8453,
-    });
+    let hash: `0x${string}`;
+    try {
+      hash = await walletClient.writeContract({
+        address: JBM_ADDRESS,
+        abi: erc20Abi,
+        functionName: "transfer",
+        args: [TREASURY_ADDRESS, parseUnits(String(amountJbm), 18)],
+        account: address,
+      });
+    } finally {
+      setIsTransferring(false);
+    }
 
     setIsWaiting(true);
     try {
@@ -59,14 +47,14 @@ export function useJBMTransfer() {
       if (receipt.status !== "success") {
         throw new Error("JBM transfer failed");
       }
-      return { hash, receipt };
+      return { from: address, hash, receipt };
     } finally {
       setIsWaiting(false);
     }
-  }, [ensureConnected, publicClient, writeContractAsync]);
+  }, [publicClient, requireWallet]);
 
   return {
     transfer,
-    isTransferring: isPending || isWaiting,
+    isTransferring: isTransferring || isWaiting,
   };
 }

@@ -1,12 +1,7 @@
 import { Hono } from "hono";
 import { encodePacked, keccak256, parseUnits } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import {
-  CONFIG,
-  db,
-  normalizeAddress,
-  toSupportedChain,
-} from "../config";
+import { CONFIG, db, normalizeAddress, toSupportedChain } from "../config";
 import { getWalletTokenHeat } from "../db/queries";
 import { ApiError } from "../services/errors";
 import type { AppEnv } from "../types";
@@ -21,12 +16,7 @@ interface ClaimHistoryRow {
 }
 
 function buildBungalowId(chain: string, tokenAddress: string): `0x${string}` {
-  return keccak256(
-    encodePacked(
-      ["string", "string"],
-      [chain, tokenAddress],
-    ),
-  );
+  return keccak256(encodePacked(["string", "string"], [chain, tokenAddress]));
 }
 
 function getCurrentPeriodId(): number {
@@ -71,7 +61,10 @@ async function computeClaimState(input: {
   wallet: string;
   periodId?: number;
 }) {
-  const heatDegrees = await getWalletTokenHeat(input.tokenAddress, input.wallet);
+  const heatDegrees = await getWalletTokenHeat(
+    input.tokenAddress,
+    input.wallet,
+  );
   const heat = heatDegrees ?? 0;
   const claimableFromHeat = BigInt(Math.max(0, Math.round(heat * 100)));
   const bungalowId = buildBungalowId(input.chain, input.tokenAddress);
@@ -101,7 +94,9 @@ claimsRoute.get("/claims/:chain/:ca/:address", async (c) => {
     throw new ApiError(400, "invalid_token", "Invalid token address");
   }
 
-  const wallet = normalizeAddress(c.req.param("address"), chain) ?? normalizeAddress(c.req.param("address"));
+  const wallet =
+    normalizeAddress(c.req.param("address"), chain) ??
+    normalizeAddress(c.req.param("address"));
   if (!wallet) {
     throw new ApiError(400, "invalid_wallet", "Invalid wallet address");
   }
@@ -128,9 +123,14 @@ claimsRoute.post("/claims/:chain/:ca/sign", async (c) => {
 
   const body = await c.req.json<{ wallet?: unknown }>();
 
-  const wallet = typeof body.wallet === "string" ? normalizeAddress(body.wallet) : null;
+  const wallet =
+    typeof body.wallet === "string" ? normalizeAddress(body.wallet) : null;
   if (!wallet) {
-    throw new ApiError(400, "invalid_wallet", "wallet must be a valid EVM address");
+    throw new ApiError(
+      400,
+      "invalid_wallet",
+      "wallet must be a valid EVM address",
+    );
   }
   const bungalowId = buildBungalowId(chain, tokenAddress);
   const periodIdNumber = getCurrentPeriodId();
@@ -145,25 +145,45 @@ claimsRoute.post("/claims/:chain/:ca/sign", async (c) => {
 
   const claimable = BigInt(claimState.claimable_jbm);
   if (!claimState.can_claim || claimable <= 0n) {
-    throw new ApiError(409, "already_claimed_today", "No claimable JBM available");
+    throw new ApiError(
+      409,
+      "already_claimed_today",
+      "No claimable JBM available",
+    );
   }
 
   const privateKey = CONFIG.CLAIM_SIGNER_PRIVATE_KEY.trim();
   if (!/^0x[0-9a-fA-F]{64}$/.test(privateKey)) {
-    throw new ApiError(500, "claim_signer_not_configured", "CLAIM_SIGNER_PRIVATE_KEY is not configured");
+    throw new ApiError(
+      500,
+      "claim_signer_not_configured",
+      "CLAIM_SIGNER_PRIVATE_KEY is not configured",
+    );
   }
 
   const claimContractAddress = normalizeAddress(CONFIG.CLAIM_CONTRACT_ADDRESS);
   if (!claimContractAddress) {
-    throw new ApiError(500, "claim_contract_not_configured", "CLAIM_CONTRACT_ADDRESS is not configured");
+    throw new ApiError(
+      500,
+      "claim_contract_not_configured",
+      "CLAIM_CONTRACT_ADDRESS is not configured",
+    );
   }
   const tokenAddressForClaim = normalizeAddress(CONFIG.JBM_TOKEN_ADDRESS);
   if (!tokenAddressForClaim) {
-    throw new ApiError(500, "jbm_token_not_configured", "JBM_TOKEN_ADDRESS is not configured");
+    throw new ApiError(
+      500,
+      "jbm_token_not_configured",
+      "JBM_TOKEN_ADDRESS is not configured",
+    );
   }
   const escrowAddress = normalizeAddress(CONFIG.TREASURY_ADDRESS);
   if (!escrowAddress) {
-    throw new ApiError(500, "treasury_not_configured", "TREASURY_ADDRESS is not configured");
+    throw new ApiError(
+      500,
+      "treasury_not_configured",
+      "TREASURY_ADDRESS is not configured",
+    );
   }
 
   const nonce = await getNextNonce(wallet);

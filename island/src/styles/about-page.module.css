@@ -1,0 +1,113 @@
+.page {
+  min-height: calc(100vh - 52px);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-items: start;
+}
+
+.card {
+  background: rgba(20, 43, 26, 0.88);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 18px 22px;
+  max-width: 880px;
+  width: 100%;
+}
+
+.card h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 40px;
+}
+
+.tagline {
+  margin: 4px 0 12px;
+  font-size: 18px;
+  color: #a8e6a3;
+  font-style: italic;
+}
+
+.card p {
+  margin: 10px 0 0;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+.heading {
+  margin: 0 0 8px;
+  font-size: 22px;
+  font-family: var(--font-display);
+  color: var(--text-primary);
+}
+
+.steps {
+  margin: 8px 0 0;
+  padding-left: 22px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+.steps li {
+  margin-bottom: 10px;
+}
+
+.list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+.list li {
+  margin-bottom: 6px;
+}
+
+.inlineLink {
+  background: none;
+  border: none;
+  color: #a8e6a3;
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+}
+
+.inlineLink:hover {
+  color: #c8f5c4;
+}
+
+.linkButton {
+  margin-top: 14px;
+  background: rgba(10, 26, 15, 0.7);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 10px 16px;
+  color: #a8e6a3;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+}
+
+.linkButton:hover {
+  background: rgba(10, 26, 15, 0.9);
+  color: #c8f5c4;
+}
+
+.chains {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.chain {
+  padding: 6px 14px;
+  background: rgba(10, 26, 15, 0.7);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-family: var(--font-mono);
+}

@@ -31,7 +31,11 @@ export default function TopNav({
           </button>
         ) : null}
 
-        <button type="button" className={styles.brand} onClick={() => navigate("/")}>
+        <button
+          type="button"
+          className={styles.brand}
+          onClick={() => navigate("/")}
+        >
           <span className={styles.palm}>🌴</span>
           <span>jungle bay island</span>
         </button>
@@ -44,9 +48,14 @@ export default function TopNav({
             className={`${styles.toggleItem} ${isIslandActive ? styles.active : ""}`}
             onClick={() => navigate("/")}
           >
-            Island
+            Map
           </button>
-          <button type="button" className={styles.toggleItem} aria-disabled="true">
+          <button
+            type="button"
+            className={styles.toggleItem}
+            aria-disabled="true"
+            onClick={() => navigate("/about")}
+          >
             About
           </button>
         </div>

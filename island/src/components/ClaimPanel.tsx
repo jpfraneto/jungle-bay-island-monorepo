@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { parseUnits } from "viem";
-import { usePublicClient, useWriteContract } from "wagmi";
 import { useClaimable } from "../hooks/useClaimable";
+import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
 import { CLAIM_CONTRACT_ADDRESS } from "../utils/constants";
 import { formatJbmAmount, formatTimeAgo } from "../utils/formatters";
 import styles from "../styles/claim-panel.module.css";
@@ -54,11 +54,9 @@ function getNextClaimCountdown(claimedToday: boolean | undefined): string | null
 }
 
 export default function ClaimPanel({ chain, ca, tokenSymbol }: ClaimPanelProps) {
-  const { authenticated, user, login } = usePrivy();
-  const walletAddress = user?.wallet?.address;
-  const { claimable, isLoading, refetch } = useClaimable(chain, ca, walletAddress);
-  const { writeContractAsync, isPending } = useWriteContract();
-  const publicClient = usePublicClient({ chainId: 8453 });
+  const { authenticated, login } = usePrivy();
+  const { publicClient, requireWallet, walletAddress } = usePrivyBaseWallet();
+  const { claimable, isLoading, refetch } = useClaimable(chain, ca, walletAddress ?? undefined);
 
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -66,7 +64,7 @@ export default function ClaimPanel({ chain, ca, tokenSymbol }: ClaimPanelProps) 
   const nextClaimText = getNextClaimCountdown(claimable?.claimed_today);
 
   const handleClaim = async () => {
-    if (!walletAddress) {
+    if (!authenticated) {
       login();
       return;
     }
@@ -90,11 +88,13 @@ export default function ClaimPanel({ chain, ca, tokenSymbol }: ClaimPanelProps) 
     setIsClaiming(true);
 
     try {
+      const { address, walletClient } = await requireWallet();
+
       const signResponse = await fetch(`/api/claims/${chain}/${ca}/sign`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          wallet: walletAddress,
+          wallet: address,
           amount: claimable.claimable_jbm,
         }),
       });
@@ -114,12 +114,12 @@ export default function ClaimPanel({ chain, ca, tokenSymbol }: ClaimPanelProps) 
         throw new Error("Invalid signature from backend");
       }
 
-      const hash = await writeContractAsync({
+      const hash = await walletClient.writeContract({
         address: CLAIM_CONTRACT_ADDRESS,
         abi: CLAIM_ABI,
         functionName: "claim",
         args: [parseUnits(signData.amount, 18), BigInt(signData.nonce), signData.signature],
-        chainId: 8453,
+        account: address,
       });
 
       setStatus("Claim transaction submitted...");
@@ -187,7 +187,7 @@ export default function ClaimPanel({ chain, ca, tokenSymbol }: ClaimPanelProps) 
       <button
         type="button"
         className={styles.actionButton}
-        disabled={!claimable.can_claim || isClaiming || isPending}
+        disabled={!claimable.can_claim || isClaiming}
         onClick={handleClaim}
       >
         {claimable.can_claim ? "Claim" : "Claimed today ✓"}

@@ -29,7 +29,7 @@ function isHexTxHash(value: string): boolean {
 }
 
 export default function AddItemModal({ chain, ca, open, onClose, onCreated }: AddItemModalProps) {
-  const { authenticated, login, user } = usePrivy();
+  const { authenticated, login } = usePrivy();
   const { transfer, isTransferring } = useJBMTransfer();
 
   const [itemType, setItemType] = useState<WallItemType>("link");
@@ -73,8 +73,6 @@ export default function AddItemModal({ chain, ca, open, onClose, onCreated }: Ad
   }, [open]);
 
   const price = ITEM_PRICES[itemType];
-  const walletAddress = user?.wallet?.address ?? "";
-
   const canSubmit = useMemo(
     () => !isSubmitting && !isTransferring,
     [isSubmitting, isTransferring],
@@ -110,7 +108,7 @@ export default function AddItemModal({ chain, ca, open, onClose, onCreated }: Ad
   };
 
   const handleSubmit = async () => {
-    if (!authenticated || !walletAddress) {
+    if (!authenticated) {
       login();
       return;
     }
@@ -133,7 +131,7 @@ export default function AddItemModal({ chain, ca, open, onClose, onCreated }: Ad
         body: JSON.stringify({
           item_type: itemType,
           content,
-          placed_by: walletAddress,
+          placed_by: transferResult.from,
           tx_hash: txHash,
           jbm_amount: String(price),
         }),

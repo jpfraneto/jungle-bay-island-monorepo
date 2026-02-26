@@ -8,9 +8,13 @@ export default function NotFoundPage() {
     <section className={styles.page}>
       <div className={styles.card}>
         <div className={styles.title}>404</div>
-        <p className={styles.subtitle}>This bungalow doesn&apos;t exist... yet</p>
+        <p className={styles.subtitle}>This page doesn&apos;t exist... yet</p>
         <div className={styles.palm}>🌴</div>
-        <button type="button" className={styles.button} onClick={() => navigate("/")}>
+        <button
+          type="button"
+          className={styles.button}
+          onClick={() => navigate("/")}
+        >
           Back to Island
         </button>
       </div>

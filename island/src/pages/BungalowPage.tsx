@@ -6,7 +6,10 @@ import Wall from "../components/Wall";
 import { useBungalow } from "../hooks/useBungalow";
 import { useBungalowItems } from "../hooks/useBungalowItems";
 import NotFoundPage from "./NotFoundPage";
-import { formatCompactUsd, formatNumber, formatUsdPrice } from "../utils/formatters";
+import {
+  formatCompactUsd,
+  formatNumber,
+} from "../utils/formatters";
 import { getFallbackTokenImage, getTokenImageUrl } from "../utils/tokenImage";
 import styles from "../styles/bungalow-page.module.css";
 
@@ -19,7 +22,11 @@ function chainLabel(chain: string): string {
 export default function BungalowPage() {
   const { chain = "", ca = "" } = useParams();
   const { bungalow, isLoading, error } = useBungalow(chain, ca);
-  const { items, isLoading: itemsLoading, refetch } = useBungalowItems(chain, ca);
+  const {
+    items,
+    isLoading: itemsLoading,
+    refetch,
+  } = useBungalowItems(chain, ca);
 
   const [isAddOpen, setIsAddOpen] = useState(false);
 
@@ -32,15 +39,22 @@ export default function BungalowPage() {
   }
 
   if (error || !bungalow) {
-    return <div className={styles.page}>Failed to load bungalow: {error ?? "Unknown"}</div>;
+    return (
+      <div className={styles.page}>
+        Failed to load bungalow: {error ?? "Unknown"}
+      </div>
+    );
   }
 
   if (!bungalow.exists) {
     return <NotFoundPage />;
   }
 
-  const heat = bungalow.viewer_context?.token_heat_degrees ?? 0;
-  const headerImage = getTokenImageUrl(bungalow.image_url, bungalow.token_address, bungalow.symbol);
+  const headerImage = getTokenImageUrl(
+    bungalow.image_url,
+    bungalow.token_address,
+    bungalow.symbol,
+  );
 
   return (
     <div className={styles.page}>
@@ -61,9 +75,12 @@ export default function BungalowPage() {
 
               <div>
                 <h1 className={styles.title}>
-                  {bungalow.name ?? "Unknown Token"} ({bungalow.symbol ? `$${bungalow.symbol}` : "?"})
+                  {bungalow.name ?? "Unknown Token"} (
+                  {bungalow.symbol ? `$${bungalow.symbol}` : "?"})
                 </h1>
-                <div className={`${styles.chainBadge} ${chain === "base" ? styles.base : styles.ethereum}`}>
+                <div
+                  className={`${styles.chainBadge} ${chain === "base" ? styles.base : styles.ethereum}`}
+                >
                   {chainLabel(chain)}
                 </div>
               </div>
@@ -74,26 +91,29 @@ export default function BungalowPage() {
                 <span>Holders</span>
                 <strong>{formatNumber(bungalow.holder_count)}</strong>
               </div>
-              <div>
-                <span>Heat</span>
-                <strong>🔥 {heat.toFixed(1)}°</strong>
-              </div>
+
               <div>
                 <span>Market Cap</span>
-                <strong>{formatCompactUsd(bungalow.market_data?.market_cap ?? null)}</strong>
-              </div>
-              <div>
-                <span>Price</span>
-                <strong>{formatUsdPrice(bungalow.market_data?.price_usd ?? null)}</strong>
+                <strong>
+                  {formatCompactUsd(bungalow.market_data?.market_cap ?? null)}
+                </strong>
               </div>
             </div>
           </header>
 
-          <Wall items={items} isLoading={itemsLoading} onAdd={() => setIsAddOpen(true)} />
+          <Wall
+            items={items}
+            isLoading={itemsLoading}
+            onAdd={() => setIsAddOpen(true)}
+          />
         </section>
 
         <div className={styles.sideColumn}>
-          <ClaimPanel chain={chain} ca={ca} tokenSymbol={bungalow.symbol ?? "TOKEN"} />
+          <ClaimPanel
+            chain={chain}
+            ca={ca}
+            tokenSymbol={bungalow.symbol ?? "TOKEN"}
+          />
         </div>
       </div>
 

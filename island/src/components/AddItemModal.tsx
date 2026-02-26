@@ -13,6 +13,7 @@ interface AddItemModalProps {
   chain: string;
   ca: string;
   open: boolean;
+  symbol: string;
   onClose: () => void;
   onCreated: (item: BungalowItem) => void;
 }
@@ -24,11 +25,34 @@ interface BungalowDirectoryItem {
   name: string | null;
 }
 
+interface PendingPayment {
+  txHash: string;
+  payer: string;
+  itemType: WallItemType;
+  amount: number;
+}
+
 function isHexTxHash(value: string): boolean {
   return /^0x[0-9a-fA-F]{64}$/.test(value);
 }
 
-export default function AddItemModal({ chain, ca, open, onClose, onCreated }: AddItemModalProps) {
+function isHttpUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+export default function AddItemModal({
+  chain,
+  ca,
+  symbol,
+  open,
+  onClose,
+  onCreated,
+}: AddItemModalProps) {
   const { authenticated, login } = usePrivy();
   const { transfer, isTransferring } = useJBMTransfer();
 
@@ -39,9 +63,28 @@ export default function AddItemModal({ chain, ca, open, onClose, onCreated }: Ad
   const [imageUrl, setImageUrl] = useState("");
   const [caption, setCaption] = useState("");
   const [portalTarget, setPortalTarget] = useState("");
-  const [portalOptions, setPortalOptions] = useState<BungalowDirectoryItem[]>([]);
+  const [portalOptions, setPortalOptions] = useState<BungalowDirectoryItem[]>(
+    [],
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingPayment, setPendingPayment] = useState<PendingPayment | null>(
+    null,
+  );
+
+  useEffect(() => {
+    if (!open) return;
+    setItemType("link");
+    setTitle("");
+    setUrl("");
+    setFrameText("");
+    setImageUrl("");
+    setCaption("");
+    setPortalTarget("");
+    setError(null);
+    setPendingPayment(null);
+    setIsSubmitting(false);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -49,7 +92,9 @@ export default function AddItemModal({ chain, ca, open, onClose, onCreated }: Ad
     const controller = new AbortController();
     void (async () => {
       try {
-        const response = await fetch("/api/bungalows?limit=200", { signal: controller.signal });
+        const response = await fetch("/api/bungalows?limit=200", {
+          signal: controller.signal,
+        });
         if (!response.ok) return;
 
         const data = (await response.json()) as {
@@ -80,8 +125,11 @@ export default function AddItemModal({ chain, ca, open, onClose, onCreated }: Ad
 
   const buildContent = (): Record<string, unknown> => {
     if (itemType === "link") {
-      if (!url) throw new Error("Link URL is required");
-      return { url, title };
+      const normalizedUrl = url.trim();
+      if (!normalizedUrl || !isHttpUrl(normalizedUrl)) {
+        throw new Error("Enter a valid link URL (http/https)");
+      }
+      return { url: normalizedUrl, title: title.trim().slice(0, 100) };
     }
 
     if (itemType === "frame") {
@@ -90,14 +138,18 @@ export default function AddItemModal({ chain, ca, open, onClose, onCreated }: Ad
     }
 
     if (itemType === "image") {
-      if (!imageUrl.trim()) throw new Error("Image URL is required");
+      const normalizedUrl = imageUrl.trim();
+      if (!normalizedUrl || !isHttpUrl(normalizedUrl)) {
+        throw new Error("Enter a valid image URL (http/https)");
+      }
       return { image_url: imageUrl.trim(), caption: caption.trim() || null };
     }
 
     if (!portalTarget) throw new Error("Select a portal target");
     const [targetChain, targetCa] = portalTarget.split(":");
     const target = portalOptions.find(
-      (option) => option.chain === targetChain && option.token_address === targetCa,
+      (option) =>
+        option.chain === targetChain && option.token_address === targetCa,
     );
 
     return {
@@ -116,13 +168,40 @@ export default function AddItemModal({ chain, ca, open, onClose, onCreated }: Ad
     setError(null);
     setIsSubmitting(true);
 
+    let confirmedPayment: PendingPayment | null = null;
+
     try {
       const content = buildContent();
-      const transferResult = await transfer(price);
-      const txHash = transferResult.hash;
+      const canReusePendingPayment = Boolean(
+        pendingPayment &&
+        pendingPayment.itemType === itemType &&
+        pendingPayment.amount === price &&
+        isHexTxHash(pendingPayment.txHash),
+      );
 
-      if (!isHexTxHash(txHash)) {
-        throw new Error("Unexpected transfer hash");
+      let txHash = "";
+      let payer = "";
+
+      if (canReusePendingPayment && pendingPayment) {
+        txHash = pendingPayment.txHash;
+        payer = pendingPayment.payer;
+        confirmedPayment = pendingPayment;
+      } else {
+        const transferResult = await transfer(price);
+        txHash = transferResult.hash;
+        payer = transferResult.from;
+
+        if (!isHexTxHash(txHash)) {
+          throw new Error("Unexpected transfer hash");
+        }
+
+        confirmedPayment = {
+          txHash,
+          payer,
+          itemType,
+          amount: price,
+        };
+        setPendingPayment(confirmedPayment);
       }
 
       const response = await fetch(`/api/bungalow/${chain}/${ca}/items`, {
@@ -131,21 +210,33 @@ export default function AddItemModal({ chain, ca, open, onClose, onCreated }: Ad
         body: JSON.stringify({
           item_type: itemType,
           content,
-          placed_by: transferResult.from,
+          placed_by: payer,
           tx_hash: txHash,
           jbm_amount: String(price),
         }),
       });
 
-      const data = (await response.json()) as { item?: BungalowItem; error?: string };
+      const data = (await response.json()) as {
+        item?: BungalowItem;
+        error?: string;
+      };
       if (!response.ok || !data.item) {
         throw new Error(data.error ?? `Request failed (${response.status})`);
       }
 
+      setPendingPayment(null);
       onCreated(data.item);
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to add item");
+      const baseMessage =
+        err instanceof Error ? err.message : "Failed to add item";
+      if (confirmedPayment) {
+        setError(
+          `${baseMessage}. Payment is already confirmed; click the button again to retry saving without paying again.`,
+        );
+      } else {
+        setError(baseMessage);
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -158,7 +249,11 @@ export default function AddItemModal({ chain, ca, open, onClose, onCreated }: Ad
       <div className={styles.modal}>
         <header className={styles.header}>
           <h3>Add to Bungalow</h3>
-          <button type="button" className={styles.closeButton} onClick={onClose}>
+          <button
+            type="button"
+            className={styles.closeButton}
+            onClick={onClose}
+          >
             ×
           </button>
         </header>
@@ -188,6 +283,7 @@ export default function AddItemModal({ chain, ca, open, onClose, onCreated }: Ad
             <input
               type="text"
               placeholder="Link title"
+              maxLength={100}
               value={title}
               onChange={(event) => setTitle(event.target.value)}
             />
@@ -198,7 +294,7 @@ export default function AddItemModal({ chain, ca, open, onClose, onCreated }: Ad
           <div className={styles.formBlock}>
             <textarea
               maxLength={280}
-              placeholder="Share a message with the community"
+              placeholder={`Share a message with the ${symbol} community`}
               value={frameText}
               onChange={(event) => setFrameText(event.target.value)}
             />
@@ -236,7 +332,8 @@ export default function AddItemModal({ chain, ca, open, onClose, onCreated }: Ad
                     key={`${option.chain}:${option.token_address}`}
                     value={`${option.chain}:${option.token_address}`}
                   >
-                    {(option.symbol ?? option.name ?? "Unknown").toUpperCase()} ({option.chain})
+                    {(option.symbol ?? option.name ?? "Unknown").toUpperCase()}{" "}
+                    ({option.chain})
                   </option>
                 ))}
             </select>
@@ -252,7 +349,13 @@ export default function AddItemModal({ chain, ca, open, onClose, onCreated }: Ad
             disabled={!canSubmit}
             onClick={handleSubmit}
           >
-            {isSubmitting || isTransferring ? "Processing..." : "Confirm & Pay"}
+            {isSubmitting || isTransferring
+              ? "Processing..."
+              : pendingPayment &&
+                  pendingPayment.itemType === itemType &&
+                  pendingPayment.amount === price
+                ? "Retry Save"
+                : "Confirm & Pay"}
           </button>
         </footer>
       </div>

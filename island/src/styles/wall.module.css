@@ -1,6 +1,8 @@
 .wallSection {
   margin-top: 18px;
-  background: rgba(20, 43, 26, 0.8);
+  background:
+    radial-gradient(1300px 420px at 10% -20%, rgba(31, 108, 71, 0.34), transparent 62%),
+    linear-gradient(180deg, rgba(20, 43, 26, 0.86) 0%, rgba(12, 28, 19, 0.92) 100%);
   border: 1px solid var(--border-subtle);
   border-radius: 14px;
   padding: 14px;
@@ -42,7 +44,24 @@
 }
 
 .grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 12px;
+  column-width: 250px;
+  column-gap: 14px;
+}
+
+.grid > * {
+  break-inside: avoid;
+  margin: 0 0 14px;
+  display: inline-block;
+  width: 100%;
+}
+
+@media (max-width: 700px) {
+  .grid {
+    column-width: 100%;
+    column-gap: 0;
+  }
+
+  .grid > * {
+    margin-bottom: 12px;
+  }
 }

@@ -1,15 +1,21 @@
 import { usePrivy } from "@privy-io/react-auth";
+import { useNavigate } from "react-router-dom";
 import styles from "../styles/wallet-button.module.css";
 
 export default function WalletButton() {
-  const { login, logout, authenticated, user } = usePrivy();
+  const { login, authenticated, user } = usePrivy();
+  const navigate = useNavigate();
 
-  if (authenticated && user?.wallet) {
-    const addr = user.wallet.address;
-    const short = `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+  if (authenticated) {
+    const addr = user?.wallet?.address;
+    const short = addr ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : "Profile";
 
     return (
-      <button type="button" onClick={logout} className={styles.walletButton}>
+      <button
+        type="button"
+        onClick={() => navigate("/profile")}
+        className={styles.walletButton}
+      >
         {short}
       </button>
     );

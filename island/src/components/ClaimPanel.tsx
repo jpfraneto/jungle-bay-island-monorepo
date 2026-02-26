@@ -35,7 +35,9 @@ function isHexSignature(value: string): value is `0x${string}` {
   return /^0x[0-9a-fA-F]+$/.test(value);
 }
 
-function getNextClaimCountdown(claimedToday: boolean | undefined): string | null {
+function getNextClaimCountdown(
+  claimedToday: boolean | undefined,
+): string | null {
   if (!claimedToday) return null;
 
   const now = new Date();
@@ -53,10 +55,18 @@ function getNextClaimCountdown(claimedToday: boolean | undefined): string | null
   return `Next claim in ${minutes}m`;
 }
 
-export default function ClaimPanel({ chain, ca, tokenSymbol }: ClaimPanelProps) {
+export default function ClaimPanel({
+  chain,
+  ca,
+  tokenSymbol,
+}: ClaimPanelProps) {
   const { authenticated, login } = usePrivy();
   const { publicClient, requireWallet, walletAddress } = usePrivyBaseWallet();
-  const { claimable, isLoading, refetch } = useClaimable(chain, ca, walletAddress ?? undefined);
+  const { claimable, isLoading, refetch } = useClaimable(
+    chain,
+    ca,
+    walletAddress ?? undefined,
+  );
 
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -106,8 +116,15 @@ export default function ClaimPanel({ chain, ca, tokenSymbol }: ClaimPanelProps) 
         error?: string;
       };
 
-      if (!signResponse.ok || !signData.signature || !signData.amount || signData.nonce === undefined) {
-        throw new Error(signData.error ?? `Signing failed (${signResponse.status})`);
+      if (
+        !signResponse.ok ||
+        !signData.signature ||
+        !signData.amount ||
+        signData.nonce === undefined
+      ) {
+        throw new Error(
+          signData.error ?? `Signing failed (${signResponse.status})`,
+        );
       }
 
       if (!isHexSignature(signData.signature)) {
@@ -118,7 +135,11 @@ export default function ClaimPanel({ chain, ca, tokenSymbol }: ClaimPanelProps) 
         address: CLAIM_CONTRACT_ADDRESS,
         abi: CLAIM_ABI,
         functionName: "claim",
-        args: [parseUnits(signData.amount, 18), BigInt(signData.nonce), signData.signature],
+        args: [
+          parseUnits(signData.amount, 18),
+          BigInt(signData.nonce),
+          signData.signature,
+        ],
         account: address,
       });
 
@@ -163,7 +184,10 @@ export default function ClaimPanel({ chain, ca, tokenSymbol }: ClaimPanelProps) 
     return (
       <aside className={styles.panel}>
         <h3>Claim Rewards</h3>
-        <p>You don&apos;t hold any {tokenSymbol} — no heat to claim.</p>
+        <p>
+          Your heat score for ${tokenSymbol} is 0 — no jungle bay memes to
+          claim.
+        </p>
       </aside>
     );
   }
@@ -182,7 +206,9 @@ export default function ClaimPanel({ chain, ca, tokenSymbol }: ClaimPanelProps) 
         <strong>{formatJbmAmount(claimable.claimable_jbm)}</strong>
       </div>
 
-      <div className={styles.lastClaim}>Last claimed: {formatTimeAgo(claimable.last_claimed_at)}</div>
+      <div className={styles.lastClaim}>
+        Last claimed: {formatTimeAgo(claimable.last_claimed_at)}
+      </div>
 
       <button
         type="button"

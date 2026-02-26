@@ -1,0 +1,112 @@
+.page {
+  min-height: calc(100vh - 52px);
+  padding: 18px;
+  display: grid;
+  align-items: start;
+}
+
+.card {
+  max-width: 760px;
+  width: 100%;
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 18px;
+  background:
+    radial-gradient(1000px 320px at 15% -30%, rgba(46, 161, 103, 0.26), transparent 62%),
+    linear-gradient(170deg, rgba(20, 43, 26, 0.9), rgba(12, 29, 20, 0.96));
+}
+
+.card h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 40px;
+  font-style: italic;
+}
+
+.card p {
+  margin: 10px 0 0;
+  color: var(--text-secondary);
+}
+
+.identity {
+  margin-top: 14px;
+  display: grid;
+  gap: 4px;
+}
+
+.identity strong {
+  font-size: 20px;
+}
+
+.identity span {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.stats {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.stats div {
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 10px;
+  background: rgba(10, 23, 16, 0.62);
+}
+
+.stats span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.stats strong {
+  display: block;
+  margin-top: 3px;
+  font-size: 16px;
+}
+
+.actions {
+  margin-top: 16px;
+  display: flex;
+  gap: 10px;
+}
+
+.actionButton,
+.secondaryButton,
+.logoutButton {
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 9px 12px;
+  cursor: pointer;
+}
+
+.actionButton {
+  margin-top: 12px;
+  background: #2a8f58;
+}
+
+.secondaryButton {
+  background: rgba(14, 31, 21, 0.8);
+}
+
+.logoutButton {
+  background: #c65353;
+  color: #fff2f2;
+}
+
+.actionButton:hover,
+.secondaryButton:hover,
+.logoutButton:hover {
+  filter: brightness(1.07);
+}
+
+@media (max-width: 640px) {
+  .actions {
+    flex-direction: column;
+  }
+}

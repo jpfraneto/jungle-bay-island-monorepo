@@ -23,6 +23,38 @@ const bungalowRoute = new Hono<AppEnv>();
 
 bungalowRoute.use("/bungalow/*", optionalWalletContext);
 
+function calculateTopHeatStats(values: number[]): {
+  sample_size: number;
+  top_50_average: number | null;
+  top_50_stddev: number | null;
+} {
+  const normalized = values
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value))
+    .slice(0, 50);
+
+  const sampleSize = normalized.length;
+  if (sampleSize === 0) {
+    return {
+      sample_size: 0,
+      top_50_average: null,
+      top_50_stddev: null,
+    };
+  }
+
+  const mean = normalized.reduce((sum, value) => sum + value, 0) / sampleSize;
+  const variance =
+    normalized.reduce((sum, value) => sum + (value - mean) ** 2, 0) /
+    sampleSize;
+  const stddev = Math.sqrt(Math.max(variance, 0));
+
+  return {
+    sample_size: sampleSize,
+    top_50_average: Number(mean.toFixed(4)),
+    top_50_stddev: Number(stddev.toFixed(4)),
+  };
+}
+
 bungalowRoute.get("/bungalow/:chain/:ca", async (c) => {
   const requestId = c.get("requestId") ?? "unknown";
   const chain = toSupportedChain(c.req.param("chain"));
@@ -92,6 +124,9 @@ bungalowRoute.get("/bungalow/:chain/:ca", async (c) => {
 
   const decimals = tokenRegistry?.decimals ?? null;
   const isNft = decimals === 0;
+  const topHeatStats = calculateTopHeatStats(
+    holdersResult.holders.map((holder) => Number(holder.heat_degrees)),
+  );
 
   const response: Record<string, unknown> = {
     token_address: tokenAddress,
@@ -125,6 +160,7 @@ bungalowRoute.get("/bungalow/:chain/:ca", async (c) => {
       website: bungalow.link_website ?? null,
       dexscreener: bungalow.link_dexscreener ?? null,
     },
+    heat_stats: topHeatStats,
     holders: holdersResult.holders.map((h, idx) => ({
       rank: idx + 1,
       wallet: h.wallet,

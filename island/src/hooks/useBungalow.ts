@@ -4,7 +4,7 @@ export interface BungalowDetails {
   token_address: string;
   chain: string;
   name: string | null;
-  symbol: string | null;
+  symbol: string;
   exists: boolean;
   is_claimed: boolean;
   is_verified: boolean;
@@ -19,6 +19,11 @@ export interface BungalowDetails {
     liquidity_usd: number | null;
     updated_at: string | null;
   } | null;
+  heat_stats?: {
+    sample_size: number;
+    top_50_average: number | null;
+    top_50_stddev: number | null;
+  };
   viewer_context?: {
     wallet: string;
     is_owner: boolean;

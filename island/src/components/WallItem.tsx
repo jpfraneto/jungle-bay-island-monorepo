@@ -11,6 +11,13 @@ function asString(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
+function formatHeat(value: number | null | undefined): string {
+  const numeric = Number(value ?? 0);
+  if (!Number.isFinite(numeric)) return "0°";
+  if (Math.abs(numeric) < 0.05) return "0°";
+  return `${numeric.toFixed(1)}°`;
+}
+
 export default function WallItem({ item }: WallItemProps) {
   const navigate = useNavigate();
   const title = asString(item.content.title);
@@ -21,9 +28,16 @@ export default function WallItem({ item }: WallItemProps) {
   const portalChain = asString(item.content.target_chain || item.content.chain);
   const portalCa = asString(item.content.target_ca || item.content.ca);
   const portalName = asString(item.content.target_name || item.content.name || item.content.symbol);
+  const collageClass = [
+    styles.collageA,
+    styles.collageB,
+    styles.collageC,
+    styles.collageD,
+    styles.collageE,
+  ][Math.abs(item.id) % 5];
 
   return (
-    <article className={styles.card}>
+    <article className={`${styles.card} ${collageClass}`}>
       <div className={styles.type}>{item.item_type}</div>
 
       {item.item_type === "link" ? (
@@ -64,11 +78,20 @@ export default function WallItem({ item }: WallItemProps) {
       ) : null}
 
       <footer className={styles.footer}>
-        <span>{formatAddress(item.placed_by)}</span>
+        <button
+          type="button"
+          className={styles.walletLink}
+          onClick={() => navigate(`/address/${item.placed_by}`)}
+        >
+          {formatAddress(item.placed_by)}
+        </button>
         <span>{formatTimeAgo(item.created_at)}</span>
       </footer>
 
-      <div className={styles.badge}>{formatJbmAmount(item.jbm_amount)}</div>
+      <div className={styles.badgeGroup}>
+        <div className={`${styles.badge} ${styles.amountBadge}`}>{formatJbmAmount(item.jbm_amount)}</div>
+        <div className={`${styles.badge} ${styles.heatBadge}`}>{formatHeat(item.placed_by_heat_degrees)}</div>
+      </div>
     </article>
   );
 }

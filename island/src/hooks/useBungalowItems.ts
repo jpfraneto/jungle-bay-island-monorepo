@@ -8,9 +8,46 @@ export interface BungalowItem {
   item_type: WallItemType;
   content: Record<string, unknown>;
   placed_by: string;
+  placed_by_heat_degrees: number | null;
   tx_hash: string;
   jbm_amount: string;
   created_at: string;
+}
+
+function normalizeContent(value: unknown): Record<string, unknown> {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      return {};
+    }
+  }
+
+  return {};
+}
+
+function normalizeItems(input: unknown): BungalowItem[] {
+  if (!Array.isArray(input)) return [];
+
+  return input.map((raw) => {
+    const item = raw as BungalowItem;
+    const parsedHeat = Number(
+      (item as unknown as { placed_by_heat_degrees?: string | number | null }).placed_by_heat_degrees ?? NaN,
+    );
+
+    return {
+      ...item,
+      content: normalizeContent(item.content),
+      placed_by_heat_degrees: Number.isFinite(parsedHeat) ? parsedHeat : null,
+    };
+  });
 }
 
 export function useBungalowItems(chain?: string, ca?: string) {
@@ -35,7 +72,7 @@ export function useBungalowItems(chain?: string, ca?: string) {
       }
 
       const data = (await response.json()) as { items?: BungalowItem[] };
-      setItems(Array.isArray(data.items) ? data.items : []);
+      setItems(normalizeItems(data.items));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load wall items");
       setItems([]);

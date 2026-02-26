@@ -1,10 +1,48 @@
 .card {
+  --collage-rotate: 0deg;
   background: linear-gradient(180deg, #1a3120 0%, #13261a 100%);
   border: 1px solid var(--border-subtle);
   border-radius: 12px;
   padding: 12px;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
   position: relative;
+  overflow: hidden;
+  transform: rotate(var(--collage-rotate));
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.card::before {
+  content: "";
+  position: absolute;
+  inset: -40% 60% auto -20%;
+  height: 90px;
+  background: radial-gradient(circle at center, rgba(97, 255, 181, 0.14), transparent 70%);
+  pointer-events: none;
+}
+
+.card:hover {
+  transform: translateY(-2px) scale(1.004) rotate(var(--collage-rotate));
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.3);
+}
+
+.collageA {
+  --collage-rotate: -0.8deg;
+}
+
+.collageB {
+  --collage-rotate: 0.55deg;
+}
+
+.collageC {
+  --collage-rotate: -0.25deg;
+}
+
+.collageD {
+  --collage-rotate: 0.85deg;
+}
+
+.collageE {
+  --collage-rotate: 0deg;
 }
 
 .type {
@@ -41,8 +79,9 @@
   color: var(--text-secondary);
   font-size: 12px;
   margin-top: 4px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.45;
 }
 
 .frameText {
@@ -54,33 +93,64 @@
 
 .image {
   width: 100%;
-  max-height: 200px;
-  object-fit: cover;
+  max-height: 320px;
+  object-fit: contain;
   border-radius: 8px;
   margin-top: 6px;
+  background: rgba(8, 18, 13, 0.7);
 }
 
 .footer {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   margin-top: 10px;
   font-size: 11px;
   color: var(--text-muted);
+  gap: 8px;
 }
 
-.badge {
+.badgeGroup {
   position: absolute;
   top: 10px;
   right: 10px;
+  display: flex;
+  gap: 6px;
+}
+
+.badge {
   font-size: 10px;
   font-family: var(--font-mono);
-  color: #ffeaa7;
   background: rgba(0, 0, 0, 0.28);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 999px;
   padding: 4px 8px;
+  white-space: nowrap;
+}
+
+.amountBadge {
+  color: #ffeaa7;
+}
+
+.heatBadge {
+  color: #7dffbe;
 }
 
 .portalButton {
   cursor: pointer;
+}
+
+.walletLink {
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.walletLink:hover {
+  color: #9effca;
+  text-decoration: underline;
 }

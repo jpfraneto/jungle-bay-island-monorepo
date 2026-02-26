@@ -37,6 +37,12 @@ export interface RecentScanRow {
   completed_at: string
 }
 
+export interface DailyRefreshTokenRow {
+  token_address: string
+  chain: 'base' | 'ethereum' | 'solana'
+  last_scanned_at: string | null
+}
+
 export async function getRecentScans(limit = 10): Promise<RecentScanRow[]> {
   return db<RecentScanRow[]>`
     SELECT
@@ -50,6 +56,19 @@ export async function getRecentScans(limit = 10): Promise<RecentScanRow[]> {
       ON tr.token_address = sl.token_address
     WHERE sl.scan_status = 'complete'
     ORDER BY sl.completed_at DESC
+    LIMIT ${limit}
+  `
+}
+
+export async function getDailyRefreshTokens(limit = 5000): Promise<DailyRefreshTokenRow[]> {
+  return db<DailyRefreshTokenRow[]>`
+    SELECT
+      token_address,
+      chain,
+      last_scanned_at::text AS last_scanned_at
+    FROM ${db(CONFIG.SCHEMA)}.token_registry
+    WHERE scan_status = 'complete'
+    ORDER BY last_scanned_at ASC NULLS FIRST, token_address ASC
     LIMIT ${limit}
   `
 }
@@ -1119,6 +1138,31 @@ export interface UserWalletLinkUpsertRow {
   last_seen_requester_wallet: boolean
 }
 
+export interface IdentityClusterWallet {
+  wallet: string
+  wallet_kind: 'evm' | 'solana'
+  linked_via_privy: boolean
+  linked_via_farcaster: boolean
+  farcaster_verified: boolean
+  is_requester_wallet: boolean
+}
+
+export interface IdentityCluster {
+  identity_key: string
+  identity_source: 'privy' | 'farcaster' | 'wallet'
+  identity_value: string
+  wallets: IdentityClusterWallet[]
+  evm_wallets: string[]
+  solana_wallets: string[]
+  x_username: string | null
+  farcaster: {
+    fid: number
+    username: string | null
+    display_name: string | null
+    pfp_url: string | null
+  } | null
+}
+
 export async function upsertUserWalletLinks(input: {
   privyUserId: string | null
   fid: number | null
@@ -1165,6 +1209,279 @@ export async function upsertUserWalletLinks(input: {
       last_seen_requester_wallet = EXCLUDED.last_seen_requester_wallet,
       last_seen_at = NOW()
   `
+}
+
+export async function getIdentityClusterByWallet(wallet: string): Promise<IdentityCluster | null> {
+  await ensureUserWalletLinksTable()
+
+  const normalizedWallet = normalizeAddress(wallet) ?? normalizeAddress(wallet, 'solana')
+  if (!normalizedWallet) return null
+  const requesterKind: 'evm' | 'solana' = normalizeAddress(wallet) ? 'evm' : 'solana'
+
+  const requesterRow = await db<Array<{
+    wallet: string
+    wallet_kind: 'evm' | 'solana'
+    privy_user_id: string | null
+    fid: number | null
+    x_username: string | null
+    seen_via_privy: boolean
+    seen_via_farcaster: boolean
+    farcaster_verified: boolean
+    last_seen_requester_wallet: boolean
+    last_seen_at: string
+  }>>`
+    SELECT
+      wallet,
+      wallet_kind,
+      privy_user_id,
+      fid,
+      x_username,
+      seen_via_privy,
+      seen_via_farcaster,
+      farcaster_verified,
+      last_seen_requester_wallet,
+      last_seen_at::text AS last_seen_at
+    FROM ${db(CONFIG.SCHEMA)}.user_wallet_links
+    WHERE wallet = ${normalizedWallet}
+    ORDER BY last_seen_requester_wallet DESC, last_seen_at DESC
+    LIMIT 1
+  `
+
+  const requesterLink = requesterRow[0] ?? null
+
+  let identitySource: 'privy' | 'farcaster' | 'wallet' = 'wallet'
+  let identityValue = normalizedWallet
+  let fid: number | null = requesterLink?.fid ?? null
+
+  if (requesterLink?.privy_user_id) {
+    identitySource = 'privy'
+    identityValue = requesterLink.privy_user_id
+  } else {
+    let resolvedFid = requesterLink?.fid ?? null
+    if (!resolvedFid) {
+      const wfpRows = await db<Array<{ fid: number | null }>>`
+        SELECT fid
+        FROM ${db(CONFIG.SCHEMA)}.wallet_farcaster_profiles
+        WHERE wallet = ${normalizedWallet}
+        LIMIT 1
+      `
+      resolvedFid = wfpRows[0]?.fid ?? null
+    }
+
+    if (resolvedFid) {
+      identitySource = 'farcaster'
+      identityValue = String(resolvedFid)
+      fid = resolvedFid
+    }
+  }
+
+  let identityRows: IdentityClusterWallet[] = []
+  let xUsername: string | null = requesterLink?.x_username ?? null
+
+  if (identitySource === 'privy') {
+    const rows = await db<Array<{
+      wallet: string
+      wallet_kind: 'evm' | 'solana'
+      seen_via_privy: boolean
+      seen_via_farcaster: boolean
+      farcaster_verified: boolean
+      last_seen_requester_wallet: boolean
+      x_username: string | null
+    }>>`
+      SELECT
+        wallet,
+        wallet_kind,
+        seen_via_privy,
+        seen_via_farcaster,
+        farcaster_verified,
+        last_seen_requester_wallet,
+        x_username
+      FROM ${db(CONFIG.SCHEMA)}.user_wallet_links
+      WHERE privy_user_id = ${identityValue}
+      ORDER BY last_seen_requester_wallet DESC, last_seen_at DESC
+    `
+
+    identityRows = rows.map((row) => ({
+      wallet: row.wallet,
+      wallet_kind: row.wallet_kind,
+      linked_via_privy: row.seen_via_privy,
+      linked_via_farcaster: row.seen_via_farcaster,
+      farcaster_verified: row.farcaster_verified,
+      is_requester_wallet: row.last_seen_requester_wallet || row.wallet === normalizedWallet,
+    }))
+    xUsername = rows.find((row) => row.x_username)?.x_username ?? xUsername
+    if (!fid) {
+      const fidRows = await db<Array<{ fid: number | null }>>`
+        SELECT fid
+        FROM ${db(CONFIG.SCHEMA)}.user_wallet_links
+        WHERE privy_user_id = ${identityValue}
+          AND fid IS NOT NULL
+        ORDER BY last_seen_at DESC
+        LIMIT 1
+      `
+      fid = fidRows[0]?.fid ?? null
+    }
+  } else if (identitySource === 'farcaster' && fid) {
+    const rows = await db<Array<{
+      wallet: string
+      wallet_kind: 'evm' | 'solana'
+      seen_via_privy: boolean
+      seen_via_farcaster: boolean
+      farcaster_verified: boolean
+      last_seen_requester_wallet: boolean
+      x_username: string | null
+    }>>`
+      SELECT
+        wallet,
+        wallet_kind,
+        seen_via_privy,
+        seen_via_farcaster,
+        farcaster_verified,
+        last_seen_requester_wallet,
+        x_username
+      FROM ${db(CONFIG.SCHEMA)}.user_wallet_links
+      WHERE fid = ${fid}
+      ORDER BY last_seen_requester_wallet DESC, last_seen_at DESC
+    `
+
+    identityRows = rows.map((row) => ({
+      wallet: row.wallet,
+      wallet_kind: row.wallet_kind,
+      linked_via_privy: row.seen_via_privy,
+      linked_via_farcaster: row.seen_via_farcaster,
+      farcaster_verified: row.farcaster_verified,
+      is_requester_wallet: row.last_seen_requester_wallet || row.wallet === normalizedWallet,
+    }))
+    xUsername = rows.find((row) => row.x_username)?.x_username ?? xUsername
+
+    const farcasterWalletRows = await db<Array<{ wallet: string }>>`
+      SELECT wallet
+      FROM ${db(CONFIG.SCHEMA)}.wallet_farcaster_profiles
+      WHERE fid = ${fid}
+      ORDER BY resolved_at DESC
+    `
+    for (const row of farcasterWalletRows) {
+      const walletKind = normalizeAddress(row.wallet) ? 'evm' : (normalizeAddress(row.wallet, 'solana') ? 'solana' : null)
+      if (!walletKind) continue
+      identityRows.push({
+        wallet: row.wallet,
+        wallet_kind: walletKind,
+        linked_via_privy: false,
+        linked_via_farcaster: true,
+        farcaster_verified: true,
+        is_requester_wallet: row.wallet === normalizedWallet,
+      })
+    }
+  }
+
+  if (identityRows.length === 0) {
+    identityRows = [
+      {
+        wallet: normalizedWallet,
+        wallet_kind: requesterKind,
+        linked_via_privy: Boolean(requesterLink?.seen_via_privy),
+        linked_via_farcaster: Boolean(requesterLink?.seen_via_farcaster),
+        farcaster_verified: Boolean(requesterLink?.farcaster_verified),
+        is_requester_wallet: true,
+      },
+    ]
+  }
+
+  const dedup = new Map<string, IdentityClusterWallet>()
+  for (const row of identityRows) {
+    const key = `${row.wallet_kind}:${row.wallet}`
+    const existing = dedup.get(key)
+    if (!existing) {
+      dedup.set(key, row)
+      continue
+    }
+    existing.linked_via_privy = existing.linked_via_privy || row.linked_via_privy
+    existing.linked_via_farcaster = existing.linked_via_farcaster || row.linked_via_farcaster
+    existing.farcaster_verified = existing.farcaster_verified || row.farcaster_verified
+    existing.is_requester_wallet = existing.is_requester_wallet || row.is_requester_wallet
+  }
+
+  const wallets = [...dedup.values()]
+  if (!wallets.some((row) => row.wallet === normalizedWallet)) {
+    wallets.push({
+      wallet: normalizedWallet,
+      wallet_kind: requesterKind,
+      linked_via_privy: false,
+      linked_via_farcaster: false,
+      farcaster_verified: false,
+      is_requester_wallet: true,
+    })
+  }
+
+  const evmWallets = wallets.filter((row) => row.wallet_kind === 'evm').map((row) => row.wallet)
+  const solanaWallets = wallets.filter((row) => row.wallet_kind === 'solana').map((row) => row.wallet)
+
+  let farcaster: IdentityCluster['farcaster'] = null
+  if (fid) {
+    const profileRows = await db<Array<{
+      fid: number
+      username: string | null
+      display_name: string | null
+      pfp_url: string | null
+    }>>`
+      SELECT
+        ${fid}::bigint AS fid,
+        COALESCE(fip.username, wfp.username) AS username,
+        COALESCE(fip.display_name, wfp.display_name) AS display_name,
+        COALESCE(fip.pfp_url, wfp.pfp_url) AS pfp_url
+      FROM (
+        SELECT 1 AS marker
+      ) marker
+      LEFT JOIN ${db(CONFIG.SCHEMA)}.fid_island_profiles fip
+        ON fip.fid = ${fid}
+      LEFT JOIN ${db(CONFIG.SCHEMA)}.wallet_farcaster_profiles wfp
+        ON wfp.fid = ${fid}
+      LIMIT 1
+    `
+    const profile = profileRows[0]
+    farcaster = profile
+      ? {
+          fid: Number(profile.fid),
+          username: profile.username,
+          display_name: profile.display_name,
+          pfp_url: profile.pfp_url,
+        }
+      : null
+  } else {
+    const wfpRows = await db<Array<{
+      fid: number | null
+      username: string | null
+      display_name: string | null
+      pfp_url: string | null
+    }>>`
+      SELECT fid, username, display_name, pfp_url
+      FROM ${db(CONFIG.SCHEMA)}.wallet_farcaster_profiles
+      WHERE wallet = ${normalizedWallet}
+      LIMIT 1
+    `
+    const wfp = wfpRows[0]
+    if (wfp?.fid) {
+      farcaster = {
+        fid: Number(wfp.fid),
+        username: wfp.username,
+        display_name: wfp.display_name,
+        pfp_url: wfp.pfp_url,
+      }
+      identitySource = 'farcaster'
+      identityValue = String(wfp.fid)
+    }
+  }
+
+  return {
+    identity_key: `${identitySource}:${identityValue}`,
+    identity_source: identitySource,
+    identity_value: identityValue,
+    wallets,
+    evm_wallets: [...new Set(evmWallets)],
+    solana_wallets: [...new Set(solanaWallets)],
+    x_username: xUsername,
+    farcaster,
+  }
 }
 
 export async function getTokenSummary(tokenAddress: string): Promise<{

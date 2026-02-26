@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
-import { parseUnits } from "viem";
 import { useClaimable } from "../hooks/useClaimable";
 import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
 import { CLAIM_CONTRACT_ADDRESS } from "../utils/constants";
@@ -41,10 +40,14 @@ function getNextClaimCountdown(
   if (!claimedToday) return null;
 
   const now = new Date();
-  const nextUtcMidnight = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1),
+  const nextUtcNoon = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 12, 0, 0),
   );
-  const diffMs = nextUtcMidnight.getTime() - now.getTime();
+  if (nextUtcNoon.getTime() <= now.getTime()) {
+    nextUtcNoon.setUTCDate(nextUtcNoon.getUTCDate() + 1);
+  }
+
+  const diffMs = nextUtcNoon.getTime() - now.getTime();
   const totalMinutes = Math.max(0, Math.floor(diffMs / 60000));
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
@@ -60,7 +63,7 @@ export default function ClaimPanel({
   ca,
   tokenSymbol,
 }: ClaimPanelProps) {
-  const { authenticated, login } = usePrivy();
+  const { authenticated, login, getAccessToken } = usePrivy();
   const { publicClient, requireWallet, walletAddress } = usePrivyBaseWallet();
   const { claimable, isLoading, refetch } = useClaimable(
     chain,
@@ -99,27 +102,35 @@ export default function ClaimPanel({
 
     try {
       const { address, walletClient } = await requireWallet();
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      const token = await getAccessToken();
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
 
       const signResponse = await fetch(`/api/claims/${chain}/${ca}/sign`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           wallet: address,
-          amount: claimable.claimable_jbm,
         }),
       });
 
       const signData = (await signResponse.json()) as {
         signature?: string;
         amount?: string;
+        amount_wei?: string;
         nonce?: number;
         error?: string;
       };
+      const amountWei = signData.amount_wei ?? signData.amount;
 
       if (
         !signResponse.ok ||
         !signData.signature ||
-        !signData.amount ||
+        !amountWei ||
         signData.nonce === undefined
       ) {
         throw new Error(
@@ -136,7 +147,7 @@ export default function ClaimPanel({
         abi: CLAIM_ABI,
         functionName: "claim",
         args: [
-          parseUnits(signData.amount, 18),
+          BigInt(amountWei),
           BigInt(signData.nonce),
           signData.signature,
         ],

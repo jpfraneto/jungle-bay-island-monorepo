@@ -19,6 +19,15 @@ function optionalInt(name: string, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
+function optionalBool(name: string, fallback: boolean): boolean {
+  const value = process.env[name]
+  if (!value) return fallback
+  const normalized = value.trim().toLowerCase()
+  if (normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on') return true
+  if (normalized === '0' || normalized === 'false' || normalized === 'no' || normalized === 'off') return false
+  return fallback
+}
+
 export const CONFIG = {
   DATABASE_URL: required('DATABASE_URL'),
   PONDER_RPC_URL_8453: required('PONDER_RPC_URL_8453'),
@@ -34,7 +43,7 @@ export const CONFIG = {
   TREASURY_ADDRESS: process.env.TREASURY_ADDRESS ?? '',
   CLAIM_SIGNER_PRIVATE_KEY: process.env.CLAIM_SIGNER_PRIVATE_KEY ?? '',
   CLAIM_CONTRACT_ADDRESS: process.env.CLAIM_CONTRACT_ADDRESS ?? '',
-  JBM_TOKEN_ADDRESS: process.env.JBM_TOKEN_ADDRESS ?? '0x33130dc28e1e4e8e6a34b1d0e5b3a8bfba8dba8d',
+  JBM_TOKEN_ADDRESS: process.env.JBM_TOKEN_ADDRESS ?? '0x3313338fe4bb2a166b81483bfcb2d4a6a1ebba8d',
   PORT: optionalInt('PORT', 3001),
   CORS_ORIGIN: process.env.CORS_ORIGIN ?? '*',
   SCHEMA: 'prod-v11',
@@ -43,6 +52,9 @@ export const CONFIG = {
   BUNGALOW_CACHE_MS: 5 * 60 * 1000,
   LEADERBOARD_CACHE_MS: 10 * 60 * 1000,
   PERSONA_CACHE_MS: 5 * 60 * 1000,
+  DAILY_HEAT_REFRESH_ENABLED: optionalBool('DAILY_HEAT_REFRESH_ENABLED', true),
+  DAILY_HEAT_REFRESH_CONCURRENCY: optionalInt('DAILY_HEAT_REFRESH_CONCURRENCY', 2),
+  DAILY_CLAIM_CAP_JBM: optionalInt('DAILY_CLAIM_CAP_JBM', 10_000_000),
 } as const
 
 export const db = postgres(CONFIG.DATABASE_URL, {

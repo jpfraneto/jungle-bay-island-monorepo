@@ -164,6 +164,15 @@ export default function AddressProfilePage() {
     profile?.farcaster?.display_name ??
     profile?.farcaster?.username ??
     formatAddress(normalizedWallet);
+  const identityMeta = [
+    profile?.x_username ? `x: @${profile.x_username}` : null,
+    profile?.farcaster?.username ? `farcaster: @${profile.farcaster.username}` : null,
+    profile?.wallet_map_summary?.total_wallets
+      ? `${profile.wallet_map_summary.total_wallets} linked wallets`
+      : null,
+  ]
+    .filter((value): value is string => Boolean(value))
+    .join(" • ");
   const islandHeat = profile?.island_heat ?? 0;
   const tier = profile?.tier ?? "drifter";
 
@@ -173,6 +182,9 @@ export default function AddressProfilePage() {
         <div>
           <h1>{displayName}</h1>
           <div className={styles.walletBadge}>{normalizedWallet}</div>
+          {identityMeta ? (
+            <div className={styles.identityMeta}>{identityMeta}</div>
+          ) : null}
         </div>
 
         <div className={styles.headerStats}>

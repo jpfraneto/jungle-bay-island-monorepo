@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { normalizeAddress } from '../config'
-import { getUserByWallet, getLinkedWalletsByWallet, getAggregatedUserByWallets } from '../db/queries'
+import { getUserByWallet, getAggregatedUserByWallets, getIdentityClusterByWallet } from '../db/queries'
 import { requireWalletAuth } from '../middleware/auth'
 import { ApiError } from '../services/errors'
 import { resolveUserWalletMap } from '../services/identityMap'
@@ -48,7 +48,7 @@ async function buildCurrentUserResponse(
 }
 
 userRoute.get('/wallet/:wallet', async (c) => {
-  const wallet = normalizeAddress(c.req.param('wallet'))
+  const wallet = normalizeAddress(c.req.param('wallet')) ?? normalizeAddress(c.req.param('wallet'), 'solana')
   if (!wallet) {
     throw new ApiError(400, 'invalid_wallet', 'Invalid wallet address')
   }
@@ -56,18 +56,33 @@ userRoute.get('/wallet/:wallet', async (c) => {
   const aggregate = c.req.query('aggregate') === 'true'
 
   if (aggregate) {
-    // Try to find linked wallets and return aggregated data
-    const linked = await getLinkedWalletsByWallet(wallet)
-    if (linked && linked.wallets.length > 1) {
-      const allWallets = linked.wallets.map((w) => w.wallet)
+    const identity = await getIdentityClusterByWallet(wallet)
+    if (identity) {
+      const allWallets = identity.wallets.map((w) => w.wallet)
       const aggregated = await getAggregatedUserByWallets(allWallets)
       if (aggregated) {
-        logInfo('USER AGGREGATE', `wallet=${wallet} linked_wallets=${allWallets.length} tokens=${aggregated.token_breakdown.length}`)
+        logInfo(
+          'USER AGGREGATE',
+          `wallet=${wallet} linked_wallets=${allWallets.length} identity=${identity.identity_key} tokens=${aggregated.token_breakdown.length}`,
+        )
         return c.json({
           wallet,
           ...aggregated,
-          linked_wallets: linked.wallets,
-          x_username: linked.x_username,
+          linked_wallets: identity.wallets.map((entry) => ({
+            wallet: entry.wallet,
+            wallet_kind: entry.wallet_kind,
+          })),
+          x_username: identity.x_username,
+          farcaster: identity.farcaster,
+          identity_key: identity.identity_key,
+          identity_source: identity.identity_source,
+          wallet_map: identity.wallets,
+          wallet_map_summary: {
+            total_wallets: identity.wallets.length,
+            evm_wallets: identity.evm_wallets.length,
+            solana_wallets: identity.solana_wallets.length,
+            farcaster_verified_wallets: identity.wallets.filter((entry) => entry.farcaster_verified).length,
+          },
           aggregated: true,
         })
       }

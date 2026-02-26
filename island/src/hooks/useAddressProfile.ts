@@ -21,6 +21,13 @@ export interface AddressProfile {
   wallet: string;
   island_heat: number;
   tier: string;
+  x_username?: string | null;
+  wallet_map_summary?: {
+    total_wallets: number;
+    evm_wallets: number;
+    solana_wallets: number;
+    farcaster_verified_wallets: number;
+  } | null;
   farcaster: {
     fid: number | null;
     username: string | null;

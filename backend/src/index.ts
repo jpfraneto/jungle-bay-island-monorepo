@@ -23,6 +23,7 @@ import v1BungalowRoute from "./routes/v1-bungalow";
 import { homeTeamRoute } from "./routes/home-team";
 import itemsRoute from "./routes/items";
 import claimsRoute from "./routes/claims";
+import { startDailyHeatRefreshScheduler } from "./services/dailyHeatRefresh";
 import { isApiError } from "./services/errors";
 import { logError, logWarn } from "./services/logger";
 import type { AppEnv } from "./types";
@@ -415,6 +416,7 @@ async function logStartupStatus(): Promise<void> {
 
 if (import.meta.main) {
   await logStartupStatus();
+  startDailyHeatRefreshScheduler();
 }
 
 export default {

@@ -1,5 +1,5 @@
 .layout {
-  height: 100vh;
+  height: 100dvh;
   background: var(--bg-main);
   display: flex;
   flex-direction: column;
@@ -8,7 +8,7 @@
 
 .body {
   display: flex;
-  height: calc(100vh - 52px);
+  flex: 1;
   min-height: 0;
   overflow: hidden;
 }
@@ -19,4 +19,5 @@
   min-height: 0;
   background: var(--bg-main);
   overflow: hidden;
+  overscroll-behavior: none;
 }

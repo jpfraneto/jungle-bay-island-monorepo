@@ -8,49 +8,18 @@ import {
   writeScanResult,
 } from "../src/db/queries";
 import { fetchDexScreenerData } from "../src/services/dexscreener";
+import { HOME_TEAM_PHASE_1, type HomeTeamToken } from "../src/services/homeTeam";
 import { scanSolanaToken } from "../src/services/solanaScanner";
 import { scanToken } from "../src/services/scanner";
 
-type HomeTeamChain = "base" | "ethereum" | "solana";
-
-interface HomeTeamToken {
-  chain: HomeTeamChain;
-  token_address: string;
-  name: string;
-  symbol: string;
-  image_url?: string | null;
-}
-
 interface RegistryRow {
   token_address: string;
-  chain: HomeTeamChain;
+  chain: HomeTeamToken["chain"];
   scan_status: string;
   is_home_team: boolean | null;
 }
 
-const HOME_TEAM_TOKENS: HomeTeamToken[] = [
-  {
-    chain: "ethereum",
-    token_address: "0xd37264c71e9af940e49795f0d3a8336afaafdda9",
-    name: "Jungle Bay Collection",
-    symbol: "JBAC",
-    image_url: "https://opensea.io/collection/junglebay/opengraph-image",
-  },
-  { chain: "base", token_address: "0x3313338fe4bb2a166b81483bfcb2d4a6a1ebba8d", name: "Jungle Bay Memes", symbol: "JBM" },
-  { chain: "base", token_address: "0x570b1533f6daa82814b25b62b5c7c4c55eb83947", name: "BOBO", symbol: "BOBO" },
-  { chain: "ethereum", token_address: "0xb90b2a35c65dbc466b04240097ca756ad2005295", name: "BOBO", symbol: "BOBO" },
-  { chain: "solana", token_address: "8NNXWrWVctNw1UFeaBypffimTdcLCcD8XJzHvYsmgwpF", name: "BRAINLET", symbol: "BRAINLET" },
-  { chain: "base", token_address: "0xe3086852a4b125803c815a158249ae468a3254ca", name: "mfer", symbol: "MFER" },
-  { chain: "base", token_address: "0x22af33fe49fd1fa80c7149773dde5890d3c76f3b", name: "BNKR", symbol: "BNKR" },
-  { chain: "ethereum", token_address: "0x6982508145454ce325ddbe47a25d4ec3d2311933", name: "PEPE", symbol: "PEPE" },
-  { chain: "base", token_address: "0x58d6e314755c2668f3d7358cc7a7a06c4314b238", name: "RIZZ", symbol: "RIZZ" },
-  { chain: "solana", token_address: "5ad4puH6yDBoeCcrQfwV5s9bxvPnAeWDoYDj3uLyBS8k", name: "RIZZ", symbol: "RIZZ" },
-  { chain: "base", token_address: "0x3ec2156d4c0a9cbdab4a016633b7bcf6a8d68ea2", name: "DebtReliefBot", symbol: "DRB" },
-  { chain: "base", token_address: "0x3d01fe5a38ddbd307fdd635b4cb0e29681226d6f", name: "ALPHA", symbol: "ALPHA" },
-  { chain: "base", token_address: "0x2b5050f01d64fbb3e4ac44dc07f0732bfb5ecadf", name: "QR", symbol: "QR" },
-  { chain: "ethereum", token_address: "0x420698cfdeddea6bc78d59bc17798113ad278f9d", name: "TOWELI", symbol: "TOWELI" },
-  { chain: "base", token_address: "0x279e7cff2dbc93ff1f5cae6cbd072f98d75987ca", name: "TOWELI", symbol: "TOWELI" },
-];
+const HOME_TEAM_TOKENS: HomeTeamToken[] = [...HOME_TEAM_PHASE_1];
 
 const CLEANUP_TOKEN_ADDRESS_TABLES = [
   { table: "bulletin_posts", column: "token_address" },
@@ -80,7 +49,7 @@ const SCAN_CONCURRENCY = Math.max(
   Number.parseInt(process.env.HOME_TEAM_SCAN_CONCURRENCY ?? "2", 10) || 2,
 );
 
-function normalizeTokenAddress(chain: HomeTeamChain, address: string): string {
+function normalizeTokenAddress(chain: HomeTeamToken["chain"], address: string): string {
   if (chain === "solana") {
     return address.trim();
   }
@@ -91,7 +60,7 @@ function normalizeTokenAddress(chain: HomeTeamChain, address: string): string {
   return normalized;
 }
 
-function tokenKey(chain: HomeTeamChain, tokenAddress: string): string {
+function tokenKey(chain: HomeTeamToken["chain"], tokenAddress: string): string {
   return `${chain}:${tokenAddress}`;
 }
 
@@ -351,7 +320,7 @@ async function main() {
     if (chainChanged.length > 0) console.log(`   Chain fixes: ${chainChanged.join(", ")}`);
     if (removedRows.length > 0) {
       console.log(
-        `   Remove list: ${removedRows.map((row) => tokenKey(row.chain as HomeTeamChain, row.token_address)).join(", ")}`,
+        `   Remove list: ${removedRows.map((row) => tokenKey(row.chain as HomeTeamToken["chain"], row.token_address)).join(", ")}`,
       );
     }
     console.log("\n✅ Dry run complete\n");
@@ -402,7 +371,7 @@ async function main() {
 
   if (removedRows.length > 0) {
     console.log(
-      `   Removed tokens: ${removedRows.map((row) => tokenKey(row.chain as HomeTeamChain, row.token_address)).join(", ")}`,
+      `   Removed tokens: ${removedRows.map((row) => tokenKey(row.chain as HomeTeamToken["chain"], row.token_address)).join(", ")}`,
     );
   }
 

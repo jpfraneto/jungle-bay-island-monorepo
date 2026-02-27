@@ -8,10 +8,10 @@ export const ITEM_PRICES: Record<WallItemType, number> = {
 };
 
 export const ITEM_LABELS: Record<WallItemType, string> = {
-  frame: "Frame",
+  frame: "Post",
   link: "Link",
   image: "Image",
-  portal: "Portal",
+  portal: "Miniapp",
 };
 
 export const GLOW_COLORS = [

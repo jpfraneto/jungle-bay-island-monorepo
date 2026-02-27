@@ -23,6 +23,7 @@
   border-right: 1px solid var(--border-subtle);
   padding: 14px 12px;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .section + .section {

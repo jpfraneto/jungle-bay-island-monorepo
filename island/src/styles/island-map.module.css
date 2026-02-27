@@ -1,7 +1,9 @@
 .map {
   position: relative;
-  min-height: calc(100vh - 52px);
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
+  overscroll-behavior: none;
   background:
     radial-gradient(circle at 50% 42%, rgba(76, 133, 87, 0.45), rgba(12, 30, 20, 0.96) 58%),
     linear-gradient(180deg, #0d2115 0%, #08140d 100%);
@@ -70,8 +72,9 @@
 .viewport {
   position: absolute;
   inset: 0;
-  transform-origin: center center;
+  transform-origin: 0 0;
   transition: transform 0.2s ease;
+  will-change: transform;
 }
 
 @keyframes islandLoad {

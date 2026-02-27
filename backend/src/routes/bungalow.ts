@@ -15,6 +15,11 @@ import {
 import { optionalWalletContext, requireWalletAuth } from "../middleware/auth";
 import { clearCache, getCached, setCached } from "../services/cache";
 import { ApiError } from "../services/errors";
+import {
+  getHomeTeamToken,
+  isPlaceholderMetadataLabel,
+  pickMetadataLabel,
+} from "../services/homeTeam";
 import { logDebug, logInfo } from "../services/logger";
 import { resolveTokenMetadata } from "../services/tokenMetadata";
 import type { AppEnv } from "../types";
@@ -81,20 +86,27 @@ bungalowRoute.get("/bungalow/:chain/:ca", async (c) => {
   }
 
   const bungalow = await getBungalow(tokenAddress, chain);
+  const seededMetadata = getHomeTeamToken(chain, tokenAddress);
 
   if (!bungalow) {
     const fallback = await resolveTokenMetadata(tokenAddress, chain);
     const notFound = {
       token_address: tokenAddress,
       chain,
-      name: fallback.name,
-      symbol: fallback.symbol,
+      name: pickMetadataLabel(
+        seededMetadata?.name,
+        fallback.name,
+      ),
+      symbol: pickMetadataLabel(
+        seededMetadata?.symbol,
+        fallback.symbol,
+      ),
       exists: false,
       is_claimed: false,
       is_verified: false,
       description: fallback.description,
       origin_story: null,
-      image_url: fallback.image_url,
+      image_url: seededMetadata?.image_url ?? fallback.image_url,
       market_data: fallback.market_data,
       links: {
         x: fallback.links.x,
@@ -116,7 +128,9 @@ bungalowRoute.get("/bungalow/:chain/:ca", async (c) => {
   );
 
   const fallbackMetadataPromise =
-    !bungalow.image_url || !bungalow.name || !bungalow.symbol
+    !bungalow.image_url ||
+    isPlaceholderMetadataLabel(bungalow.name) ||
+    isPlaceholderMetadataLabel(bungalow.symbol)
       ? resolveTokenMetadata(tokenAddress, chain).catch(() => null)
       : Promise.resolve(null);
 
@@ -133,12 +147,24 @@ bungalowRoute.get("/bungalow/:chain/:ca", async (c) => {
   const topHeatStats = calculateTopHeatStats(
     holdersResult.holders.map((holder) => Number(holder.heat_degrees)),
   );
+  const resolvedName = pickMetadataLabel(
+    bungalow.name,
+    tokenRegistry?.name,
+    seededMetadata?.name,
+    fallbackMetadata?.name,
+  );
+  const resolvedSymbol = pickMetadataLabel(
+    bungalow.symbol,
+    tokenRegistry?.symbol,
+    seededMetadata?.symbol,
+    fallbackMetadata?.symbol,
+  );
 
   const response: Record<string, unknown> = {
     token_address: tokenAddress,
     chain,
-    name: bungalow.name ?? fallbackMetadata?.name ?? null,
-    symbol: bungalow.symbol ?? fallbackMetadata?.symbol ?? null,
+    name: resolvedName,
+    symbol: resolvedSymbol,
     decimals,
     is_nft: isNft,
     exists: true,
@@ -147,7 +173,11 @@ bungalowRoute.get("/bungalow/:chain/:ca", async (c) => {
     current_owner: bungalow.current_owner ?? null,
     description: bungalow.description ?? fallbackMetadata?.description ?? null,
     origin_story: bungalow.origin_story ?? null,
-    image_url: bungalow.image_url ?? fallbackMetadata?.image_url ?? null,
+    image_url:
+      bungalow.image_url ??
+      seededMetadata?.image_url ??
+      fallbackMetadata?.image_url ??
+      null,
     holder_count: bungalow.holder_count ?? 0,
     total_supply: bungalow.total_supply ?? null,
     market_data: hasMarketData

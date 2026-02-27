@@ -62,7 +62,7 @@ export default function BungalowNode({ bungalow, x, y, index }: BungalowNodeProp
         }}
       />
       <span className={styles.label}>
-        <ChainIcon chain={bungalow.chain} className={styles.chainIcon} />
+        <ChainIcon chain={bungalow.chain} className={styles.chainIcon} size={11} />
         <span className={styles.symbol}>{ticker}</span>
       </span>
       <NodeTooltip

@@ -7,6 +7,7 @@ import { base, mainnet } from 'viem/chains'
 import { calculateHeatDegrees, calculateTWAB, type BalanceSnapshot } from './heat'
 import { fetchDexScreenerData } from './dexscreener'
 import { getBungalow } from '../db/queries'
+import { isPlaceholderMetadataLabel } from './homeTeam'
 import { logInfo } from './logger'
 
 export interface TimelineBucket {
@@ -425,7 +426,7 @@ export async function scanToken(
   const metadata = await getTokenMetadata(client, checksumAddress, rpcCounter)
 
   // Fallback for name/symbol: check existing DB data, then DexScreener
-  const isPlaceholder = (v: string | null) => !v || v === 'UNKNOWN' || v === 'Unknown'
+  const isPlaceholder = isPlaceholderMetadataLabel
   if (isPlaceholder(metadata.name) || isPlaceholder(metadata.symbol)) {
     const existing = await getBungalow(tokenAddress, chain)
     if (existing?.name && !isPlaceholder(existing.name)) metadata.name = existing.name

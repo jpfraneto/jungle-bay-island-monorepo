@@ -2,6 +2,7 @@ import type { SupportedChain } from "../config";
 import { getBungalow } from "../db/queries";
 import { getCached, setCached } from "./cache";
 import { fetchDexScreenerData } from "./dexscreener";
+import { isPlaceholderMetadataLabel, pickMetadataLabel } from "./homeTeam";
 import { fetchSolanaTokenMetadata } from "./solanaMetadata";
 
 const TOKEN_METADATA_CACHE_MS = 30 * 60 * 1000;
@@ -59,10 +60,11 @@ export async function resolveTokenMetadata(
   if (cached) return cached;
 
   const bungalow = await getBungalow(tokenAddress, chain);
-  const isPlaceholder = (v: string | null | undefined) =>
-    !v || v === 'UNKNOWN' || v === 'Unknown';
   const needsDexFallback =
-    !bungalow || isPlaceholder(bungalow.name) || isPlaceholder(bungalow.symbol) || !bungalow.image_url;
+    !bungalow ||
+    isPlaceholderMetadataLabel(bungalow.name) ||
+    isPlaceholderMetadataLabel(bungalow.symbol) ||
+    !bungalow.image_url;
   const dexData = needsDexFallback
     ? await fetchDexScreenerData(tokenAddress, chain)
     : null;
@@ -78,10 +80,16 @@ export async function resolveTokenMetadata(
 
   const rawName = bungalow?.name;
   const rawSymbol = bungalow?.symbol;
-  const name = (rawName && !isPlaceholder(rawName) ? rawName : null)
-    ?? dexData?.tokenName ?? solMeta?.name ?? rawName ?? null;
-  const symbol = (rawSymbol && !isPlaceholder(rawSymbol) ? rawSymbol : null)
-    ?? dexData?.tokenSymbol ?? solMeta?.symbol ?? rawSymbol ?? null;
+  const name = pickMetadataLabel(
+    rawName,
+    dexData?.tokenName,
+    solMeta?.name,
+  );
+  const symbol = pickMetadataLabel(
+    rawSymbol,
+    dexData?.tokenSymbol,
+    solMeta?.symbol,
+  );
   const description =
     bungalow?.description ??
     solMeta?.description ??

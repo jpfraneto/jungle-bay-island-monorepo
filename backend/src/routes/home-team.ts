@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { CONFIG, db } from "../config";
+import { getHomeTeamToken, pickMetadataLabel } from "../services/homeTeam";
 import type { AppEnv } from "../types";
 
 interface HomeTeamBungalowRow {
@@ -47,7 +48,21 @@ homeTeamRoute.get("/home-team", async (c) => {
     ORDER BY tr.name ASC
   `;
 
-  return c.json({ bungalows: rows });
+  const bungalows = rows.map((row) => {
+    const seeded = getHomeTeamToken(
+      row.chain as "base" | "ethereum" | "solana",
+      row.token_address,
+    );
+
+    return {
+      ...row,
+      name: pickMetadataLabel(row.name, row.symbol, seeded?.name),
+      symbol: pickMetadataLabel(row.symbol, seeded?.symbol),
+      image_url: row.image_url ?? seeded?.image_url ?? null,
+    };
+  });
+
+  return c.json({ bungalows });
 });
 
 export { homeTeamRoute };

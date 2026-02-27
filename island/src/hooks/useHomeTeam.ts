@@ -14,7 +14,7 @@ export interface HomeTeamBungalow {
   price_usd: string | null;
 }
 
-const SEEDED_HOME_TEAM: HomeTeamBungalow[] = [
+export const SEEDED_HOME_TEAM: HomeTeamBungalow[] = [
   {
     token_address: "0xd37264c71e9af940e49795f0d3a8336afaafdda9",
     chain: "ethereum",

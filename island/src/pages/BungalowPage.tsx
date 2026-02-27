@@ -182,21 +182,25 @@ export default function BungalowPage() {
 
               <div className={styles.headerText}>
                 <div className={styles.titleRow}>
-                  <ChainIcon chain={activeChain} className={styles.chainIcon} />
+                  <ChainIcon chain={activeChain} className={styles.chainIcon} size={14} />
                   <h1 className={styles.title}>
                     {bungalow.name ?? "Unknown Token"} (
                     {bungalow.symbol ? `$${bungalow.symbol}` : "?"})
                   </h1>
                 </div>
                 <div className={styles.headerMeta}>
-                  <div className={`${styles.chainBadge} ${chainToneClass(activeChain)}`}>
+                  <div
+                    className={`${styles.chainBadge} ${chainToneClass(activeChain)}`}
+                  >
                     {getChainLabel(activeChain)}
                   </div>
                   <div className={styles.standardBadge}>
                     {tokenStandardLabel(activeChain, isNft)}
                   </div>
                 </div>
-                <p className={styles.contractAddress}>{bungalow.token_address}</p>
+                <p className={styles.contractAddress}>
+                  {bungalow.token_address}
+                </p>
               </div>
             </div>
 

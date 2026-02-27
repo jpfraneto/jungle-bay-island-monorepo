@@ -3,6 +3,7 @@ import type { HomeTeamBungalow } from "../hooks/useHomeTeam";
 import { GLOW_COLORS } from "../utils/constants";
 import { getFallbackTokenImage, getTokenImageUrl } from "../utils/tokenImage";
 import styles from "../styles/sidebar.module.css";
+import ChainIcon from "./ChainIcon";
 
 interface SidebarProps {
   bungalows: HomeTeamBungalow[];
@@ -22,7 +23,9 @@ export default function Sidebar({ bungalows, isOpen, onClose }: SidebarProps) {
         onClick={onClose}
       />
 
-      <aside className={`${styles.sidebar} ${isOpen ? styles.sidebarOpen : ""}`}>
+      <aside
+        className={`${styles.sidebar} ${isOpen ? styles.sidebarOpen : ""}`}
+      >
         <section className={styles.section}>
           <h2 className={styles.heading}>CORE</h2>
           <button
@@ -68,7 +71,9 @@ export default function Sidebar({ bungalows, isOpen, onClose }: SidebarProps) {
           <h2 className={styles.heading}>BUNGALOWS</h2>
           <div className={styles.bungalowList}>
             {bungalows.length === 0 ? (
-              <div className={styles.empty}>No bungalows yet. Try again in a moment.</div>
+              <div className={styles.empty}>
+                No bungalows yet. Try again in a moment.
+              </div>
             ) : (
               bungalows.map((bungalow, index) => {
                 const symbol = bungalow.symbol ?? "?";
@@ -105,6 +110,13 @@ export default function Sidebar({ bungalows, isOpen, onClose }: SidebarProps) {
                       />
                     </span>
                     <span>{symbol}</span>
+                    <span className={styles.chainIcon}>
+                      <ChainIcon
+                        chain={bungalow.chain}
+                        className={styles.chainIcon}
+                        size={11}
+                      />
+                    </span>
                   </button>
                 );
               })

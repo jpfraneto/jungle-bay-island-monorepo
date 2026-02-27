@@ -3,6 +3,7 @@ import { calculateHeatDegrees } from './heat'
 import { fetchSolanaTokenMetadata } from './solanaMetadata'
 import { fetchDexScreenerData } from './dexscreener'
 import { getBungalow } from '../db/queries'
+import { isPlaceholderMetadataLabel } from './homeTeam'
 import { logInfo, logError } from './logger'
 import type { ScanResult } from './scanner'
 import { createHash } from 'crypto'
@@ -166,7 +167,7 @@ export async function scanSolanaToken(
   const totalSupply = Number(totalSupplyRaw) / (10 ** decimals)
 
   // Fallback: check existing DB data, then DexScreener
-  const isPlaceholder = (v: string | null) => !v || v === 'UNKNOWN' || v === 'Unknown'
+  const isPlaceholder = isPlaceholderMetadataLabel
   if (isPlaceholder(name) || isPlaceholder(symbol)) {
     const existing = await getBungalow(tokenAddress, 'solana')
     if (existing && !isPlaceholder(existing.name)) name = existing.name

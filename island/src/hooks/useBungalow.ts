@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { SEEDED_HOME_TEAM } from "./useHomeTeam";
 
 export interface BungalowDetails {
   token_address: string;
@@ -36,6 +37,26 @@ export interface BungalowDetails {
   };
 }
 
+function isPlaceholderLabel(value: string | null | undefined): boolean {
+  if (!value) return true;
+  const normalized = value.trim().toLowerCase();
+  return (
+    normalized.length === 0 ||
+    normalized === "unknown" ||
+    normalized === "$unknown" ||
+    normalized === "?" ||
+    normalized === "token" ||
+    normalized === "null"
+  );
+}
+
+const SEEDED_BY_KEY = new Map(
+  SEEDED_HOME_TEAM.map((item) => [
+    `${item.chain}:${item.token_address.toLowerCase()}`,
+    item,
+  ]),
+);
+
 export function useBungalow(chain?: string, ca?: string) {
   const [bungalow, setBungalow] = useState<BungalowDetails | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -58,7 +79,17 @@ export function useBungalow(chain?: string, ca?: string) {
       }
 
       const data = (await response.json()) as BungalowDetails;
-      setBungalow(data);
+      const seeded = SEEDED_BY_KEY.get(
+        `${data.chain}:${data.token_address.toLowerCase()}`,
+      );
+
+      setBungalow({
+        ...data,
+        name: isPlaceholderLabel(data.name) ? seeded?.name ?? null : data.name,
+        symbol: isPlaceholderLabel(data.symbol)
+          ? seeded?.symbol ?? null
+          : data.symbol,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load bungalow");
       setBungalow(null);

@@ -18,18 +18,20 @@ export default function Wall({ items, isLoading, onAdd }: WallProps) {
         </button>
       </div>
 
-      {isLoading ? <div className={styles.empty}>Loading wall items...</div> : null}
+      <div className={styles.scrollArea}>
+        {isLoading ? <div className={styles.empty}>Loading wall items...</div> : null}
 
-      {!isLoading && items.length === 0 ? (
-        <div className={styles.empty}>
-          This bungalow&apos;s wall is empty. Be the first to add something.
+        {!isLoading && items.length === 0 ? (
+          <div className={styles.empty}>
+            This bungalow&apos;s wall is empty. Be the first to add something.
+          </div>
+        ) : null}
+
+        <div className={styles.grid}>
+          {items.map((item) => (
+            <WallItem key={item.id} item={item} />
+          ))}
         </div>
-      ) : null}
-
-      <div className={styles.grid}>
-        {items.map((item) => (
-          <WallItem key={item.id} item={item} />
-        ))}
       </div>
     </section>
   );

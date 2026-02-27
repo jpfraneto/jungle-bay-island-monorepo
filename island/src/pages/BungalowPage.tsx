@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { usePrivy } from "@privy-io/react-auth";
 import { useParams } from "react-router-dom";
 import AddItemModal from "../components/AddItemModal";
+import ChainIcon, { getChainLabel } from "../components/ChainIcon";
 import ClaimPanel from "../components/ClaimPanel";
 import Wall from "../components/Wall";
 import { useBungalow } from "../hooks/useBungalow";
@@ -9,12 +11,6 @@ import NotFoundPage from "./NotFoundPage";
 import { formatCompactUsd, formatNumber } from "../utils/formatters";
 import { getFallbackTokenImage, getTokenImageUrl } from "../utils/tokenImage";
 import styles from "../styles/bungalow-page.module.css";
-
-function chainLabel(chain: string): string {
-  if (chain === "base") return "Base";
-  if (chain === "ethereum") return "Ethereum";
-  return "Solana";
-}
 
 function tokenStandardLabel(chain: string, isNft: boolean): string {
   if (chain === "base" || chain === "ethereum") {
@@ -27,45 +23,6 @@ function chainToneClass(chain: string): string {
   if (chain === "base") return styles.base;
   if (chain === "ethereum") return styles.ethereum;
   return styles.solana;
-}
-
-function ChainIcon({ chain }: { chain: string }) {
-  if (chain === "ethereum") {
-    return (
-      <svg viewBox="0 0 24 24" className={styles.chainIcon} aria-hidden="true">
-        <path
-          d="M12 2.3 6.7 12l5.3 3.2 5.3-3.2L12 2.3Zm-5.3 11.7L12 21.7l5.3-7.7L12 17.2 6.7 14Z"
-          fill="currentColor"
-        />
-      </svg>
-    );
-  }
-  if (chain === "solana") {
-    return (
-      <svg viewBox="0 0 24 24" className={styles.chainIcon} aria-hidden="true">
-        <path
-          d="M5.2 5.5a1.8 1.8 0 0 1 1.3-.5h11.2c1.2 0 1.8 1.5.9 2.4l-2.2 2.2a1.8 1.8 0 0 1-1.3.5H4c-1.2 0-1.8-1.5-.9-2.4l2.1-2.2Z"
-          fill="currentColor"
-        />
-        <path
-          d="M18.8 11.8a1.8 1.8 0 0 0-1.3-.5H6.3c-1.2 0-1.8 1.5-.9 2.4l2.2 2.2c.3.3.8.5 1.3.5h11.2c1.2 0 1.8-1.5.9-2.4l-2.2-2.2Z"
-          fill="currentColor"
-          opacity="0.82"
-        />
-        <path
-          d="M5.2 18.1a1.8 1.8 0 0 1 1.3-.5h11.2c1.2 0 1.8 1.5.9 2.4l-2.2 2.2a1.8 1.8 0 0 1-1.3.5H4c-1.2 0-1.8-1.5-.9-2.4l2.1-2.2Z"
-          fill="currentColor"
-          opacity="0.66"
-        />
-      </svg>
-    );
-  }
-  return (
-    <svg viewBox="0 0 24 24" className={styles.chainIcon} aria-hidden="true">
-      <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="2.2" />
-      <circle cx="12" cy="12" r="4" fill="currentColor" />
-    </svg>
-  );
 }
 
 function formatHeatMetric(
@@ -160,6 +117,7 @@ function BungalowSkeleton() {
 
 export default function BungalowPage() {
   const { chain = "", ca = "" } = useParams();
+  const { authenticated, login } = usePrivy();
   const { bungalow, isLoading, error } = useBungalow(chain, ca);
   const {
     items,
@@ -168,6 +126,14 @@ export default function BungalowPage() {
   } = useBungalowItems(chain, ca);
 
   const [isAddOpen, setIsAddOpen] = useState(false);
+
+  const handleOpenAddModal = () => {
+    if (!authenticated) {
+      login();
+      return;
+    }
+    setIsAddOpen(true);
+  };
 
   if (!chain || !ca) {
     return <div className={styles.page}>Invalid bungalow route</div>;
@@ -216,7 +182,7 @@ export default function BungalowPage() {
 
               <div className={styles.headerText}>
                 <div className={styles.titleRow}>
-                  <ChainIcon chain={activeChain} />
+                  <ChainIcon chain={activeChain} className={styles.chainIcon} />
                   <h1 className={styles.title}>
                     {bungalow.name ?? "Unknown Token"} (
                     {bungalow.symbol ? `$${bungalow.symbol}` : "?"})
@@ -224,7 +190,7 @@ export default function BungalowPage() {
                 </div>
                 <div className={styles.headerMeta}>
                   <div className={`${styles.chainBadge} ${chainToneClass(activeChain)}`}>
-                    {chainLabel(activeChain)}
+                    {getChainLabel(activeChain)}
                   </div>
                   <div className={styles.standardBadge}>
                     {tokenStandardLabel(activeChain, isNft)}
@@ -269,11 +235,13 @@ export default function BungalowPage() {
             </div>
           </header>
 
-          <Wall
-            items={items}
-            isLoading={itemsLoading}
-            onAdd={() => setIsAddOpen(true)}
-          />
+          <div className={styles.wallRegion}>
+            <Wall
+              items={items}
+              isLoading={itemsLoading}
+              onAdd={handleOpenAddModal}
+            />
+          </div>
         </section>
 
         <div className={styles.sideColumn}>

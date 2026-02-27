@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import type { HomeTeamBungalow } from "../hooks/useHomeTeam";
+import ChainIcon from "./ChainIcon";
 import { GLOW_COLORS } from "../utils/constants";
 import { getFallbackTokenImage, getTokenImageUrl } from "../utils/tokenImage";
 import NodeTooltip from "./NodeTooltip";
@@ -23,6 +24,8 @@ export default function BungalowNode({ bungalow, x, y, index }: BungalowNodeProp
   const [imageSrc, setImageSrc] = useState(
     getTokenImageUrl(bungalow.image_url, bungalow.token_address, bungalow.symbol),
   );
+  const rawTicker = bungalow.symbol?.trim() || "?";
+  const ticker = rawTicker.length > 12 ? `${rawTicker.slice(0, 12)}…` : rawTicker;
 
   useEffect(() => {
     setImageSrc(getTokenImageUrl(bungalow.image_url, bungalow.token_address, bungalow.symbol));
@@ -58,7 +61,10 @@ export default function BungalowNode({ bungalow, x, y, index }: BungalowNodeProp
           }
         }}
       />
-      <span className={styles.symbol}>{bungalow.symbol ?? "?"}</span>
+      <span className={styles.label}>
+        <ChainIcon chain={bungalow.chain} className={styles.chainIcon} />
+        <span className={styles.symbol}>{ticker}</span>
+      </span>
       <NodeTooltip
         name={bungalow.name}
         symbol={bungalow.symbol}

@@ -6,7 +6,9 @@
     "start:3000": "PORT=3000 bun --env-file=.env.local src/index.ts",
     "typecheck": "bunx tsc --noEmit",
     "migrate:v13": "bun --env-file=.env.local scripts/migrate-v13.ts",
-    "migrate:v14": "bun --env-file=.env.local scripts/migrate-v14.ts"
+    "migrate:v14": "bun --env-file=.env.local scripts/migrate-v14.ts",
+    "sync:home-team:phase1": "bun --env-file=.env.local scripts/sync-home-team-phase1.ts",
+    "sync:home-team:phase1:dry": "DRY_RUN=1 bun --env-file=.env.local scripts/sync-home-team-phase1.ts"
   },
   "dependencies": {
     "hono": "^4.11.9",

@@ -30,6 +30,43 @@
   z-index: 3;
 }
 
+.loadingCenter {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(320px, calc(100% - 48px));
+  z-index: 3;
+  display: grid;
+  gap: 10px;
+}
+
+.loadingLabel {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-secondary);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.progressBar {
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  background: rgba(10, 24, 15, 0.86);
+  box-shadow: inset 0 0 0 1px rgba(121, 181, 138, 0.08);
+}
+
+.progressFill {
+  display: block;
+  width: 42%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(88, 164, 108, 0.8), rgba(159, 227, 176, 0.95));
+  animation: islandLoad 1.3s ease-in-out infinite;
+}
+
 .viewport {
   position: absolute;
   inset: 0;
@@ -37,15 +74,11 @@
   transition: transform 0.2s ease;
 }
 
-.connections {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-}
-
-.connections line {
-  stroke: rgba(241, 196, 15, 0.2);
-  stroke-width: 0.35;
+@keyframes islandLoad {
+  0% {
+    transform: translateX(-110%);
+  }
+  100% {
+    transform: translateX(290%);
+  }
 }

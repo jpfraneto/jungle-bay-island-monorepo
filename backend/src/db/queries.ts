@@ -29,6 +29,13 @@ function parseJsonArray<T>(value: unknown): T[] {
   return []
 }
 
+function isMeaningfulMetadataLabel(value: string | null | undefined): boolean {
+  if (!value) return false
+  const normalized = value.trim().toLowerCase()
+  if (!normalized) return false
+  return normalized !== 'unknown' && normalized !== '?' && normalized !== 'null' && normalized !== 'token'
+}
+
 export interface RecentScanRow {
   requested_by: string
   token_address: string
@@ -499,6 +506,25 @@ export async function writeScanResult(scanId: number, result: ScanResult, onProg
   await ensureTimelineColumn()
   await ensureHolderBalanceSnapshotsTable()
 
+  const existingRegistry = await db<Array<{
+    name: string | null
+    symbol: string | null
+    is_home_team: boolean | null
+  }>>`
+    SELECT name, symbol, is_home_team
+    FROM ${db(CONFIG.SCHEMA)}.token_registry
+    WHERE token_address = ${result.tokenAddress}
+    LIMIT 1
+  `
+
+  const current = existingRegistry[0]
+  const hasHomeTeamName = isMeaningfulMetadataLabel(current?.name)
+  const hasHomeTeamSymbol = isMeaningfulMetadataLabel(current?.symbol)
+  const preferredName =
+    current?.is_home_team && hasHomeTeamName ? current.name ?? result.name : result.name
+  const preferredSymbol =
+    current?.is_home_team && hasHomeTeamSymbol ? current.symbol ?? result.symbol : result.symbol
+
   await db`
     INSERT INTO ${db(CONFIG.SCHEMA)}.token_registry (
       token_address, chain, name, symbol, decimals, total_supply,
@@ -506,7 +532,7 @@ export async function writeScanResult(scanId: number, result: ScanResult, onProg
       last_scan_block, holder_count
     )
     VALUES (
-      ${result.tokenAddress}, ${result.chain}, ${result.name}, ${result.symbol}, ${result.decimals},
+      ${result.tokenAddress}, ${result.chain}, ${preferredName}, ${preferredSymbol}, ${result.decimals},
       ${result.totalSupply}, ${result.deployBlock}, ${result.deployTimestamp}, 'complete', NOW(),
       ${result.deployBlock}, ${result.holderCount}
     )
@@ -629,7 +655,7 @@ export async function writeScanResult(scanId: number, result: ScanResult, onProg
       token_address, chain, name, symbol, holder_count, total_supply, updated_at
     )
     VALUES (
-      ${result.tokenAddress}, ${result.chain}, ${result.name}, ${result.symbol}, ${result.holderCount}, ${result.totalSupply}, NOW()
+      ${result.tokenAddress}, ${result.chain}, ${preferredName}, ${preferredSymbol}, ${result.holderCount}, ${result.totalSupply}, NOW()
     )
     ON CONFLICT (token_address) DO UPDATE SET
       chain = EXCLUDED.chain,

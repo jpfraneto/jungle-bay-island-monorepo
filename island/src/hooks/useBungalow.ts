@@ -4,7 +4,9 @@ export interface BungalowDetails {
   token_address: string;
   chain: string;
   name: string | null;
-  symbol: string;
+  symbol: string | null;
+  decimals?: number | null;
+  is_nft?: boolean;
   exists: boolean;
   is_claimed: boolean;
   is_verified: boolean;

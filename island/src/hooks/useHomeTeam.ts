@@ -16,12 +16,12 @@ export interface HomeTeamBungalow {
 
 const SEEDED_HOME_TEAM: HomeTeamBungalow[] = [
   {
-    token_address: "0x2b5050f01d64fbb3e4ac44dc07f0732bfb5ecadf",
-    chain: "base",
-    name: "QR coin",
-    symbol: "QR",
-    holder_count: 140790,
-    image_url: "https://cdn.dexscreener.com/cms/images/cb1ef7f414ce126c315d62988bf341b930d46733faee18eb4bb1f8ccff9f2c8f?width=800&height=800&quality=90",
+    token_address: "0xd37264c71e9af940e49795f0d3a8336afaafdda9",
+    chain: "ethereum",
+    name: "Jungle Bay Collection",
+    symbol: "JBAC",
+    holder_count: 0,
+    image_url: null,
     is_claimed: null,
     current_owner: null,
     description: null,
@@ -29,51 +29,12 @@ const SEEDED_HOME_TEAM: HomeTeamBungalow[] = [
     price_usd: null,
   },
   {
-    token_address: "0xe3086852a4b125803c815a158249ae468a3254ca",
+    token_address: "0x3313338fe4bb2a166b81483bfcb2d4a6a1ebba8d",
     chain: "base",
-    name: "mfercoin",
-    symbol: "$mfer",
-    holder_count: 134856,
-    image_url: "https://cdn.dexscreener.com/cms/images/0f6a2a2bab359b6b098bcf82a676bba330d48ac38644ceb11fc7679f7c8d8a18?width=800&height=800&quality=90",
-    is_claimed: null,
-    current_owner: null,
-    description: null,
-    market_cap: null,
-    price_usd: null,
-  },
-  {
-    token_address: "0x3ec2156d4c0a9cbdab4a016633b7bcf6a8d68ea2",
-    chain: "base",
-    name: "DebtReliefBot",
-    symbol: "DRB",
-    holder_count: 95657,
-    image_url: "https://cdn.dexscreener.com/cms/images/933f90e3132e6bf22153efc75938b732f0f1dc3a2fc2d9dbff614fe60ddf95b6?width=800&height=800&quality=90",
-    is_claimed: null,
-    current_owner: null,
-    description: null,
-    market_cap: null,
-    price_usd: null,
-  },
-  {
-    token_address: "0x9f86db9fc6f7c9408e8fda3ff8ce4e78ac7a6b07",
-    chain: "base",
-    name: "clawd.atg.eth",
-    symbol: "CLAWD",
-    holder_count: 21665,
-    image_url: "https://cdn.dexscreener.com/cms/images/-Rgo829S-B3_ZVNX?width=800&height=800&quality=90",
-    is_claimed: null,
-    current_owner: null,
-    description: null,
-    market_cap: null,
-    price_usd: null,
-  },
-  {
-    token_address: "0xf30bf00edd0c22db54c9274b90d2a4c21fc09b07",
-    chain: "base",
-    name: "FELIX",
-    symbol: "FELIX",
-    holder_count: 9111,
-    image_url: "https://cdn.dexscreener.com/cms/images/7680887c680187bf4dc86d0fd8c23f4e3db7a8304bdac81eeb8191800cc9e1d4?width=800&height=800&quality=90",
+    name: "Jungle Bay Memes",
+    symbol: "JBM",
+    holder_count: 0,
+    image_url: null,
     is_claimed: null,
     current_owner: null,
     description: null,
@@ -85,8 +46,8 @@ const SEEDED_HOME_TEAM: HomeTeamBungalow[] = [
     chain: "base",
     name: "BOBO",
     symbol: "BOBO",
-    holder_count: 8931,
-    image_url: "https://cdn.dexscreener.com/cms/images/3857ad508b599c90ee7a35f341d96c8035d186a7abe43883178283f540769134?width=800&height=800&quality=90",
+    holder_count: 0,
+    image_url: null,
     is_claimed: null,
     current_owner: null,
     description: null,
@@ -94,25 +55,12 @@ const SEEDED_HOME_TEAM: HomeTeamBungalow[] = [
     price_usd: null,
   },
   {
-    token_address: "0x4e6c9f48f73e54ee5f3ab7e2992b2d733d0d0b07",
-    chain: "base",
-    name: "Juno Agent",
-    symbol: "JUNO",
-    holder_count: 7379,
-    image_url: "https://cdn.dexscreener.com/cms/images/527e8043c8851064cf9a874a58ab1a290ab8b441370a36ee186cb20d7f7bbb88?width=800&height=800&quality=90",
-    is_claimed: null,
-    current_owner: null,
-    description: null,
-    market_cap: null,
-    price_usd: null,
-  },
-  {
-    token_address: "0x3d01fe5a38ddbd307fdd635b4cb0e29681226d6f",
-    chain: "base",
-    name: "Alpha",
-    symbol: "ALPHA",
-    holder_count: 5765,
-    image_url: "https://cdn.dexscreener.com/cms/images/f98d26ae0596db192f20e18b2fbd661494df4682c8ace93dd6dd84e884c19953?width=800&height=800&quality=90",
+    token_address: "0xb90b2a35c65dbc466b04240097ca756ad2005295",
+    chain: "ethereum",
+    name: "BOBO",
+    symbol: "BOBO",
+    holder_count: 0,
+    image_url: null,
     is_claimed: null,
     current_owner: null,
     description: null,
@@ -122,10 +70,10 @@ const SEEDED_HOME_TEAM: HomeTeamBungalow[] = [
   {
     token_address: "8NNXWrWVctNw1UFeaBypffimTdcLCcD8XJzHvYsmgwpF",
     chain: "solana",
-    name: "Brainlet",
+    name: "BRAINLET",
     symbol: "BRAINLET",
-    holder_count: 2666,
-    image_url: "https://cdn.dexscreener.com/cms/images/0a2c499e8fe3db005ff62b125901113007d947af30529dcd1287672ae70896ff?width=800&height=800&quality=90",
+    holder_count: 0,
+    image_url: null,
     is_claimed: null,
     current_owner: null,
     description: null,
@@ -133,25 +81,129 @@ const SEEDED_HOME_TEAM: HomeTeamBungalow[] = [
     price_usd: null,
   },
   {
-    token_address: "AWGCDT2gd8JadbYbYyZy1iKxfWokPNgrEQoU24zUpump",
-    chain: "solana",
-    name: "CLUDE",
-    symbol: "Clude",
-    holder_count: 2593,
-    image_url: "https://cdn.dexscreener.com/cms/images/u3KkWN5ED0uAmCb2?width=800&height=800&quality=90",
-    is_claimed: null,
-    current_owner: null,
-    description: null,
-    market_cap: null,
-    price_usd: null,
-  },
-  {
-    token_address: "0x3313338fe4bb2a166b81483bfcb2d4a6a1ebba8d",
+    token_address: "0xe3086852a4b125803c815a158249ae468a3254ca",
     chain: "base",
-    name: "jungle bay memes",
-    symbol: "jungle bay memes",
-    holder_count: 1932,
-    image_url: "https://cdn.dexscreener.com/cms/images/7cc02a691d687c5eb0eb3adb7652f6a5772ad372bc340ed87471fbf39d6e1914?width=800&height=800&quality=90",
+    name: "mfer",
+    symbol: "MFER",
+    holder_count: 0,
+    image_url: null,
+    is_claimed: null,
+    current_owner: null,
+    description: null,
+    market_cap: null,
+    price_usd: null,
+  },
+  {
+    token_address: "0x22af33fe49fd1fa80c7149773dde5890d3c76f3b",
+    chain: "base",
+    name: "BNKR",
+    symbol: "BNKR",
+    holder_count: 0,
+    image_url: null,
+    is_claimed: null,
+    current_owner: null,
+    description: null,
+    market_cap: null,
+    price_usd: null,
+  },
+  {
+    token_address: "0x6982508145454ce325ddbe47a25d4ec3d2311933",
+    chain: "ethereum",
+    name: "PEPE",
+    symbol: "PEPE",
+    holder_count: 0,
+    image_url: null,
+    is_claimed: null,
+    current_owner: null,
+    description: null,
+    market_cap: null,
+    price_usd: null,
+  },
+  {
+    token_address: "0x58d6e314755c2668f3d7358cc7a7a06c4314b238",
+    chain: "base",
+    name: "RIZZ",
+    symbol: "RIZZ",
+    holder_count: 0,
+    image_url: null,
+    is_claimed: null,
+    current_owner: null,
+    description: null,
+    market_cap: null,
+    price_usd: null,
+  },
+  {
+    token_address: "5ad4puH6yDBoeCcrQfwV5s9bxvPnAeWDoYDj3uLyBS8k",
+    chain: "solana",
+    name: "RIZZ",
+    symbol: "RIZZ",
+    holder_count: 0,
+    image_url: null,
+    is_claimed: null,
+    current_owner: null,
+    description: null,
+    market_cap: null,
+    price_usd: null,
+  },
+  {
+    token_address: "0x3ec2156d4c0a9cbdab4a016633b7bcf6a8d68ea2",
+    chain: "base",
+    name: "DebtReliefBot",
+    symbol: "DRB",
+    holder_count: 0,
+    image_url: null,
+    is_claimed: null,
+    current_owner: null,
+    description: null,
+    market_cap: null,
+    price_usd: null,
+  },
+  {
+    token_address: "0x3d01fe5a38ddbd307fdd635b4cb0e29681226d6f",
+    chain: "base",
+    name: "ALPHA",
+    symbol: "ALPHA",
+    holder_count: 0,
+    image_url: null,
+    is_claimed: null,
+    current_owner: null,
+    description: null,
+    market_cap: null,
+    price_usd: null,
+  },
+  {
+    token_address: "0x2b5050f01d64fbb3e4ac44dc07f0732bfb5ecadf",
+    chain: "base",
+    name: "QR",
+    symbol: "QR",
+    holder_count: 0,
+    image_url: null,
+    is_claimed: null,
+    current_owner: null,
+    description: null,
+    market_cap: null,
+    price_usd: null,
+  },
+  {
+    token_address: "0x420698cfdeddea6bc78d59bc17798113ad278f9d",
+    chain: "ethereum",
+    name: "TOWELI",
+    symbol: "TOWELI",
+    holder_count: 0,
+    image_url: null,
+    is_claimed: null,
+    current_owner: null,
+    description: null,
+    market_cap: null,
+    price_usd: null,
+  },
+  {
+    token_address: "0x279e7cff2dbc93ff1f5cae6cbd072f98d75987ca",
+    chain: "base",
+    name: "TOWELI",
+    symbol: "TOWELI",
+    holder_count: 0,
+    image_url: null,
     is_claimed: null,
     current_owner: null,
     description: null,
@@ -193,6 +245,36 @@ function normalizeBungalowsList(
     }));
 }
 
+function isPlaceholderLabel(value: string | null | undefined): boolean {
+  if (!value) return true;
+  const normalized = value.trim().toLowerCase();
+  return (
+    normalized.length === 0 ||
+    normalized === "unknown" ||
+    normalized === "?" ||
+    normalized === "token" ||
+    normalized === "null"
+  );
+}
+
+function mergeWithSeededFallback(items: HomeTeamBungalow[]): HomeTeamBungalow[] {
+  const fallbackByKey = new Map<string, HomeTeamBungalow>();
+  for (const seeded of SEEDED_HOME_TEAM) {
+    fallbackByKey.set(`${seeded.chain}:${seeded.token_address.toLowerCase()}`, seeded);
+  }
+
+  return items.map((item) => {
+    const fallback = fallbackByKey.get(`${item.chain}:${item.token_address.toLowerCase()}`);
+    if (!fallback) return item;
+
+    return {
+      ...item,
+      name: isPlaceholderLabel(item.name) ? fallback.name : item.name,
+      symbol: isPlaceholderLabel(item.symbol) ? fallback.symbol : item.symbol,
+    };
+  });
+}
+
 export function useHomeTeam() {
   const [bungalows, setBungalows] = useState<HomeTeamBungalow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -214,7 +296,7 @@ export function useHomeTeam() {
       const homeTeam = Array.isArray(data.bungalows) ? data.bungalows : [];
 
       if (homeTeam.length > 0) {
-        setBungalows(homeTeam);
+        setBungalows(mergeWithSeededFallback(homeTeam));
         return;
       }
 
@@ -232,7 +314,7 @@ export function useHomeTeam() {
       const normalized = normalizeBungalowsList(fallbackData.items);
 
       if (normalized.length > 0) {
-        setBungalows(normalized);
+        setBungalows(mergeWithSeededFallback(normalized));
         setError(null);
         return;
       }

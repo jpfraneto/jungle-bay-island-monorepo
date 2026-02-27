@@ -115,11 +115,17 @@ bungalowRoute.get("/bungalow/:chain/:ca", async (c) => {
     viewerWallet.toLowerCase() === bungalow.current_owner.toLowerCase(),
   );
 
+  const fallbackMetadataPromise =
+    !bungalow.image_url || !bungalow.name || !bungalow.symbol
+      ? resolveTokenMetadata(tokenAddress, chain).catch(() => null)
+      : Promise.resolve(null);
+
   // Fetch holders and heat distribution
-  const [holdersResult, heatDistribution, tokenRegistry] = await Promise.all([
+  const [holdersResult, heatDistribution, tokenRegistry, fallbackMetadata] = await Promise.all([
     getTokenHolders(tokenAddress, 50, 0),
     getTokenHeatDistribution(tokenAddress),
     getTokenRegistry(tokenAddress, chain),
+    fallbackMetadataPromise,
   ]);
 
   const decimals = tokenRegistry?.decimals ?? null;
@@ -131,17 +137,17 @@ bungalowRoute.get("/bungalow/:chain/:ca", async (c) => {
   const response: Record<string, unknown> = {
     token_address: tokenAddress,
     chain,
-    name: bungalow.name,
-    symbol: bungalow.symbol,
+    name: bungalow.name ?? fallbackMetadata?.name ?? null,
+    symbol: bungalow.symbol ?? fallbackMetadata?.symbol ?? null,
     decimals,
     is_nft: isNft,
     exists: true,
     is_claimed: bungalow.is_claimed ?? false,
     is_verified: bungalow.is_verified ?? false,
     current_owner: bungalow.current_owner ?? null,
-    description: bungalow.description ?? null,
+    description: bungalow.description ?? fallbackMetadata?.description ?? null,
     origin_story: bungalow.origin_story ?? null,
-    image_url: bungalow.image_url ?? null,
+    image_url: bungalow.image_url ?? fallbackMetadata?.image_url ?? null,
     holder_count: bungalow.holder_count ?? 0,
     total_supply: bungalow.total_supply ?? null,
     market_data: hasMarketData
@@ -152,13 +158,13 @@ bungalowRoute.get("/bungalow/:chain/:ca", async (c) => {
           liquidity_usd: bungalow.liquidity_usd ? Number(bungalow.liquidity_usd) : null,
           updated_at: bungalow.metadata_updated_at ?? null,
         }
-      : null,
+      : fallbackMetadata?.market_data ?? null,
     links: {
-      x: bungalow.link_x ?? null,
-      farcaster: bungalow.link_farcaster ?? null,
-      telegram: bungalow.link_telegram ?? null,
-      website: bungalow.link_website ?? null,
-      dexscreener: bungalow.link_dexscreener ?? null,
+      x: bungalow.link_x ?? fallbackMetadata?.links.x ?? null,
+      farcaster: bungalow.link_farcaster ?? fallbackMetadata?.links.farcaster ?? null,
+      telegram: bungalow.link_telegram ?? fallbackMetadata?.links.telegram ?? null,
+      website: bungalow.link_website ?? fallbackMetadata?.links.website ?? null,
+      dexscreener: bungalow.link_dexscreener ?? fallbackMetadata?.links.dexscreener ?? null,
     },
     heat_stats: topHeatStats,
     holders: holdersResult.holders.map((h, idx) => ({

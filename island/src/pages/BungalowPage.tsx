@@ -16,6 +16,58 @@ function chainLabel(chain: string): string {
   return "Solana";
 }
 
+function tokenStandardLabel(chain: string, isNft: boolean): string {
+  if (chain === "base" || chain === "ethereum") {
+    return isNft ? "ERC-721" : "ERC-20";
+  }
+  return isNft ? "SPL NFT" : "SPL";
+}
+
+function chainToneClass(chain: string): string {
+  if (chain === "base") return styles.base;
+  if (chain === "ethereum") return styles.ethereum;
+  return styles.solana;
+}
+
+function ChainIcon({ chain }: { chain: string }) {
+  if (chain === "ethereum") {
+    return (
+      <svg viewBox="0 0 24 24" className={styles.chainIcon} aria-hidden="true">
+        <path
+          d="M12 2.3 6.7 12l5.3 3.2 5.3-3.2L12 2.3Zm-5.3 11.7L12 21.7l5.3-7.7L12 17.2 6.7 14Z"
+          fill="currentColor"
+        />
+      </svg>
+    );
+  }
+  if (chain === "solana") {
+    return (
+      <svg viewBox="0 0 24 24" className={styles.chainIcon} aria-hidden="true">
+        <path
+          d="M5.2 5.5a1.8 1.8 0 0 1 1.3-.5h11.2c1.2 0 1.8 1.5.9 2.4l-2.2 2.2a1.8 1.8 0 0 1-1.3.5H4c-1.2 0-1.8-1.5-.9-2.4l2.1-2.2Z"
+          fill="currentColor"
+        />
+        <path
+          d="M18.8 11.8a1.8 1.8 0 0 0-1.3-.5H6.3c-1.2 0-1.8 1.5-.9 2.4l2.2 2.2c.3.3.8.5 1.3.5h11.2c1.2 0 1.8-1.5.9-2.4l-2.2-2.2Z"
+          fill="currentColor"
+          opacity="0.82"
+        />
+        <path
+          d="M5.2 18.1a1.8 1.8 0 0 1 1.3-.5h11.2c1.2 0 1.8 1.5.9 2.4l-2.2 2.2a1.8 1.8 0 0 1-1.3.5H4c-1.2 0-1.8-1.5-.9-2.4l2.1-2.2Z"
+          fill="currentColor"
+          opacity="0.66"
+        />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" className={styles.chainIcon} aria-hidden="true">
+      <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="2.2" />
+      <circle cx="12" cy="12" r="4" fill="currentColor" />
+    </svg>
+  );
+}
+
 function formatHeatMetric(
   value: number | null | undefined,
   sampleSize: number | undefined,
@@ -142,6 +194,8 @@ export default function BungalowPage() {
     bungalow.token_address,
     bungalow.symbol,
   );
+  const activeChain = bungalow.chain || chain;
+  const isNft = Boolean(bungalow.is_nft ?? bungalow.decimals === 0);
 
   return (
     <div className={styles.page}>
@@ -160,16 +214,23 @@ export default function BungalowPage() {
                 }}
               />
 
-              <div>
-                <h1 className={styles.title}>
-                  {bungalow.name ?? "Unknown Token"} (
-                  {bungalow.symbol ? `$${bungalow.symbol}` : "?"})
-                </h1>
-                <div
-                  className={`${styles.chainBadge} ${chain === "base" ? styles.base : styles.ethereum}`}
-                >
-                  {chainLabel(chain)}
+              <div className={styles.headerText}>
+                <div className={styles.titleRow}>
+                  <ChainIcon chain={activeChain} />
+                  <h1 className={styles.title}>
+                    {bungalow.name ?? "Unknown Token"} (
+                    {bungalow.symbol ? `$${bungalow.symbol}` : "?"})
+                  </h1>
                 </div>
+                <div className={styles.headerMeta}>
+                  <div className={`${styles.chainBadge} ${chainToneClass(activeChain)}`}>
+                    {chainLabel(activeChain)}
+                  </div>
+                  <div className={styles.standardBadge}>
+                    {tokenStandardLabel(activeChain, isNft)}
+                  </div>
+                </div>
+                <p className={styles.contractAddress}>{bungalow.token_address}</p>
               </div>
             </div>
 
@@ -228,7 +289,7 @@ export default function BungalowPage() {
         chain={chain}
         ca={ca}
         open={isAddOpen}
-        symbol={bungalow.symbol}
+        symbol={bungalow.symbol ?? ""}
         onClose={() => setIsAddOpen(false)}
         onCreated={() => {
           void refetch();

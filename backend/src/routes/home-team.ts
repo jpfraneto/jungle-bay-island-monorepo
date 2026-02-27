@@ -23,8 +23,16 @@ homeTeamRoute.get("/home-team", async (c) => {
     SELECT
       tr.token_address,
       tr.chain,
-      COALESCE(b.name, tr.name) AS name,
-      COALESCE(b.symbol, tr.symbol) AS symbol,
+      CASE
+        WHEN b.name IS NULL OR btrim(b.name) = '' OR lower(btrim(b.name)) IN ('unknown', '?', 'token', 'null')
+          THEN tr.name
+        ELSE b.name
+      END AS name,
+      CASE
+        WHEN b.symbol IS NULL OR btrim(b.symbol) = '' OR lower(btrim(b.symbol)) IN ('unknown', '?', 'token', 'null')
+          THEN tr.symbol
+        ELSE b.symbol
+      END AS symbol,
       tr.holder_count,
       b.image_url,
       b.is_claimed,

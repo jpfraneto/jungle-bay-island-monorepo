@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import type { HomeTeamBungalow } from "../hooks/useHomeTeam";
-import { calculateConnections } from "../utils/connections";
 import { resolveAllPositions } from "../utils/positions";
 import BungalowNode from "./BungalowNode";
 import ZoomControls from "./ZoomControls";
@@ -29,34 +28,24 @@ export default function IslandMap({ bungalows, isLoading, error }: IslandMapProp
     }));
   }, [bungalows]);
 
-  const connections = useMemo(
-    () => calculateConnections(nodes.map((node) => ({ x: node.x, y: node.y, index: node.index }))),
-    [nodes],
-  );
-
   return (
     <section className={styles.map}>
       <div className={styles.noise} />
 
-      {isLoading ? <div className={styles.status}>Loading island...</div> : null}
+      {isLoading ? (
+        <div className={styles.loadingCenter}>
+          <div className={styles.loadingLabel}>Loading Island</div>
+          <div className={styles.progressBar}>
+            <span className={styles.progressFill} />
+          </div>
+        </div>
+      ) : null}
       {error ? <div className={styles.status}>Failed to load home team: {error}</div> : null}
       {!isLoading && nodes.length === 0 ? (
         <div className={styles.status}>No bungalows available yet. Check back soon.</div>
       ) : null}
 
       <div className={styles.viewport} style={{ transform: `scale(${scale})` }}>
-        <svg className={styles.connections} viewBox="0 0 100 100" preserveAspectRatio="none">
-          {connections.map(([from, to]) => (
-            <line
-              key={`${from}-${to}`}
-              x1={nodes[from].x}
-              y1={nodes[from].y}
-              x2={nodes[to].x}
-              y2={nodes[to].y}
-            />
-          ))}
-        </svg>
-
         {nodes.map((node) => (
           <BungalowNode
             key={`${node.bungalow.chain}:${node.bungalow.token_address}`}

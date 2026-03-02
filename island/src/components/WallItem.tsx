@@ -22,12 +22,6 @@ function formatHeat(value: number | null | undefined): string {
   return `${numeric.toFixed(1)}°`;
 }
 
-function formatItemTypeLabel(type: string): string {
-  if (type === "frame") return "post";
-  if (type === "portal") return "miniapp";
-  return type;
-}
-
 export default function WallItem({ item }: WallItemProps) {
   const navigate = useNavigate();
   const title = asString(item.content.title);
@@ -37,7 +31,9 @@ export default function WallItem({ item }: WallItemProps) {
   const caption = asString(item.content.caption);
   const portalChain = asString(item.content.target_chain || item.content.chain);
   const portalCa = asString(item.content.target_ca || item.content.ca);
-  const portalName = asString(item.content.target_name || item.content.name || item.content.symbol);
+  const portalName = asString(
+    item.content.target_name || item.content.name || item.content.symbol,
+  );
   const collageClass = [
     styles.collageA,
     styles.collageB,
@@ -48,10 +44,13 @@ export default function WallItem({ item }: WallItemProps) {
 
   return (
     <article className={`${styles.card} ${collageClass}`}>
-      <div className={styles.type}>{formatItemTypeLabel(item.item_type)}</div>
-
       {item.item_type === "link" ? (
-        <a href={url} target="_blank" rel="noreferrer" className={styles.bodyLink}>
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          className={styles.bodyLink}
+        >
           <div className={styles.mainText}>🔗 {title || "Untitled link"}</div>
           <div className={styles.subText}>{url}</div>
         </a>
@@ -67,7 +66,13 @@ export default function WallItem({ item }: WallItemProps) {
       {item.item_type === "image" ? (
         <div className={styles.bodyText}>
           <div className={styles.mainText}>🖼️ Image</div>
-          {imageUrl ? <img className={styles.image} src={imageUrl} alt={caption || "Wall image"} /> : null}
+          {imageUrl ? (
+            <img
+              className={styles.image}
+              src={imageUrl}
+              alt={caption || "Wall image"}
+            />
+          ) : null}
           {caption ? <p className={styles.subText}>{caption}</p> : null}
         </div>
       ) : null}
@@ -83,7 +88,9 @@ export default function WallItem({ item }: WallItemProps) {
           }}
         >
           <div className={styles.mainText}>🌀 Portal</div>
-          <div className={styles.subText}>{portalName || "Jump to destination"}</div>
+          <div className={styles.subText}>
+            {portalName || "Jump to destination"}
+          </div>
         </button>
       ) : null}
 
@@ -99,9 +106,11 @@ export default function WallItem({ item }: WallItemProps) {
           <span className={styles.separator}>-</span>
           <span>{formatHeat(item.placed_by_heat_degrees)}</span>
           <span className={styles.separator}>-</span>
-          <span>paid {formatJbmCount(item.jbm_amount)} jungle bay memes</span>
+          <span>{formatJbmCount(item.jbm_amount)} jungle bay memes</span>
         </div>
-        <span className={styles.timestamp}>{formatTimeAgo(item.created_at)}</span>
+        <span className={styles.timestamp}>
+          {formatTimeAgo(item.created_at)}
+        </span>
       </footer>
     </article>
   );

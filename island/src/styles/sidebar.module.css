@@ -21,9 +21,11 @@
   min-height: 0;
   background: linear-gradient(180deg, #102315 0%, #0c1b12 100%);
   border-right: 1px solid var(--border-subtle);
-  padding: 14px 12px;
+  padding: 14px 12px 24px;
   overflow-y: auto;
   overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scroll-padding-bottom: 24px;
 }
 
 .section + .section {
@@ -96,6 +98,8 @@
     left: -235px;
     z-index: 31;
     transition: left 0.2s ease;
+    padding-bottom: calc(88px + env(safe-area-inset-bottom));
+    scroll-padding-bottom: calc(88px + env(safe-area-inset-bottom));
   }
 
   .sidebarOpen {

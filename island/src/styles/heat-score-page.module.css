@@ -1,6 +1,5 @@
 .page {
-  min-height: calc(100vh - 52px);
-  padding: 18px;
+  min-height: 100%;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -9,8 +8,6 @@
 
 .card {
   background: rgba(20, 43, 26, 0.88);
-  border: 1px solid var(--border-subtle);
-  border-radius: 14px;
   padding: 18px 22px;
   max-width: 880px;
   width: 100%;
@@ -50,6 +47,65 @@
   font-size: 16px;
   color: #a8e6a3;
   letter-spacing: 0.5px;
+}
+
+.equation {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 18px;
+  color: #a8e6a3;
+}
+
+.symbol {
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+
+.equals {
+  padding: 0 2px;
+}
+
+.fraction {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.1;
+  font-size: 16px;
+}
+
+.numerator {
+  border-bottom: 1px solid #a8e6a3;
+  padding: 0 4px 2px;
+}
+
+.denominator {
+  padding: 2px 4px 0;
+}
+
+.sigma {
+  font-size: 20px;
+  margin: 0 4px;
+}
+
+.term {
+  font-size: 16px;
+}
+
+.dot {
+  padding: 0 2px;
+}
+
+.minus {
+  padding: 0 2px;
+}
+
+.exponent {
+  font-size: 0.8em;
+  font-weight: 400;
+  margin-left: 2px;
 }
 
 .formulaDesc {

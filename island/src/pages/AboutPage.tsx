@@ -7,30 +7,63 @@ export default function AboutPage() {
   return (
     <section className={styles.page}>
       <article className={styles.card}>
-        <h1>Jungle Bay</h1>
-        <p className={styles.tagline}>
-          A living map of on-chain communities.
+        <p className={styles.tagline}>A place where memes can stay.</p>
+        <p>
+          Jungle Bay Island is a cultural persistence layer for memes. It is not
+          a social network, not a launchpad, and not a gamified engagement loop.
+          It is a digital territory where projects can keep their place through
+          market cycles instead of resetting to zero every time attention moves
+          on.
         </p>
         <p>
-          Jungle Bay turns token contracts into explorable community spaces
-          called <strong>bungalows</strong>. Each bungalow is a living profile
-          page for a token &mdash; tracking holders, on-chain activity, and
-          community contributions across Base and Solana.
+          The core belief is simple: memes do not fail because they lack
+          creativity. They fail because they lose continuity. Context fragments,
+          people disperse, and every cycle starts from scratch. Jungle Bay
+          exists to give that context a home.
         </p>
       </article>
 
       <article className={styles.card}>
-        <h2 className={styles.heading}>How it works</h2>
-        <ol className={styles.steps}>
+        <h2 className={styles.heading}>What The Island Optimizes For</h2>
+        <ul className={styles.list}>
           <li>
-            <strong>Paste a contract address</strong> &mdash; any ERC-20 on Base
-            or SPL token on Solana. Jungle Bay scans every Transfer event from
-            deploy block to present.
+            <strong>Continuity over virality</strong> &mdash; the system rewards
+            time, patience, and sustained alignment, not spikes in attention.
           </li>
           <li>
-            <strong>The scanner builds a heat map</strong> &mdash; for every
-            wallet that ever held the token, we compute a Time-Weighted Average
-            Balance (TWAB) and convert it into a{" "}
+            <strong>Territory over profiles</strong> &mdash; projects live as
+            <strong> bungalows</strong>, which behave like places people return
+            to, not pages they skim past.
+          </li>
+          <li>
+            <strong>Passive recognition</strong> &mdash; support is tracked in
+            the background. Heat accumulates quietly and unlocks access without
+            turning into a public contest.
+          </li>
+          <li>
+            <strong>Adjacency over hierarchy</strong> &mdash; growth comes from
+            cultural closeness and placement, not featured rankings or forced
+            promotion.
+          </li>
+          <li>
+            <strong>Restraint over noise</strong> &mdash; when in doubt, the
+            Island should feel quieter, not louder.
+          </li>
+        </ul>
+      </article>
+
+      <article className={styles.card}>
+        <h2 className={styles.heading}>How It Works</h2>
+        <ol className={styles.steps}>
+          <li>
+            <strong>A project gets territory</strong> &mdash; each supported
+            token is anchored as a bungalow on the Island, with its own place,
+            identity, and wall.
+          </li>
+          <li>
+            <strong>Time becomes signal</strong> &mdash; holdings are observed
+            across time, not just at a snapshot. That history is converted into
+            a quiet alignment signal called{" "}
             <button
               type="button"
               className={styles.inlineLink}
@@ -41,9 +74,9 @@ export default function AboutPage() {
             .
           </li>
           <li>
-            <strong>A bungalow is born</strong> &mdash; the token gets its own
-            page with holder rankings, tier breakdowns, a community wall, and
-            live market data.
+            <strong>The Island gains memory</strong> &mdash; walls, proximity,
+            and repeated presence allow projects to accumulate meaning instead
+            of disappearing between cycles.
           </li>
         </ol>
       </article>
@@ -51,43 +84,44 @@ export default function AboutPage() {
       <article className={styles.card}>
         <h2 className={styles.heading}>Bungalows</h2>
         <p>
-          Every scanned token gets a bungalow on the island. Inside you&apos;ll
-          find:
+          A bungalow is not a listing. It is the project&apos;s territorial
+          anchor on the Island. Inside each one, the product should feel more
+          like visiting a location than checking a profile card.
         </p>
         <ul className={styles.list}>
           <li>
-            <strong>Heat tab</strong> &mdash; tier distribution showing how
-            holders are spread across Elder, Builder, Resident, Observer, and
-            Drifter.
+            <strong>The Wall</strong> &mdash; a persistent public surface where
+            the community can leave posts, images, links, and portals.
           </li>
           <li>
-            <strong>Holders tab</strong> &mdash; ranked table of every wallet by
-            heat score, filterable by tier.
+            <strong>Heat and holders</strong> &mdash; a read on who has stayed
+            close to the project over time, without turning that into a carnival
+            of engagement mechanics.
           </li>
           <li>
-            <strong>Chart</strong> &mdash; live price chart powered by
-            DexScreener.
+            <strong>Identity</strong> &mdash; a token address, a one-line
+            presence, and a durable place in relation to the rest of the Island.
           </li>
           <li>
-            <strong>Wall</strong> &mdash; community bulletin board for
-            token-specific discussion.
+            <strong>Atmosphere</strong> &mdash; the Island is designed to feel
+            alive through place, adjacency, and return, not through constant
+            prompts.
           </li>
         </ul>
       </article>
 
       <article className={styles.card}>
-        <h2 className={styles.heading}>Heat &amp; Tiers</h2>
+        <h2 className={styles.heading}>Why Heat Exists</h2>
         <p>
-          Your <strong>island heat</strong> is the sum of your heat scores
-          across every bungalow you hold tokens in. Higher island heat places
-          you in a higher tier, unlocking capabilities like free scans and
-          bulletin posting.
+          Heat is the Island&apos;s quiet recognition layer. It exists to
+          measure sustained alignment without reducing that alignment to a
+          leaderboard. Your <strong>island heat</strong> is the sum of the heat
+          you have built across the bungalows where you have stayed present.
         </p>
         <p>
-          Heat rewards consistent, long-term holders over short-term flippers.
-          The math is designed so that splitting tokens across wallets
-          doesn&apos;t game the system &mdash; the sum of parts equals the
-          whole.
+          The intent is not to create pressure or urgency. The intent is to make
+          continuity legible, and then use that continuity to quietly unlock
+          opportunity for the people who keep showing up.
         </p>
         <button
           type="button"
@@ -99,11 +133,13 @@ export default function AboutPage() {
       </article>
 
       <article className={styles.card}>
-        <h2 className={styles.heading}>Supported chains</h2>
-        <div className={styles.chains}>
-          <span className={styles.chain}>Base</span>
-          <span className={styles.chain}>Solana</span>
-        </div>
+        <h2 className={styles.heading}>Phase 1</h2>
+        <p>
+          Phase 1 is about making the Island feel real. The goal is not growth
+          hacking or feature completeness. The goal is to establish ground: seed
+          the first twelve home-team bungalows, make heat legible, and prove
+          that a quieter on-chain place can still feel alive.
+        </p>
       </article>
     </section>
   );

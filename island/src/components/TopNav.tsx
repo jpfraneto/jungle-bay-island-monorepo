@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import RewardsInboxButton from "./RewardsInboxButton";
 import WalletButton from "./WalletButton";
 import styles from "../styles/top-nav.module.css";
 
@@ -62,6 +63,7 @@ export default function TopNav({
       </div>
 
       <div className={styles.right}>
+        <RewardsInboxButton />
         <WalletButton />
       </div>
     </header>

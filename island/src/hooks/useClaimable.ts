@@ -4,9 +4,12 @@ import { usePrivy } from "@privy-io/react-auth";
 export interface ClaimableData {
   heat_degrees: number;
   claimable_jbm: string;
+  claimable_wei?: string;
   last_claimed_at: string | null;
   can_claim: boolean;
   claimed_today?: boolean;
+  payout_wallet?: string | null;
+  period_id?: number;
 }
 
 export function useClaimable(chain?: string, ca?: string, walletAddress?: string) {

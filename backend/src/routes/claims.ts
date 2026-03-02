@@ -2,13 +2,20 @@ import { Hono } from "hono";
 import { encodePacked, keccak256, parseUnits } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import {
+  getAggregatedUserByWallets,
   getIdentityClusterByWallet,
   getWalletTokenHeats,
   type IdentityClusterWallet,
 } from "../db/queries";
 import { optionalWalletContext } from "../middleware/auth";
 import { resolveUserWalletMap } from "../services/identityMap";
-import { CONFIG, db, normalizeAddress, toSupportedChain } from "../config";
+import {
+  CONFIG,
+  db,
+  normalizeAddress,
+  publicClients,
+  toSupportedChain,
+} from "../config";
 import { ApiError } from "../services/errors";
 import type { AppEnv } from "../types";
 
@@ -19,6 +26,39 @@ const REWARD_RESET_HOUR_UTC = 12;
 const REWARD_RESET_OFFSET_SECONDS = REWARD_RESET_HOUR_UTC * 3600;
 const JBM_PER_HEAT_DEGREE = 100;
 const DAILY_DISTRIBUTION_CAP_JBM = BigInt(Math.max(0, CONFIG.DAILY_CLAIM_CAP_JBM));
+const WEI_PER_JBM = 10n ** 18n;
+
+const CLAIM_ESCROW_ABI = [
+  {
+    name: "hasClaimed",
+    type: "function",
+    stateMutability: "view",
+    inputs: [
+      { name: "periodId", type: "uint256" },
+      { name: "bungalowId", type: "bytes32" },
+      { name: "recipient", type: "address" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
+  },
+  {
+    name: "hasClaimedBatch",
+    type: "function",
+    stateMutability: "view",
+    inputs: [
+      { name: "_periodIds", type: "uint256[]" },
+      { name: "_bungalowIds", type: "bytes32[]" },
+      { name: "_recipients", type: "address[]" },
+    ],
+    outputs: [{ name: "claimed", type: "bool[]" }],
+  },
+  {
+    name: "getNonce",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "recipient", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+] as const;
 
 interface ClaimAllocationRow {
   identity_key: string;
@@ -193,6 +233,49 @@ function parseAllocation(row: ClaimAllocationRow) {
   };
 }
 
+function getReservedJbm(amountWei: string | null | undefined): bigint {
+  return parseNumericBigInt(amountWei) / WEI_PER_JBM;
+}
+
+function getClaimContractAddress(): `0x${string}` | null {
+  const address = normalizeAddress(CONFIG.CLAIM_CONTRACT_ADDRESS);
+  return address ? (address as `0x${string}`) : null;
+}
+
+async function readOnchainClaimStatus(input: {
+  claimContractAddress: `0x${string}`;
+  periodId: number;
+  bungalowId: `0x${string}`;
+  payoutWallet: string;
+}): Promise<boolean> {
+  const result = await publicClients.base.readContract({
+    address: input.claimContractAddress,
+    abi: CLAIM_ESCROW_ABI,
+    functionName: "hasClaimed",
+    args: [
+      BigInt(input.periodId),
+      input.bungalowId,
+      input.payoutWallet as `0x${string}`,
+    ],
+  });
+
+  return Boolean(result);
+}
+
+async function readOnchainClaimNonce(input: {
+  claimContractAddress: `0x${string}`;
+  payoutWallet: string;
+}): Promise<number> {
+  const result = await publicClients.base.readContract({
+    address: input.claimContractAddress,
+    abi: CLAIM_ESCROW_ABI,
+    functionName: "getNonce",
+    args: [input.payoutWallet as `0x${string}`],
+  });
+
+  return Number(result);
+}
+
 async function getPeriodCap(periodId: number): Promise<{
   cap_jbm: bigint;
   distributed_jbm: bigint;
@@ -356,7 +439,25 @@ async function getNextClaimNonceTx(
     WHERE claimant_wallet = ${claimantWallet}
   `;
 
-  return Number(rows[0]?.max_nonce ?? 0) + 1;
+  return Number(rows[0]?.max_nonce ?? -1) + 1;
+}
+
+async function getPendingClaimNoncesTx(
+  tx: typeof db,
+  claimantWallet: string,
+  minNonce = 0,
+): Promise<number[]> {
+  const rows = await tx<Array<{ claim_nonce: number }>>`
+    SELECT claim_nonce
+    FROM ${db(CONFIG.SCHEMA)}.claim_daily_allocations
+    WHERE claimant_wallet = ${claimantWallet}
+      AND claim_nonce IS NOT NULL
+      AND claimed_at IS NULL
+      AND claim_nonce >= ${minNonce}
+    ORDER BY claim_nonce ASC
+  `;
+
+  return rows.map((row) => row.claim_nonce);
 }
 
 async function getCurrentAllocation(input: {
@@ -467,6 +568,150 @@ async function getCurrentAllocation(input: {
   return parseAllocation(inserted[0]);
 }
 
+claimsRoute.get("/claims/wallet/:address", async (c) => {
+  const wallet =
+    normalizeAddress(c.req.param("address")) ??
+    normalizeAddress(c.req.param("address"), "solana");
+  if (!wallet) {
+    throw new ApiError(400, "invalid_wallet", "Invalid wallet address");
+  }
+
+  const contextWallet = c.get("walletAddress") ?? null;
+  const rawClaims = c.get("privyClaims") as Record<string, unknown> | undefined;
+  const claims = rawClaims ?? null;
+
+  const identity = await resolveIdentity({
+    requesterWallet: wallet,
+    claims,
+    allowClaimsEnrichment: claimsBelongToWallet(contextWallet, wallet),
+  });
+
+  const payoutWallet = pickDefaultPayoutWallet(identity, wallet);
+  const periodId = getCurrentPeriodId();
+  const periodCap = await getPeriodCap(periodId);
+  const allKnownWallets = [...new Set(identity.wallets.map((entry) => entry.wallet))];
+  const aggregated = await getAggregatedUserByWallets(allKnownWallets);
+  const claimContractAddress = getClaimContractAddress();
+
+  const candidates = aggregated?.token_breakdown ?? [];
+  const prepared = await Promise.all(
+    candidates.map(async (entry) => {
+      const chain = entry.chain ? toSupportedChain(entry.chain) : null;
+      if (!chain) return null;
+
+      const tokenAddress = normalizeAddress(entry.token, chain);
+      if (!tokenAddress) return null;
+
+      const allocation = await getCurrentAllocation({
+        identity,
+        chain,
+        tokenAddress,
+        periodId,
+      });
+
+      if (allocation.reward_jbm_bigint <= 0n && getReservedJbm(allocation.amount_wei) <= 0n) {
+        return null;
+      }
+
+      return {
+        chain,
+        tokenAddress,
+        tokenName: entry.token_name,
+        tokenSymbol: entry.token_symbol,
+        bungalowId: buildBungalowId(chain, tokenAddress),
+        allocation,
+      };
+    }),
+  );
+
+  const validEntries = prepared.filter(
+    (
+      entry,
+    ): entry is NonNullable<typeof entry> => entry !== null,
+  );
+
+  let claimedStatuses = validEntries.map(() => false);
+  if (claimContractAddress && payoutWallet && validEntries.length > 0) {
+    try {
+      const result = await publicClients.base.readContract({
+        address: claimContractAddress,
+        abi: CLAIM_ESCROW_ABI,
+        functionName: "hasClaimedBatch",
+        args: [
+          validEntries.map(() => BigInt(periodId)),
+          validEntries.map((entry) => entry.bungalowId),
+          validEntries.map(() => payoutWallet as `0x${string}`),
+        ],
+      });
+      claimedStatuses = Array.isArray(result)
+        ? result.map((value) => Boolean(value))
+        : claimedStatuses;
+    } catch {
+      claimedStatuses = validEntries.map((entry) => Boolean(entry.allocation.claimed_at));
+    }
+  } else {
+    claimedStatuses = validEntries.map((entry) => Boolean(entry.allocation.claimed_at));
+  }
+
+  const items = validEntries
+    .map((entry, index) => {
+      const claimedToday = claimedStatuses[index] ?? false;
+      const reservedJbm = getReservedJbm(entry.allocation.amount_wei);
+      const claimableJbm = claimedToday
+        ? 0n
+        : reservedJbm > 0n
+          ? reservedJbm
+          : entry.allocation.reward_jbm_bigint;
+
+      return {
+        chain: entry.chain,
+        token_address: entry.tokenAddress,
+        token_name: entry.tokenName,
+        token_symbol: entry.tokenSymbol,
+        heat_degrees: Number(entry.allocation.heat_degrees_number.toFixed(2)),
+        claimable_jbm: claimableJbm.toString(),
+        claimable_wei: (claimableJbm * WEI_PER_JBM).toString(),
+        can_claim: Boolean(payoutWallet && claimableJbm > 0n && !claimedToday),
+        claimed_today: claimedToday,
+        last_claimed_at: claimedToday ? entry.allocation.claimed_at : null,
+        claim_nonce: entry.allocation.claim_nonce,
+        has_reservation: reservedJbm > 0n,
+        deadline:
+          entry.allocation.deadline !== null
+            ? String(entry.allocation.deadline)
+            : null,
+      };
+    })
+    .filter((entry) => entry.can_claim || entry.claimed_today)
+    .sort((a, b) => {
+      if (a.claim_nonce !== null && b.claim_nonce !== null) {
+        return a.claim_nonce - b.claim_nonce;
+      }
+      if (a.claim_nonce !== null) return -1;
+      if (b.claim_nonce !== null) return 1;
+      return b.heat_degrees - a.heat_degrees;
+    });
+
+  const claimableItems = items.filter((entry) => entry.can_claim);
+  const totalClaimableJbm = claimableItems.reduce(
+    (sum, entry) => sum + parseNumericBigInt(entry.claimable_jbm),
+    0n,
+  );
+
+  return c.json({
+    payout_wallet: payoutWallet,
+    period_id: periodId,
+    period_start_at: getPeriodStartIso(periodId),
+    period_end_at: getPeriodEndIso(periodId),
+    claimable_count: claimableItems.length,
+    total_claimable_jbm: totalClaimableJbm.toString(),
+    daily_cap_jbm: periodCap.cap_jbm.toString(),
+    daily_distributed_jbm: periodCap.distributed_jbm.toString(),
+    daily_remaining_jbm: periodCap.remaining_jbm.toString(),
+    items,
+  });
+});
+
 claimsRoute.get("/claims/:chain/:ca/:address", async (c) => {
   const chain = toSupportedChain(c.req.param("chain"));
   if (!chain) {
@@ -505,14 +750,31 @@ claimsRoute.get("/claims/:chain/:ca/:address", async (c) => {
   const periodCap = await getPeriodCap(periodId);
 
   const payoutWallet = pickDefaultPayoutWallet(identity, wallet);
-  const effectiveClaimableJbm = minBigInt(
-    allocation.reward_jbm_bigint,
-    periodCap.remaining_jbm,
-  );
+  const claimContractAddress = getClaimContractAddress();
+  const bungalowId = buildBungalowId(chain, tokenAddress);
+  let claimedToday = Boolean(allocation.claimed_at);
+
+  if (claimContractAddress && payoutWallet) {
+    try {
+      claimedToday = await readOnchainClaimStatus({
+        claimContractAddress,
+        periodId,
+        bungalowId,
+        payoutWallet,
+      });
+    } catch {
+      claimedToday = Boolean(allocation.claimed_at);
+    }
+  }
+
+  const reservedJbm = getReservedJbm(allocation.amount_wei);
+  const effectiveClaimableJbm = reservedJbm > 0n
+    ? reservedJbm
+    : minBigInt(allocation.reward_jbm_bigint, periodCap.remaining_jbm);
   const canClaim = Boolean(
     payoutWallet &&
     effectiveClaimableJbm > 0n &&
-    !allocation.claimed_at,
+    !claimedToday,
   );
 
   return c.json({
@@ -521,9 +783,9 @@ claimsRoute.get("/claims/:chain/:ca/:address", async (c) => {
     claimable_wei: canClaim
       ? parseUnits(effectiveClaimableJbm.toString(), 18).toString()
       : "0",
-    last_claimed_at: allocation.claimed_at,
+    last_claimed_at: claimedToday ? allocation.claimed_at : null,
     can_claim: canClaim,
-    claimed_today: Boolean(allocation.claimed_at),
+    claimed_today: claimedToday,
     payout_wallet: payoutWallet,
     daily_cap_jbm: periodCap.cap_jbm.toString(),
     daily_distributed_jbm: periodCap.distributed_jbm.toString(),
@@ -616,11 +878,8 @@ claimsRoute.post("/claims/:chain/:ca/sign", async (c) => {
     periodId,
   });
 
-  if (allocation.claimed_at) {
-    throw new ApiError(409, "already_claimed_today", "Daily reward already claimed");
-  }
-
-  if (allocation.reward_jbm_bigint <= 0n) {
+  const reservedJbm = getReservedJbm(allocation.amount_wei);
+  if (allocation.reward_jbm_bigint <= 0n && reservedJbm <= 0n) {
     throw new ApiError(409, "nothing_to_claim", "No claimable JBM for this period");
   }
 
@@ -633,7 +892,7 @@ claimsRoute.post("/claims/:chain/:ca/sign", async (c) => {
     );
   }
 
-  const claimContractAddress = normalizeAddress(CONFIG.CLAIM_CONTRACT_ADDRESS);
+  const claimContractAddress = getClaimContractAddress();
   if (!claimContractAddress) {
     throw new ApiError(
       500,
@@ -661,9 +920,34 @@ claimsRoute.post("/claims/:chain/:ca/sign", async (c) => {
   }
 
   const bungalowId = buildBungalowId(chain, tokenAddress);
+
+  let claimedToday = Boolean(allocation.claimed_at);
+  let onchainNonce = 0;
+  try {
+    claimedToday = await readOnchainClaimStatus({
+      claimContractAddress,
+      periodId,
+      bungalowId,
+      payoutWallet,
+    });
+    onchainNonce = await readOnchainClaimNonce({
+      claimContractAddress,
+      payoutWallet,
+    });
+  } catch {
+    claimedToday = Boolean(allocation.claimed_at);
+    onchainNonce = Math.max(0, allocation.claim_nonce ?? 0);
+  }
+
+  if (claimedToday) {
+    throw new ApiError(409, "already_claimed_today", "Daily reward already claimed");
+  }
+
   const signer = privateKeyToAccount(privateKey as `0x${string}`);
   const response = await db.begin(async (tx) => {
     const trx = tx as unknown as typeof db;
+
+    await trx`SELECT pg_advisory_xact_lock(hashtext(${`claim-nonce:${payoutWallet}`}))`;
 
     await trx`
       INSERT INTO ${db(CONFIG.SCHEMA)}.claim_period_caps (
@@ -697,16 +981,96 @@ claimsRoute.post("/claims/:chain/:ca/sign", async (c) => {
 
     const capJbm = parseNumericBigInt(capRow.cap_jbm);
     const distributedJbm = parseNumericBigInt(capRow.distributed_jbm);
-    const remainingJbm = capJbm > distributedJbm ? capJbm - distributedJbm : 0n;
-    const grantedJbm = minBigInt(allocation.reward_jbm_bigint, remainingJbm);
+    let distributedAfter = distributedJbm;
+    let remainingAfter = capJbm > distributedJbm ? capJbm - distributedJbm : 0n;
+
+    const allocationRows = await trx<ClaimAllocationRow[]>`
+      SELECT
+        identity_key,
+        identity_source,
+        identity_value,
+        chain,
+        token_address,
+        period_id,
+        heat_degrees::text AS heat_degrees,
+        reward_jbm::text AS reward_jbm,
+        wallets_snapshot,
+        created_at::text AS created_at,
+        claimed_at::text AS claimed_at,
+        claimant_wallet,
+        claim_nonce,
+        signature,
+        amount_wei::text AS amount_wei,
+        deadline
+      FROM ${db(CONFIG.SCHEMA)}.claim_daily_allocations
+      WHERE identity_key = ${identity.identity_key}
+        AND chain = ${chain}
+        AND token_address = ${tokenAddress}
+        AND period_id = ${periodId}
+      FOR UPDATE
+    `;
+
+    const lockedRow = allocationRows[0];
+    if (!lockedRow) {
+      throw new ApiError(500, "allocation_failed", "Could not resolve claim allocation");
+    }
+
+    const lockedAllocation = parseAllocation(lockedRow);
+    const hasReservedAmount = parseNumericBigInt(lockedAllocation.amount_wei) > 0n;
+    const grantedJbm = hasReservedAmount
+      ? getReservedJbm(lockedAllocation.amount_wei)
+      : minBigInt(lockedAllocation.reward_jbm_bigint, remainingAfter);
 
     if (grantedJbm <= 0n) {
       throw new ApiError(409, "daily_cap_reached", "Daily claim cap reached");
     }
 
-    await trx`SELECT pg_advisory_xact_lock(hashtext(${`claim-nonce:${payoutWallet}`}))`;
-    const nonce = await getNextClaimNonceTx(trx, payoutWallet);
-    const amountInWei = parseUnits(grantedJbm.toString(), 18);
+    if (!hasReservedAmount) {
+      await trx`
+        UPDATE ${db(CONFIG.SCHEMA)}.claim_period_caps
+        SET
+          distributed_jbm = distributed_jbm + ${grantedJbm.toString()},
+          updated_at = NOW()
+        WHERE period_id = ${periodId}
+      `;
+
+      distributedAfter = distributedJbm + grantedJbm;
+      remainingAfter = capJbm > distributedAfter ? capJbm - distributedAfter : 0n;
+    }
+
+    const pendingNonces = await getPendingClaimNoncesTx(
+      trx,
+      payoutWallet,
+      onchainNonce,
+    );
+    const canReuseStoredNonce = (
+      lockedAllocation.claimant_wallet === payoutWallet &&
+      lockedAllocation.claim_nonce !== null &&
+      lockedAllocation.claim_nonce >= onchainNonce
+    );
+    const nextReservedNonce = Math.max(
+      await getNextClaimNonceTx(trx, payoutWallet),
+      onchainNonce,
+    );
+    const pendingIndex = canReuseStoredNonce
+      ? pendingNonces.findIndex((value) => value === lockedAllocation.claim_nonce)
+      : -1;
+    const expectedStoredNonce = pendingIndex >= 0
+      ? onchainNonce + pendingIndex
+      : null;
+    const shouldRebaseStoredNonce = Boolean(
+      canReuseStoredNonce &&
+      expectedStoredNonce !== null &&
+      lockedAllocation.claim_nonce !== expectedStoredNonce,
+    );
+    const nonce = shouldRebaseStoredNonce
+      ? (expectedStoredNonce ?? onchainNonce)
+      : canReuseStoredNonce
+        ? (lockedAllocation.claim_nonce ?? nextReservedNonce)
+        : nextReservedNonce;
+    const amountInWei = hasReservedAmount
+      ? parseNumericBigInt(lockedAllocation.amount_wei)
+      : parseUnits(grantedJbm.toString(), 18);
     const deadline = Math.floor(Date.now() / 1000) + 3600;
 
     const signature = await signer.signTypedData({
@@ -741,10 +1105,10 @@ claimsRoute.post("/claims/:chain/:ca/sign", async (c) => {
       },
     });
 
-    const updated = await trx<ClaimAllocationRow[]>`
+    await trx`
       UPDATE ${db(CONFIG.SCHEMA)}.claim_daily_allocations
       SET
-        claimed_at = NOW(),
+        claimed_at = NULL,
         claimant_wallet = ${payoutWallet},
         claim_nonce = ${nonce},
         signature = ${signature},
@@ -754,40 +1118,7 @@ claimsRoute.post("/claims/:chain/:ca/sign", async (c) => {
         AND chain = ${chain}
         AND token_address = ${tokenAddress}
         AND period_id = ${periodId}
-        AND claimed_at IS NULL
-      RETURNING
-        identity_key,
-        identity_source,
-        identity_value,
-        chain,
-        token_address,
-        period_id,
-        heat_degrees::text AS heat_degrees,
-        reward_jbm::text AS reward_jbm,
-        wallets_snapshot,
-        created_at::text AS created_at,
-        claimed_at::text AS claimed_at,
-        claimant_wallet,
-        claim_nonce,
-        signature,
-        amount_wei::text AS amount_wei,
-        deadline
     `;
-
-    if (updated.length === 0) {
-      throw new ApiError(409, "already_claimed_today", "Daily reward already claimed");
-    }
-
-    await trx`
-      UPDATE ${db(CONFIG.SCHEMA)}.claim_period_caps
-      SET
-        distributed_jbm = distributed_jbm + ${grantedJbm.toString()},
-        updated_at = NOW()
-      WHERE period_id = ${periodId}
-    `;
-
-    const distributedAfter = distributedJbm + grantedJbm;
-    const remainingAfter = capJbm > distributedAfter ? capJbm - distributedAfter : 0n;
 
     return {
       signature,
@@ -809,6 +1140,114 @@ claimsRoute.post("/claims/:chain/:ca/sign", async (c) => {
   });
 
   return c.json(response);
+});
+
+claimsRoute.post("/claims/:chain/:ca/confirm", async (c) => {
+  const chain = toSupportedChain(c.req.param("chain"));
+  if (!chain) {
+    throw new ApiError(400, "invalid_chain", "Invalid chain");
+  }
+
+  const tokenAddress = normalizeAddress(c.req.param("ca"), chain);
+  if (!tokenAddress) {
+    throw new ApiError(400, "invalid_token", "Invalid token address");
+  }
+
+  const body = await c.req.json<{
+    wallet?: unknown;
+    payout_wallet?: unknown;
+  }>();
+
+  const contextWallet = c.get("walletAddress") ?? null;
+  const requesterWallet =
+    (typeof body.wallet === "string"
+      ? normalizeAddress(body.wallet) ?? normalizeAddress(body.wallet, "solana")
+      : null) ??
+    (contextWallet ? normalizeAddress(contextWallet) ?? normalizeAddress(contextWallet, "solana") : null);
+
+  if (!requesterWallet) {
+    throw new ApiError(
+      400,
+      "invalid_wallet",
+      "wallet must be provided or authenticated",
+    );
+  }
+
+  const rawClaims = c.get("privyClaims") as Record<string, unknown> | undefined;
+  const claims = rawClaims ?? null;
+
+  const identity = await resolveIdentity({
+    requesterWallet,
+    claims,
+    allowClaimsEnrichment: claimsBelongToWallet(contextWallet, requesterWallet),
+  });
+
+  const requestedPayoutWallet =
+    typeof body.payout_wallet === "string"
+      ? normalizeAddress(body.payout_wallet)
+      : null;
+  const payoutWallet = requestedPayoutWallet ?? pickDefaultPayoutWallet(identity, requesterWallet);
+
+  if (!payoutWallet) {
+    throw new ApiError(
+      400,
+      "missing_evm_wallet",
+      "No EVM wallet found for payouts. Link an EVM wallet in Privy/Farcaster.",
+    );
+  }
+
+  if (!identity.evm_wallets.includes(payoutWallet)) {
+    throw new ApiError(
+      403,
+      "invalid_payout_wallet",
+      "Payout wallet is not part of this identity",
+    );
+  }
+
+  const claimContractAddress = getClaimContractAddress();
+  if (!claimContractAddress) {
+    throw new ApiError(
+      500,
+      "claim_contract_not_configured",
+      "CLAIM_CONTRACT_ADDRESS is not configured",
+    );
+  }
+
+  const periodId = getCurrentPeriodId();
+  const bungalowId = buildBungalowId(chain, tokenAddress);
+  const claimedToday = await readOnchainClaimStatus({
+    claimContractAddress,
+    periodId,
+    bungalowId,
+    payoutWallet,
+  });
+
+  if (!claimedToday) {
+    throw new ApiError(409, "claim_pending", "Claim is not confirmed onchain yet");
+  }
+
+  const rows = await db<Array<{ claimed_at: string }>>`
+    UPDATE ${db(CONFIG.SCHEMA)}.claim_daily_allocations
+    SET
+      claimed_at = COALESCE(claimed_at, NOW()),
+      claimant_wallet = ${payoutWallet}
+    WHERE identity_key = ${identity.identity_key}
+      AND chain = ${chain}
+      AND token_address = ${tokenAddress}
+      AND period_id = ${periodId}
+    RETURNING claimed_at::text AS claimed_at
+  `;
+
+  if (rows.length === 0) {
+    throw new ApiError(404, "allocation_not_found", "Claim allocation not found");
+  }
+
+  return c.json({
+    ok: true,
+    claimed_at: rows[0].claimed_at,
+    payout_wallet: payoutWallet,
+    period_id: periodId,
+  });
 });
 
 export default claimsRoute;

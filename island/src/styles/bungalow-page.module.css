@@ -7,7 +7,9 @@
     rgba(39, 92, 60, 0.24),
     rgba(8, 18, 12, 0.96) 60%
   );
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .content {
@@ -303,11 +305,22 @@
 }
 
 @media (max-width: 980px) {
+  .page {
+    height: auto;
+    min-height: 100%;
+  }
+
   .content {
     grid-template-columns: 1fr;
+    height: auto;
+    min-height: 100%;
   }
 
   .stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .wallRegion {
+    overflow: visible;
   }
 }

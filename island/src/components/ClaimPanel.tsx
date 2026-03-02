@@ -3,6 +3,13 @@ import { usePrivy } from "@privy-io/react-auth";
 import { useClaimable } from "../hooks/useClaimable";
 import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
 import { CLAIM_CONTRACT_ADDRESS } from "../utils/constants";
+import {
+  claimEscrowAbi,
+  type ClaimSignaturePayload,
+  isHexAddress,
+  isHexBytes32,
+  isHexSignature,
+} from "../utils/claimEscrow";
 import { formatJbmAmount, formatTimeAgo } from "../utils/formatters";
 import styles from "../styles/claim-panel.module.css";
 
@@ -10,28 +17,6 @@ interface ClaimPanelProps {
   chain: string;
   ca: string;
   tokenSymbol: string;
-}
-
-const CLAIM_ABI = [
-  {
-    name: "claim",
-    type: "function",
-    inputs: [
-      { name: "amount", type: "uint256" },
-      { name: "nonce", type: "uint256" },
-      { name: "signature", type: "bytes" },
-    ],
-    outputs: [],
-    stateMutability: "nonpayable",
-  },
-] as const;
-
-function isHexAddress(value: string): value is `0x${string}` {
-  return /^0x[0-9a-fA-F]{40}$/.test(value);
-}
-
-function isHexSignature(value: string): value is `0x${string}` {
-  return /^0x[0-9a-fA-F]+$/.test(value);
 }
 
 function getNextClaimCountdown(
@@ -118,20 +103,18 @@ export default function ClaimPanel({
         }),
       });
 
-      const signData = (await signResponse.json()) as {
-        signature?: string;
-        amount?: string;
-        amount_wei?: string;
-        nonce?: number;
-        error?: string;
-      };
-      const amountWei = signData.amount_wei ?? signData.amount;
+      const signData = (await signResponse.json()) as ClaimSignaturePayload;
+      const amountWei = signData.amount_wei;
 
       if (
         !signResponse.ok ||
         !signData.signature ||
         !amountWei ||
-        signData.nonce === undefined
+        !signData.escrow ||
+        !signData.payout_wallet ||
+        !signData.bungalowId ||
+        !signData.periodId ||
+        !signData.deadline
       ) {
         throw new Error(
           signData.error ?? `Signing failed (${signResponse.status})`,
@@ -141,14 +124,25 @@ export default function ClaimPanel({
       if (!isHexSignature(signData.signature)) {
         throw new Error("Invalid signature from backend");
       }
+      if (
+        !isHexAddress(signData.escrow) ||
+        !isHexAddress(signData.payout_wallet) ||
+        !isHexBytes32(signData.bungalowId)
+      ) {
+        throw new Error("Invalid claim payload from backend");
+      }
 
       const hash = await walletClient.writeContract({
         address: CLAIM_CONTRACT_ADDRESS,
-        abi: CLAIM_ABI,
+        abi: claimEscrowAbi,
         functionName: "claim",
         args: [
+          signData.escrow,
+          signData.payout_wallet,
           BigInt(amountWei),
-          BigInt(signData.nonce),
+          signData.bungalowId,
+          BigInt(signData.periodId),
+          BigInt(signData.deadline),
           signData.signature,
         ],
         account: address,
@@ -160,11 +154,28 @@ export default function ClaimPanel({
         throw new Error("Claim transaction failed");
       }
 
+      const confirmResponse = await fetch(`/api/claims/${chain}/${ca}/confirm`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          wallet: address,
+          payout_wallet: signData.payout_wallet,
+        }),
+      });
+
+      if (!confirmResponse.ok) {
+        const confirmData = (await confirmResponse.json()) as { error?: string };
+        throw new Error(
+          confirmData.error ?? `Claim confirmation failed (${confirmResponse.status})`,
+        );
+      }
+
       setStatus("Claim successful");
-      await refetch();
+      await refetch().catch(() => undefined);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Claim failed");
       setStatus(null);
+      await refetch().catch(() => undefined);
     } finally {
       setIsClaiming(false);
     }

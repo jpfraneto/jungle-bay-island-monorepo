@@ -76,3 +76,14 @@
     margin-bottom: 12px;
   }
 }
+
+@media (max-width: 980px) {
+  .wallSection {
+    height: auto;
+  }
+
+  .scrollArea {
+    overflow: visible;
+    padding-right: 0;
+  }
+}

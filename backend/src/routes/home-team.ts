@@ -1,5 +1,6 @@
 import { Hono } from "hono";
-import { CONFIG, db } from "../config";
+import { CONFIG, db, type SupportedChain } from "../config";
+import { getCanonicalProjectContext } from "../services/canonicalProjects";
 import { getHomeTeamToken, pickMetadataLabel } from "../services/homeTeam";
 import type { AppEnv } from "../types";
 
@@ -48,7 +49,7 @@ homeTeamRoute.get("/home-team", async (c) => {
     ORDER BY tr.name ASC
   `;
 
-  const bungalows = rows.map((row) => {
+  const rawBungalows = rows.map((row) => {
     const seeded = getHomeTeamToken(
       row.chain as "base" | "ethereum" | "solana",
       row.token_address,
@@ -61,6 +62,59 @@ homeTeamRoute.get("/home-team", async (c) => {
       image_url: row.image_url ?? seeded?.image_url ?? null,
     };
   });
+
+  const grouped = new Map<string, typeof rawBungalows>();
+
+  for (const bungalow of rawBungalows) {
+    const context = getCanonicalProjectContext(
+      bungalow.chain as SupportedChain,
+      bungalow.token_address,
+    );
+    const key =
+      context.project?.id ?? `${bungalow.chain}:${bungalow.token_address}`;
+    const existing = grouped.get(key);
+    if (existing) {
+      existing.push(bungalow);
+    } else {
+      grouped.set(key, [bungalow]);
+    }
+  }
+
+  const bungalows = [...grouped.values()]
+    .map((group) => {
+      const context = getCanonicalProjectContext(
+        group[0].chain as SupportedChain,
+        group[0].token_address,
+      );
+      const primary =
+        group.find(
+          (item) =>
+            item.chain === context.primaryDeployment.chain &&
+            item.token_address === context.primaryDeployment.token_address,
+        ) ?? group[0];
+
+      return {
+        ...primary,
+        name: context.project?.name ?? primary.name,
+        symbol: context.project?.symbol ?? primary.symbol,
+        holder_count: group.reduce(
+          (sum, item) => sum + Math.max(0, item.holder_count ?? 0),
+          0,
+        ),
+        image_url:
+          primary.image_url ?? group.find((item) => item.image_url)?.image_url ?? null,
+        is_claimed: group.some((item) => Boolean(item.is_claimed)),
+        current_owner:
+          primary.current_owner ??
+          group.find((item) => item.current_owner)?.current_owner ??
+          null,
+        description:
+          primary.description ??
+          group.find((item) => item.description)?.description ??
+          null,
+      };
+    })
+    .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
 
   return c.json({ bungalows });
 });

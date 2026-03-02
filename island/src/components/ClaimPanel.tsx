@@ -17,6 +17,7 @@ interface ClaimPanelProps {
   chain: string;
   ca: string;
   tokenSymbol: string;
+  sticky?: boolean;
 }
 
 function getNextClaimCountdown(
@@ -47,6 +48,7 @@ export default function ClaimPanel({
   chain,
   ca,
   tokenSymbol,
+  sticky = true,
 }: ClaimPanelProps) {
   const { authenticated, login, getAccessToken } = usePrivy();
   const { publicClient, requireWallet, walletAddress } = usePrivyBaseWallet();
@@ -60,6 +62,7 @@ export default function ClaimPanel({
   const [error, setError] = useState<string | null>(null);
   const [isClaiming, setIsClaiming] = useState(false);
   const nextClaimText = getNextClaimCountdown(claimable?.claimed_today);
+  const panelClassName = `${styles.panel} ${!sticky ? styles.panelStatic : ""}`;
 
   const handleClaim = async () => {
     if (!authenticated) {
@@ -183,7 +186,7 @@ export default function ClaimPanel({
 
   if (!authenticated) {
     return (
-      <aside className={styles.panel}>
+      <aside className={panelClassName}>
         <h3>Claim Rewards</h3>
         <p>Connect wallet to see your rewards</p>
         <button type="button" className={styles.actionButton} onClick={login}>
@@ -195,7 +198,7 @@ export default function ClaimPanel({
 
   if (isLoading) {
     return (
-      <aside className={styles.panel}>
+      <aside className={panelClassName}>
         <h3>Claim Rewards</h3>
         <p>Loading claim data...</p>
       </aside>
@@ -204,7 +207,7 @@ export default function ClaimPanel({
 
   if (!claimable || claimable.heat_degrees <= 0) {
     return (
-      <aside className={styles.panel}>
+      <aside className={panelClassName}>
         <h3>Claim Rewards</h3>
         <p>
           Your heat score for ${tokenSymbol} is 0 — no jungle bay memes to
@@ -215,7 +218,7 @@ export default function ClaimPanel({
   }
 
   return (
-    <aside className={styles.panel}>
+    <aside className={panelClassName}>
       <h3>Claim Rewards</h3>
 
       <div className={styles.metric}>

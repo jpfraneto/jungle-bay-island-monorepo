@@ -118,6 +118,18 @@
   overflow-wrap: anywhere;
 }
 
+.identityNote {
+  margin: 6px 0 0;
+  color: #9fc0aa;
+  font-size: 12px;
+}
+
+.description {
+  margin: 10px 0 0;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
 .base {
   background: rgba(52, 152, 219, 0.2);
   border-color: rgba(52, 152, 219, 0.55);
@@ -162,6 +174,149 @@
 
 .sideColumn {
   min-width: 0;
+}
+
+.deploymentList {
+  display: grid;
+  gap: 14px;
+}
+
+.deploymentStack {
+  display: grid;
+  gap: 10px;
+}
+
+.deploymentCard {
+  background: rgba(20, 43, 26, 0.82);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.deploymentCardActive {
+  border-color: rgba(88, 164, 108, 0.42);
+  box-shadow: inset 0 0 0 1px rgba(88, 164, 108, 0.08);
+}
+
+.deploymentHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.deploymentTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.deploymentTitle strong {
+  font-size: 14px;
+}
+
+.deploymentChainIcon {
+  width: 18px;
+  height: 18px;
+  color: #98d0a4;
+  flex: 0 0 auto;
+}
+
+.deploymentTicker {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-family: var(--font-mono);
+}
+
+.deploymentBadges {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.deploymentPill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #d0f1d8;
+  border: 1px solid rgba(131, 183, 144, 0.4);
+  background: rgba(51, 94, 62, 0.25);
+}
+
+.deploymentPillActive {
+  border-color: rgba(88, 164, 108, 0.55);
+  background: rgba(46, 204, 113, 0.16);
+}
+
+.deploymentMeta {
+  margin-top: 10px;
+}
+
+.deploymentAddress {
+  margin: 10px 0 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+.deploymentStats {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.deploymentStats div {
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 8px;
+}
+
+.deploymentStats span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.deploymentStats strong {
+  display: block;
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.switchButton {
+  margin-top: 12px;
+  width: 100%;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: rgba(8, 18, 12, 0.55);
+  color: #d6f5de;
+  padding: 9px 12px;
+  cursor: pointer;
+}
+
+.switchButton:hover {
+  background: rgba(8, 18, 12, 0.78);
+}
+
+.deploymentNote {
+  border: 1px dashed var(--border-subtle);
+  border-radius: 12px;
+  padding: 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .wallRegion {
@@ -325,5 +480,9 @@
 
   .wallRegion {
     overflow: visible;
+  }
+
+  .deploymentStats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

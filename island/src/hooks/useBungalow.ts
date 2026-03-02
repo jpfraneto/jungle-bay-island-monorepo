@@ -1,6 +1,57 @@
 import { useCallback, useEffect, useState } from "react";
 import { SEEDED_HOME_TEAM } from "./useHomeTeam";
 
+export interface BungalowDeployment {
+  chain: string;
+  token_address: string;
+  route_path: string;
+  name: string | null;
+  symbol: string | null;
+  decimals?: number | null;
+  is_nft?: boolean;
+  exists: boolean;
+  is_claimed: boolean;
+  is_verified: boolean;
+  current_owner: string | null;
+  description: string | null;
+  origin_story: string | null;
+  image_url: string | null;
+  holder_count: number;
+  total_supply: string | null;
+  market_data: {
+    price_usd: number | null;
+    market_cap: number | null;
+    volume_24h: number | null;
+    liquidity_usd: number | null;
+    updated_at: string | null;
+  } | null;
+  heat_stats?: {
+    sample_size: number;
+    top_50_average: number | null;
+    top_50_stddev: number | null;
+  };
+  is_primary: boolean;
+  is_active: boolean;
+}
+
+export interface CanonicalProjectSummary {
+  id: string;
+  slug: string | null;
+  name: string | null;
+  symbol: string | null;
+  chain_count: number;
+  deployment_count: number;
+  total_holder_count: number;
+  primary_deployment: {
+    chain: string;
+    token_address: string;
+  };
+  active_deployment: {
+    chain: string;
+    token_address: string;
+  };
+}
+
 export interface BungalowDetails {
   token_address: string;
   chain: string;
@@ -35,6 +86,9 @@ export interface BungalowDetails {
     island_heat: number;
     tier: string;
   };
+  canonical_project?: CanonicalProjectSummary;
+  deployments?: BungalowDeployment[];
+  active_deployment?: BungalowDeployment | null;
 }
 
 function isPlaceholderLabel(value: string | null | undefined): boolean {

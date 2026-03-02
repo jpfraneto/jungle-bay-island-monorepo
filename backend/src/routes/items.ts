@@ -1,5 +1,9 @@
 import { Hono } from "hono";
 import { CONFIG, db, normalizeAddress, toSupportedChain } from "../config";
+import {
+  getCanonicalProjectContext,
+  type CanonicalDeploymentRef,
+} from "../services/canonicalProjects";
 import { ApiError } from "../services/errors";
 import type { AppEnv } from "../types";
 
@@ -63,6 +67,25 @@ async function ensureBungalowItemsTable(): Promise<void> {
   }
 
   await bungalowItemsTablePromise;
+}
+
+function buildDeploymentWhereClause(
+  alias: string,
+  deployments: CanonicalDeploymentRef[],
+): { clause: string; params: string[] } {
+  const params: string[] = [];
+  const clause = deployments
+    .map((deployment) => {
+      const tokenParam = params.push(deployment.token_address);
+      const chainParam = params.push(deployment.chain);
+      return `(${alias}.token_address = $${tokenParam} AND ${alias}.chain = $${chainParam})`;
+    })
+    .join(" OR ");
+
+  return {
+    clause: clause || "FALSE",
+    params,
+  };
 }
 
 function parseJbmAmount(input: unknown): bigint | null {
@@ -220,8 +243,11 @@ itemsRoute.get("/bungalow/:chain/:ca/items", async (c) => {
     throw new ApiError(400, "invalid_token", "Invalid token address");
   }
 
-  const rows = await db<BungalowItemRow[]>`
-    SELECT
+  const projectContext = getCanonicalProjectContext(chain, tokenAddress);
+  const filter = buildDeploymentWhereClause("bi", projectContext.deployments);
+
+  const rows = await db.unsafe<BungalowItemRow[]>(
+    `SELECT
       bi.id,
       bi.token_address,
       bi.chain,
@@ -232,13 +258,14 @@ itemsRoute.get("/bungalow/:chain/:ca/items", async (c) => {
       bi.tx_hash,
       bi.jbm_amount::text AS jbm_amount,
       bi.created_at::text AS created_at
-    FROM ${db(CONFIG.SCHEMA)}.bungalow_items bi
-    LEFT JOIN ${db(CONFIG.SCHEMA)}.token_holder_heat thh
+    FROM "${CONFIG.SCHEMA}".bungalow_items bi
+    LEFT JOIN "${CONFIG.SCHEMA}".token_holder_heat thh
       ON thh.token_address = bi.token_address
       AND thh.wallet = bi.placed_by
-    WHERE bi.token_address = ${tokenAddress} AND bi.chain = ${chain}
-    ORDER BY bi.created_at DESC, bi.id DESC
-  `;
+    WHERE ${filter.clause}
+    ORDER BY bi.created_at DESC, bi.id DESC`,
+    filter.params,
+  );
 
   return c.json({ items: rows });
 });
@@ -255,6 +282,9 @@ itemsRoute.post("/bungalow/:chain/:ca/items", async (c) => {
   if (!tokenAddress) {
     throw new ApiError(400, "invalid_token", "Invalid token address");
   }
+
+  const projectContext = getCanonicalProjectContext(chain, tokenAddress);
+  const storageDeployment = projectContext.primaryDeployment;
 
   const body = await c.req.json<{
     item_type?: unknown;
@@ -331,7 +361,13 @@ itemsRoute.post("/bungalow/:chain/:ca/items", async (c) => {
   `;
   if (existing.length > 0) {
     const existingItem = existing[0];
-    if (existingItem.token_address !== tokenAddress || existingItem.chain !== chain) {
+    const matchesCanonicalDeployment = projectContext.deployments.some(
+      (deployment) =>
+        deployment.token_address === existingItem.token_address &&
+        deployment.chain === existingItem.chain,
+    );
+
+    if (!matchesCanonicalDeployment) {
       throw new ApiError(409, "duplicate_tx_hash", "tx_hash has already been used");
     }
     return c.json({ item: existingItem, idempotent: true }, 200);
@@ -349,8 +385,8 @@ itemsRoute.post("/bungalow/:chain/:ca/items", async (c) => {
         jbm_amount
       )
       VALUES (
-        ${tokenAddress},
-        ${chain},
+        ${storageDeployment.token_address},
+        ${storageDeployment.chain},
         ${itemType},
         ${JSON.stringify(normalizedContent)}::jsonb,
         ${placedBy},

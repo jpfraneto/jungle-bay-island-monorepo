@@ -14,6 +14,10 @@ import {
 } from "../db/queries";
 import { optionalWalletContext, requireWalletAuth } from "../middleware/auth";
 import { clearCache, getCached, setCached } from "../services/cache";
+import {
+  getCanonicalProjectContext,
+  type CanonicalDeploymentRef,
+} from "../services/canonicalProjects";
 import { ApiError } from "../services/errors";
 import {
   getHomeTeamToken,
@@ -60,6 +64,156 @@ function calculateTopHeatStats(values: number[]): {
   };
 }
 
+interface BungalowMarketDataResponse {
+  price_usd: number | null;
+  market_cap: number | null;
+  volume_24h: number | null;
+  liquidity_usd: number | null;
+  updated_at: string | null;
+}
+
+interface LinkedDeploymentView {
+  chain: string;
+  token_address: string;
+  route_path: string;
+  name: string | null;
+  symbol: string | null;
+  decimals: number | null;
+  is_nft: boolean;
+  exists: boolean;
+  is_claimed: boolean;
+  is_verified: boolean;
+  current_owner: string | null;
+  description: string | null;
+  origin_story: string | null;
+  image_url: string | null;
+  holder_count: number;
+  total_supply: string | null;
+  market_data: BungalowMarketDataResponse | null;
+  links: {
+    x: string | null;
+    farcaster: string | null;
+    telegram: string | null;
+    website: string | null;
+    dexscreener: string | null;
+  };
+  heat_stats: {
+    sample_size: number;
+    top_50_average: number | null;
+    top_50_stddev: number | null;
+  };
+  is_primary: boolean;
+  is_active: boolean;
+}
+
+function toMarketData(
+  input:
+    | {
+        price_usd: string | null;
+        market_cap: string | null;
+        volume_24h: string | null;
+        liquidity_usd: string | null;
+        metadata_updated_at: string | null;
+      }
+    | null
+    | undefined,
+): BungalowMarketDataResponse | null {
+  if (!input) return null;
+
+  return {
+    price_usd: input.price_usd ? Number(input.price_usd) : null,
+    market_cap: input.market_cap ? Number(input.market_cap) : null,
+    volume_24h: input.volume_24h ? Number(input.volume_24h) : null,
+    liquidity_usd: input.liquidity_usd ? Number(input.liquidity_usd) : null,
+    updated_at: input.metadata_updated_at ?? null,
+  };
+}
+
+async function buildLinkedDeploymentView(input: {
+  deployment: CanonicalDeploymentRef;
+  isPrimary: boolean;
+  isActive: boolean;
+}): Promise<LinkedDeploymentView> {
+  const { deployment } = input;
+
+  const [bungalow, tokenRegistry] = await Promise.all([
+    getBungalow(deployment.token_address, deployment.chain),
+    getTokenRegistry(deployment.token_address, deployment.chain),
+  ]);
+
+  const seededMetadata = getHomeTeamToken(deployment.chain, deployment.token_address);
+  const needsFallbackMetadata =
+    !bungalow ||
+    !bungalow.image_url ||
+    isPlaceholderMetadataLabel(bungalow.name) ||
+    isPlaceholderMetadataLabel(bungalow.symbol) ||
+    isPlaceholderMetadataLabel(tokenRegistry?.name) ||
+    isPlaceholderMetadataLabel(tokenRegistry?.symbol);
+
+  const fallbackMetadata = needsFallbackMetadata
+    ? await resolveTokenMetadata(deployment.token_address, deployment.chain).catch(
+        () => null,
+      )
+    : null;
+
+  const exists = Boolean(bungalow || tokenRegistry);
+  const holdersResult = exists
+    ? await getTokenHolders(deployment.token_address, 50, 0).catch(() => ({
+        holders: [],
+        total: 0,
+      }))
+    : { holders: [], total: 0 };
+
+  const decimals = tokenRegistry?.decimals ?? null;
+
+  return {
+    chain: deployment.chain,
+    token_address: deployment.token_address,
+    route_path: `/${deployment.chain}/${deployment.token_address}`,
+    name: pickMetadataLabel(
+      bungalow?.name,
+      tokenRegistry?.name,
+      seededMetadata?.name,
+      fallbackMetadata?.name,
+    ),
+    symbol: pickMetadataLabel(
+      bungalow?.symbol,
+      tokenRegistry?.symbol,
+      seededMetadata?.symbol,
+      fallbackMetadata?.symbol,
+    ),
+    decimals,
+    is_nft: decimals === 0,
+    exists,
+    is_claimed: bungalow?.is_claimed ?? false,
+    is_verified: bungalow?.is_verified ?? false,
+    current_owner: bungalow?.current_owner ?? null,
+    description: bungalow?.description ?? fallbackMetadata?.description ?? null,
+    origin_story: bungalow?.origin_story ?? null,
+    image_url:
+      bungalow?.image_url ??
+      seededMetadata?.image_url ??
+      fallbackMetadata?.image_url ??
+      null,
+    holder_count: bungalow?.holder_count ?? tokenRegistry?.holder_count ?? 0,
+    total_supply: bungalow?.total_supply ?? tokenRegistry?.total_supply ?? null,
+    market_data: toMarketData(bungalow) ?? fallbackMetadata?.market_data ?? null,
+    links: {
+      x: bungalow?.link_x ?? fallbackMetadata?.links.x ?? null,
+      farcaster: bungalow?.link_farcaster ?? fallbackMetadata?.links.farcaster ?? null,
+      telegram: bungalow?.link_telegram ?? fallbackMetadata?.links.telegram ?? null,
+      website: bungalow?.link_website ?? fallbackMetadata?.links.website ?? null,
+      dexscreener:
+        bungalow?.link_dexscreener ?? fallbackMetadata?.links.dexscreener ?? null,
+    },
+    heat_stats: calculateTopHeatStats(
+      holdersResult.holders.map((holder) => Number(holder.heat_degrees)),
+    ),
+    is_primary: input.isPrimary,
+    is_active: input.isActive,
+  };
+}
+
 bungalowRoute.get("/bungalow/:chain/:ca", async (c) => {
   const requestId = c.get("requestId") ?? "unknown";
   const chain = toSupportedChain(c.req.param("chain"));
@@ -85,131 +239,140 @@ bungalowRoute.get("/bungalow/:chain/:ca", async (c) => {
     return c.json(cached);
   }
 
-  const bungalow = await getBungalow(tokenAddress, chain);
-  const seededMetadata = getHomeTeamToken(chain, tokenAddress);
+  const projectContext = getCanonicalProjectContext(chain, tokenAddress);
+  const deploymentViews = await Promise.all(
+    projectContext.deployments.map((deployment) =>
+      buildLinkedDeploymentView({
+        deployment,
+        isPrimary:
+          deployment.chain === projectContext.primaryDeployment.chain &&
+          deployment.token_address === projectContext.primaryDeployment.token_address,
+        isActive:
+          deployment.chain === chain && deployment.token_address === tokenAddress,
+      }),
+    ),
+  );
 
-  if (!bungalow) {
-    const fallback = await resolveTokenMetadata(tokenAddress, chain);
+  const activeDeployment =
+    deploymentViews.find((deployment) => deployment.is_active) ?? deploymentViews[0];
+  const primaryDeployment =
+    deploymentViews.find((deployment) => deployment.is_primary) ?? activeDeployment;
+  const firstExistingDeployment =
+    deploymentViews.find((deployment) => deployment.exists) ?? null;
+  const displaySource = firstExistingDeployment ?? activeDeployment;
+  const canonicalExists = Boolean(firstExistingDeployment);
+  const aggregateHolderCount = deploymentViews.reduce(
+    (sum, deployment) => sum + Math.max(0, deployment.holder_count),
+    0,
+  );
+  const chainCount = new Set(deploymentViews.map((deployment) => deployment.chain))
+    .size;
+  const canonicalProject = {
+    id:
+      projectContext.project?.id ??
+      `${displaySource.chain}:${displaySource.token_address}`,
+    slug: projectContext.project?.slug ?? null,
+    name: projectContext.project?.name ?? displaySource.name,
+    symbol: projectContext.project?.symbol ?? displaySource.symbol,
+    chain_count: chainCount,
+    deployment_count: deploymentViews.length,
+    total_holder_count: aggregateHolderCount,
+    primary_deployment: {
+      chain: primaryDeployment.chain,
+      token_address: primaryDeployment.token_address,
+    },
+    active_deployment: {
+      chain: activeDeployment.chain,
+      token_address: activeDeployment.token_address,
+    },
+  };
+
+  if (!canonicalExists) {
     const notFound = {
       token_address: tokenAddress,
       chain,
-      name: pickMetadataLabel(
-        seededMetadata?.name,
-        fallback.name,
-      ),
-      symbol: pickMetadataLabel(
-        seededMetadata?.symbol,
-        fallback.symbol,
-      ),
+      name: canonicalProject.name,
+      symbol: canonicalProject.symbol,
+      decimals: activeDeployment.decimals,
+      is_nft: activeDeployment.is_nft,
       exists: false,
       is_claimed: false,
       is_verified: false,
-      description: fallback.description,
+      current_owner: null,
+      description: activeDeployment.description,
       origin_story: null,
-      image_url: seededMetadata?.image_url ?? fallback.image_url,
-      market_data: fallback.market_data,
-      links: {
-        x: fallback.links.x,
-        farcaster: fallback.links.farcaster,
-        telegram: fallback.links.telegram,
-        website: fallback.links.website,
-        dexscreener: fallback.links.dexscreener,
-      },
+      image_url: activeDeployment.image_url,
+      holder_count: 0,
+      total_supply: null,
+      market_data: activeDeployment.market_data,
+      links: activeDeployment.links,
+      heat_stats: activeDeployment.heat_stats,
+      holders: [],
+      heat_distribution: null,
+      canonical_project: canonicalProject,
+      deployments: deploymentViews,
+      active_deployment: activeDeployment,
     };
     setCached(cacheKey, notFound, CONFIG.BUNGALOW_CACHE_MS);
     return c.json(notFound);
   }
 
-  const hasMarketData = bungalow.price_usd || bungalow.market_cap;
-  const viewerIsOwner = Boolean(
-    viewerWallet &&
-    bungalow.current_owner &&
-    viewerWallet.toLowerCase() === bungalow.current_owner.toLowerCase(),
-  );
-
-  const fallbackMetadataPromise =
-    !bungalow.image_url ||
-    isPlaceholderMetadataLabel(bungalow.name) ||
-    isPlaceholderMetadataLabel(bungalow.symbol)
-      ? resolveTokenMetadata(tokenAddress, chain).catch(() => null)
-      : Promise.resolve(null);
-
-  // Fetch holders and heat distribution
-  const [holdersResult, heatDistribution, tokenRegistry, fallbackMetadata] = await Promise.all([
-    getTokenHolders(tokenAddress, 50, 0),
-    getTokenHeatDistribution(tokenAddress),
-    getTokenRegistry(tokenAddress, chain),
-    fallbackMetadataPromise,
+  const heatContextDeployment = activeDeployment.exists
+    ? activeDeployment
+    : displaySource;
+  const [holdersResult, heatDistribution] = await Promise.all([
+    getTokenHolders(heatContextDeployment.token_address, 50, 0).catch(() => ({
+      holders: [],
+      total: 0,
+    })),
+    getTokenHeatDistribution(heatContextDeployment.token_address).catch(() => null),
   ]);
-
-  const decimals = tokenRegistry?.decimals ?? null;
-  const isNft = decimals === 0;
-  const topHeatStats = calculateTopHeatStats(
-    holdersResult.holders.map((holder) => Number(holder.heat_degrees)),
-  );
-  const resolvedName = pickMetadataLabel(
-    bungalow.name,
-    tokenRegistry?.name,
-    seededMetadata?.name,
-    fallbackMetadata?.name,
-  );
-  const resolvedSymbol = pickMetadataLabel(
-    bungalow.symbol,
-    tokenRegistry?.symbol,
-    seededMetadata?.symbol,
-    fallbackMetadata?.symbol,
-  );
 
   const response: Record<string, unknown> = {
     token_address: tokenAddress,
     chain,
-    name: resolvedName,
-    symbol: resolvedSymbol,
-    decimals,
-    is_nft: isNft,
+    name: canonicalProject.name,
+    symbol: canonicalProject.symbol,
+    decimals: displaySource.decimals,
+    is_nft: displaySource.is_nft,
     exists: true,
-    is_claimed: bungalow.is_claimed ?? false,
-    is_verified: bungalow.is_verified ?? false,
-    current_owner: bungalow.current_owner ?? null,
-    description: bungalow.description ?? fallbackMetadata?.description ?? null,
-    origin_story: bungalow.origin_story ?? null,
-    image_url:
-      bungalow.image_url ??
-      seededMetadata?.image_url ??
-      fallbackMetadata?.image_url ??
-      null,
-    holder_count: bungalow.holder_count ?? 0,
-    total_supply: bungalow.total_supply ?? null,
-    market_data: hasMarketData
-      ? {
-          price_usd: bungalow.price_usd ? Number(bungalow.price_usd) : null,
-          market_cap: bungalow.market_cap ? Number(bungalow.market_cap) : null,
-          volume_24h: bungalow.volume_24h ? Number(bungalow.volume_24h) : null,
-          liquidity_usd: bungalow.liquidity_usd ? Number(bungalow.liquidity_usd) : null,
-          updated_at: bungalow.metadata_updated_at ?? null,
-        }
-      : fallbackMetadata?.market_data ?? null,
-    links: {
-      x: bungalow.link_x ?? fallbackMetadata?.links.x ?? null,
-      farcaster: bungalow.link_farcaster ?? fallbackMetadata?.links.farcaster ?? null,
-      telegram: bungalow.link_telegram ?? fallbackMetadata?.links.telegram ?? null,
-      website: bungalow.link_website ?? fallbackMetadata?.links.website ?? null,
-      dexscreener: bungalow.link_dexscreener ?? fallbackMetadata?.links.dexscreener ?? null,
-    },
-    heat_stats: topHeatStats,
-    holders: holdersResult.holders.map((h, idx) => ({
+    is_claimed: displaySource.is_claimed,
+    is_verified: displaySource.is_verified,
+    current_owner: displaySource.current_owner,
+    description: displaySource.description,
+    origin_story: displaySource.origin_story,
+    image_url: displaySource.image_url,
+    holder_count: aggregateHolderCount,
+    total_supply: displaySource.total_supply,
+    market_data: displaySource.market_data,
+    links: displaySource.links,
+    heat_stats: heatContextDeployment.heat_stats,
+    holders: holdersResult.holders.map((holder, idx) => ({
       rank: idx + 1,
-      wallet: h.wallet,
-      heat_degrees: Number(h.heat_degrees),
-      farcaster: h.fid ? { fid: h.fid, username: h.username, pfp_url: h.pfp_url } : null,
+      wallet: holder.wallet,
+      heat_degrees: Number(holder.heat_degrees),
+      farcaster: holder.fid
+        ? {
+            fid: holder.fid,
+            username: holder.username,
+            pfp_url: holder.pfp_url,
+          }
+        : null,
     })),
     heat_distribution: heatDistribution,
+    canonical_project: canonicalProject,
+    deployments: deploymentViews,
+    active_deployment: activeDeployment,
   };
 
   if (viewerWallet) {
+    const viewerIsOwner = Boolean(
+      displaySource.current_owner &&
+      viewerWallet.toLowerCase() === displaySource.current_owner.toLowerCase(),
+    );
     const [viewerProfile, walletHeat] = await Promise.all([
       getViewerProfile(viewerWallet),
-      getWalletTokenHeat(tokenAddress, viewerWallet),
+      getWalletTokenHeat(heatContextDeployment.token_address, viewerWallet),
     ]);
 
     response.viewer_context = {
@@ -218,14 +381,14 @@ bungalowRoute.get("/bungalow/:chain/:ca", async (c) => {
       holds_token: walletHeat !== null,
       token_heat_degrees: walletHeat ?? 0,
       island_heat: viewerProfile?.islandHeat ?? 0,
-      tier: viewerProfile?.tier ?? 'drifter',
+      tier: viewerProfile?.tier ?? "drifter",
     };
   }
 
   setCached(cacheKey, response, CONFIG.BUNGALOW_CACHE_MS);
   logInfo(
     "BUNGALOW RESP",
-    `request_id=${requestId} token=${tokenAddress} chain=${chain} exists=true claimed=${bungalow.is_claimed}`,
+    `request_id=${requestId} token=${tokenAddress} chain=${chain} exists=true deployments=${deploymentViews.length} claimed=${displaySource.is_claimed}`,
   );
   return c.json(response);
 });
@@ -293,7 +456,9 @@ bungalowRoute.put("/bungalow/:chain/:ca/curate", requireWalletAuth, async (c) =>
   }
 
   await updateBungalowCuration(tokenAddress, chain, fields);
-  clearCache(`bungalow:${chain}:${tokenAddress}`);
+  for (const deployment of getCanonicalProjectContext(chain, tokenAddress).deployments) {
+    clearCache(`bungalow:${deployment.chain}:${deployment.token_address}`);
+  }
   logInfo("BUNGALOW CURATE", `wallet=${wallet} token=${tokenAddress} chain=${chain} fields=${Object.keys(fields).join(",")}`);
 
   return c.json({ ok: true });

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { sendCalls, waitForCallsStatus } from "viem/actions";
+import ChainIcon from "./ChainIcon";
 import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
 import { useWalletClaims } from "../hooks/useWalletClaims";
 import { CLAIM_CONTRACT_ADDRESS } from "../utils/constants";
@@ -11,7 +12,7 @@ import {
   isHexBytes32,
   isHexSignature,
 } from "../utils/claimEscrow";
-import { formatJbmAmount } from "../utils/formatters";
+import { formatJbmCount } from "../utils/formatters";
 import styles from "../styles/rewards-inbox.module.css";
 
 interface SignedReward {
@@ -30,25 +31,31 @@ interface SignedReward {
 
 function getBatchErrorMessage(error: unknown): string {
   if (error instanceof Error) {
-    const message = error.message.toLowerCase();
-    if (
-      error.name === "AtomicityNotSupportedError" ||
-      message.includes("forceatomic") ||
-      message.includes("atomicity") ||
-      message.includes("wallet_sendcalls")
-    ) {
-      return "Your wallet does not support one-click atomic batch claims yet. Use the bungalow Claim button for now.";
-    }
-
     return error.message;
   }
 
   return "Batch claim failed";
 }
 
+function shouldFallbackToSequential(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+
+  const message = error.message.toLowerCase();
+  return (
+    error.name === "AtomicityNotSupportedError" ||
+    message.includes("forceatomic") ||
+    message.includes("atomicity") ||
+    message.includes("wallet_sendcalls") ||
+    message.includes("unknown connector error") ||
+    message.includes("unknown rpc error") ||
+    message.includes("not supported") ||
+    message.includes("method not found")
+  );
+}
+
 export default function RewardsInboxButton() {
   const { authenticated, getAccessToken, login } = usePrivy();
-  const { requireWallet, walletAddress } = usePrivyBaseWallet();
+  const { publicClient, requireWallet, walletAddress } = usePrivyBaseWallet();
   const { claims, isLoading, error: loadError, refetch } = useWalletClaims(
     walletAddress ?? undefined,
   );
@@ -156,44 +163,101 @@ export default function RewardsInboxButton() {
         });
       }
 
-      const bundle = await sendCalls(walletClient, {
-        account: address,
-        forceAtomic: true,
-        calls: signedRewards.map((reward) => ({
-          to: CLAIM_CONTRACT_ADDRESS,
-          abi: claimEscrowAbi,
-          functionName: "claim",
-          args: [
-            reward.payload.escrow,
-            reward.payload.payoutWallet,
-            reward.payload.amountWei,
-            reward.payload.bungalowId,
-            reward.payload.periodId,
-            reward.payload.deadline,
-            reward.payload.signature,
-          ],
-        })),
-      });
-
-      setStatus("Batch claim submitted...");
-      await waitForCallsStatus(walletClient, {
-        id: bundle.id,
-        throwOnFailure: true,
-        timeout: 120_000,
-      });
-
-      await Promise.allSettled(
-        signedRewards.map((reward) =>
-          fetch(`/api/claims/${reward.chain}/${reward.tokenAddress}/confirm`, {
+      const confirmReward = async (reward: SignedReward) => {
+        const confirmResponse = await fetch(
+          `/api/claims/${reward.chain}/${reward.tokenAddress}/confirm`,
+          {
             method: "POST",
             headers,
             body: JSON.stringify({
               wallet: address,
               payout_wallet: address,
             }),
-          }),
-        ),
-      );
+          },
+        );
+
+        if (!confirmResponse.ok) {
+          const confirmData = (await confirmResponse.json()) as { error?: string };
+          throw new Error(
+            confirmData.error ?? `Claim confirmation failed (${confirmResponse.status})`,
+          );
+        }
+      };
+
+      const submitSequentialClaims = async () => {
+        if (!publicClient) {
+          throw new Error("Missing Base public client");
+        }
+
+        setStatus("Your wallet rejected one-click batch. Claiming one by one...");
+
+        for (const reward of signedRewards) {
+          const hash = await walletClient.writeContract({
+            address: CLAIM_CONTRACT_ADDRESS,
+            abi: claimEscrowAbi,
+            functionName: "claim",
+            args: [
+              reward.payload.escrow,
+              reward.payload.payoutWallet,
+              reward.payload.amountWei,
+              reward.payload.bungalowId,
+              reward.payload.periodId,
+              reward.payload.deadline,
+              reward.payload.signature,
+            ],
+            account: address,
+          });
+
+          const receipt = await publicClient.waitForTransactionReceipt({ hash });
+          if (receipt.status !== "success") {
+            throw new Error("Claim transaction failed");
+          }
+
+          await confirmReward(reward);
+        }
+      };
+
+      let bundleId: string;
+      try {
+        const bundle = await sendCalls(walletClient, {
+          account: address,
+          forceAtomic: true,
+          calls: signedRewards.map((reward) => ({
+            to: CLAIM_CONTRACT_ADDRESS,
+            abi: claimEscrowAbi,
+            functionName: "claim",
+            args: [
+              reward.payload.escrow,
+              reward.payload.payoutWallet,
+              reward.payload.amountWei,
+              reward.payload.bungalowId,
+              reward.payload.periodId,
+              reward.payload.deadline,
+              reward.payload.signature,
+            ],
+          })),
+        });
+        bundleId = bundle.id;
+      } catch (err) {
+        if (shouldFallbackToSequential(err)) {
+          await submitSequentialClaims();
+          setStatus("Rewards claimed");
+          await refetch().catch(() => undefined);
+          return;
+        }
+        throw err;
+      }
+
+      setStatus("Batch claim submitted...");
+      await waitForCallsStatus(walletClient, {
+        id: bundleId,
+        throwOnFailure: true,
+        timeout: 120_000,
+      });
+
+      for (const reward of signedRewards) {
+        await confirmReward(reward);
+      }
 
       setStatus("Rewards claimed");
       await refetch().catch(() => undefined);
@@ -226,7 +290,7 @@ export default function RewardsInboxButton() {
                 <h3>Island Rewards</h3>
                 <p>
                   {claims
-                    ? `${claims.claimable_count} bungalow${claims.claimable_count === 1 ? "" : "s"} ready`
+                    ? `you have heat score on ${claims.claimable_count} bungalow${claims.claimable_count === 1 ? "" : "s"}`
                     : "Loading rewards"}
                 </p>
               </div>
@@ -238,13 +302,6 @@ export default function RewardsInboxButton() {
                 ×
               </button>
             </header>
-
-            <div className={styles.summary}>
-              <span>Total ready</span>
-              <strong>
-                {claims ? formatJbmAmount(claims.total_claimable_jbm) : "—"}
-              </strong>
-            </div>
 
             <div className={styles.list}>
               {isLoading ? (
@@ -260,36 +317,43 @@ export default function RewardsInboxButton() {
               ) : null}
 
               {!isLoading && !loadError
-                ? claimableItems.map((item) => (
+                  ? claimableItems.map((item) => (
                     <div
                       key={`${item.chain}:${item.token_address}`}
                       className={styles.item}
                     >
-                      <div>
+                      <span className={styles.itemLabel}>
+                        <ChainIcon
+                          chain={item.chain}
+                          className={styles.chainIcon}
+                          size={14}
+                        />
                         <strong>
                           {item.token_symbol
                             ? `$${item.token_symbol}`
                             : item.token_name ?? item.token_address}
                         </strong>
-                        <span>
-                          {item.chain} • {item.heat_degrees.toFixed(1)}°
-                          {item.has_reservation ? " • reserved" : ""}
-                        </span>
-                      </div>
-                      <b>{formatJbmAmount(item.claimable_jbm)}</b>
+                      </span>
+                      <b>{formatJbmCount(item.claimable_jbm)}</b>
                     </div>
                   ))
                 : null}
             </div>
 
             <div className={styles.footer}>
+              <div className={styles.summary}>
+                <span>jungle bay memes to claim today</span>
+                <strong>{claims ? formatJbmCount(claims.total_claimable_jbm) : "—"}</strong>
+              </div>
               <button
                 type="button"
                 className={styles.claimButton}
                 disabled={isClaiming || isLoading || claimableItems.length === 0}
                 onClick={handleClaimAll}
               >
-                {isClaiming ? "Claiming..." : "CLAIM"}
+                {isClaiming
+                  ? "Claiming..."
+                  : `Claim ${claims ? formatJbmCount(claims.total_claimable_jbm) : "0"} jungle bay memes tokens`}
               </button>
               {status ? <div className={styles.status}>{status}</div> : null}
               {error ? <div className={styles.error}>{error}</div> : null}

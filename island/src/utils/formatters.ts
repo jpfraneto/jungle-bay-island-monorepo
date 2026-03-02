@@ -52,3 +52,7 @@ export function formatJbmAmount(value: string | number): string {
   if (numeric >= 1_000) return `${(numeric / 1_000).toFixed(0)}k JBM`;
   return `${numeric} JBM`;
 }
+
+export function formatJbmCount(value: string | number): string {
+  return formatJbmAmount(value).replace(/ JBM$/, "");
+}

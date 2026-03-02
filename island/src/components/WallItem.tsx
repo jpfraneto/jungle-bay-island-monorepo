@@ -1,6 +1,10 @@
 import { useNavigate } from "react-router-dom";
 import type { BungalowItem } from "../hooks/useBungalowItems";
-import { formatAddress, formatJbmAmount, formatTimeAgo } from "../utils/formatters";
+import {
+  formatAddress,
+  formatJbmCount,
+  formatTimeAgo,
+} from "../utils/formatters";
 import styles from "../styles/wall-item.module.css";
 
 interface WallItemProps {
@@ -16,6 +20,12 @@ function formatHeat(value: number | null | undefined): string {
   if (!Number.isFinite(numeric)) return "0°";
   if (Math.abs(numeric) < 0.05) return "0°";
   return `${numeric.toFixed(1)}°`;
+}
+
+function formatItemTypeLabel(type: string): string {
+  if (type === "frame") return "post";
+  if (type === "portal") return "miniapp";
+  return type;
 }
 
 export default function WallItem({ item }: WallItemProps) {
@@ -38,7 +48,7 @@ export default function WallItem({ item }: WallItemProps) {
 
   return (
     <article className={`${styles.card} ${collageClass}`}>
-      <div className={styles.type}>{item.item_type}</div>
+      <div className={styles.type}>{formatItemTypeLabel(item.item_type)}</div>
 
       {item.item_type === "link" ? (
         <a href={url} target="_blank" rel="noreferrer" className={styles.bodyLink}>
@@ -49,7 +59,7 @@ export default function WallItem({ item }: WallItemProps) {
 
       {item.item_type === "frame" ? (
         <div className={styles.bodyText}>
-          <div className={styles.mainText}>📝 Frame</div>
+          <div className={styles.mainText}>📝 Post</div>
           <p className={styles.frameText}>{text.slice(0, 280)}</p>
         </div>
       ) : null}
@@ -78,20 +88,21 @@ export default function WallItem({ item }: WallItemProps) {
       ) : null}
 
       <footer className={styles.footer}>
-        <button
-          type="button"
-          className={styles.walletLink}
-          onClick={() => navigate(`/address/${item.placed_by}`)}
-        >
-          {formatAddress(item.placed_by)}
-        </button>
-        <span>{formatTimeAgo(item.created_at)}</span>
+        <div className={styles.metaRow}>
+          <button
+            type="button"
+            className={styles.walletLink}
+            onClick={() => navigate(`/address/${item.placed_by}`)}
+          >
+            {formatAddress(item.placed_by)}
+          </button>
+          <span className={styles.separator}>-</span>
+          <span>{formatHeat(item.placed_by_heat_degrees)}</span>
+          <span className={styles.separator}>-</span>
+          <span>paid {formatJbmCount(item.jbm_amount)} jungle bay memes</span>
+        </div>
+        <span className={styles.timestamp}>{formatTimeAgo(item.created_at)}</span>
       </footer>
-
-      <div className={styles.badgeGroup}>
-        <div className={`${styles.badge} ${styles.amountBadge}`}>{formatJbmAmount(item.jbm_amount)}</div>
-        <div className={`${styles.badge} ${styles.heatBadge}`}>{formatHeat(item.placed_by_heat_degrees)}</div>
-      </div>
     </article>
   );
 }

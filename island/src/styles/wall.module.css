@@ -52,6 +52,7 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   padding-right: 4px;
+  -webkit-overflow-scrolling: touch;
 }
 
 .grid {

@@ -23,7 +23,6 @@
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
   border: 0;
   background: transparent;
   color: var(--text-primary);
@@ -32,10 +31,7 @@
   font-style: italic;
   cursor: pointer;
   padding: 0;
-}
-
-.palm {
-  font-size: 18px;
+  white-space: nowrap;
 }
 
 .menuButton {
@@ -98,6 +94,6 @@
   }
 
   .brand {
-    font-size: 20px;
+    font-size: 18px;
   }
 }

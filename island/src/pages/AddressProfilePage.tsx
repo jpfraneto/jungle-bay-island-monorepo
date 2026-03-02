@@ -1,4 +1,5 @@
 import { Link, useParams } from "react-router-dom";
+import { ITEM_LABELS } from "../utils/constants";
 import {
   useAddressProfile,
   type AddressContributionItem,
@@ -30,6 +31,14 @@ function chainLabel(chain: string): string {
   return chain;
 }
 
+function formatItemTypeLabel(type: AddressContributionItem["item_type"]): string {
+  if (type === "frame") return ITEM_LABELS.frame;
+  if (type === "link") return ITEM_LABELS.link;
+  if (type === "image") return ITEM_LABELS.image;
+  if (type === "portal") return ITEM_LABELS.portal;
+  return type;
+}
+
 function renderItemContent(item: AddressContributionItem) {
   const title = asString(item.content.title);
   const url = asString(item.content.url);
@@ -57,7 +66,7 @@ function renderItemContent(item: AddressContributionItem) {
   }
 
   if (item.item_type === "frame") {
-    return <p className={styles.frameBody}>{text || "No frame text"}</p>;
+    return <p className={styles.frameBody}>{text || "No post text"}</p>;
   }
 
   if (item.item_type === "image") {
@@ -249,7 +258,9 @@ export default function AddressProfilePage() {
                       <span>{chainLabel(item.chain)}</span>
                     </div>
                   </Link>
-                  <span className={styles.typeTag}>{item.item_type}</span>
+                  <span className={styles.typeTag}>
+                    {formatItemTypeLabel(item.item_type)}
+                  </span>
                 </header>
 
                 <div className={styles.metricRow}>

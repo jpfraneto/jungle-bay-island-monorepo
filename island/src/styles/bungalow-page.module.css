@@ -1,6 +1,6 @@
 .page {
   height: 100%;
-  min-height: 0;
+  min-height: 100%;
   padding: 18px;
   background: radial-gradient(
     circle at 48% 26%,
@@ -10,6 +10,7 @@
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .content {
@@ -314,6 +315,11 @@
     grid-template-columns: 1fr;
     height: auto;
     min-height: 100%;
+  }
+
+  .mainColumn,
+  .sideColumn {
+    min-height: auto;
   }
 
   .stats {

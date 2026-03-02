@@ -37,7 +37,6 @@ export default function TopNav({
           className={styles.brand}
           onClick={() => navigate("/")}
         >
-          <span className={styles.palm}>🌴</span>
           <span>jungle bay island</span>
         </button>
       </div>

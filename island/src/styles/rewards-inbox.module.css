@@ -90,20 +90,24 @@
 .summary {
   border: 1px solid var(--border-subtle);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.02);
-  padding: 12px;
+  background: linear-gradient(135deg, rgba(65, 142, 92, 0.14), rgba(22, 53, 33, 0.5));
+  padding: 12px 14px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
 }
 
 .summary span {
   color: var(--text-secondary);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 .summary strong {
   font-family: var(--font-mono);
-  font-size: 18px;
+  font-size: 20px;
 }
 
 .list {
@@ -117,28 +121,38 @@
 
 .item {
   border: 1px solid var(--border-subtle);
-  border-radius: 12px;
-  padding: 12px;
+  border-radius: 10px;
+  padding: 10px 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.itemLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 .item strong {
-  display: block;
-  margin-bottom: 4px;
-}
-
-.item span {
-  color: var(--text-muted);
-  font-size: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .item b {
   font-family: var(--font-mono);
   font-size: 14px;
+  color: #ffe89a;
+}
+
+.chainIcon {
+  color: #9ed4aa;
 }
 
 .empty {
@@ -161,7 +175,8 @@
   padding: 12px;
   cursor: pointer;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  font-size: 13px;
+  line-height: 1.35;
 }
 
 .claimButton:disabled {
@@ -189,7 +204,6 @@
   }
 
   .item {
-    align-items: flex-start;
-    flex-direction: column;
+    padding: 10px;
   }
 }

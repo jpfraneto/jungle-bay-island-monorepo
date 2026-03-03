@@ -73,6 +73,19 @@
   padding: 10px;
 }
 
+.skeletonRow {
+  height: 36px;
+  border-radius: 10px;
+  background: linear-gradient(
+    90deg,
+    rgba(19, 38, 27, 0.68) 0%,
+    rgba(38, 73, 53, 0.86) 50%,
+    rgba(19, 38, 27, 0.68) 100%
+  );
+  background-size: 220% 100%;
+  animation: sidebarShimmer 1.3s ease-in-out infinite;
+}
+
 .imageRing {
   width: 18px;
   height: 18px;
@@ -88,6 +101,16 @@
   height: 16px;
   border-radius: 999px;
   object-fit: cover;
+}
+
+@keyframes sidebarShimmer {
+  0% {
+    background-position: 100% 0;
+  }
+
+  100% {
+    background-position: -100% 0;
+  }
 }
 
 @media (max-width: 900px) {

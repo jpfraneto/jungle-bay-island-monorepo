@@ -7,6 +7,7 @@ import { requestLogMiddleware } from "./middleware/requestLog";
 import { requestIdMiddleware } from "./middleware/requestId";
 import { createRateLimit } from "./middleware/rateLimit";
 import bungalowRoute from "./routes/bungalow";
+import bungalowAdminRoute from "./routes/bungalow-admin";
 import healthRoute from "./routes/health";
 import tokenRoute from "./routes/token";
 import bungalowsRoute from "./routes/bungalows";
@@ -23,6 +24,8 @@ import v1BungalowRoute from "./routes/v1-bungalow";
 import { homeTeamRoute } from "./routes/home-team";
 import itemsRoute from "./routes/items";
 import claimsRoute from "./routes/claims";
+import bodegaRoute from "./routes/bodega";
+import walletLinkRoute from "./routes/wallet-link";
 import { startDailyHeatRefreshScheduler } from "./services/dailyHeatRefresh";
 import { isApiError } from "./services/errors";
 import { logError, logWarn } from "./services/logger";
@@ -153,7 +156,7 @@ app.use(
       "X-Wallet-Address",
       "X-Payment-Proof",
     ],
-    allowMethods: ["GET", "POST", "PUT", "OPTIONS"],
+    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   }),
 );
 
@@ -183,6 +186,7 @@ app.use(
 // --- API routes ---
 app.route("/api", healthRoute);
 app.route("/api", bungalowRoute);
+app.route("/api", bungalowAdminRoute);
 app.route("/api", tokenRoute);
 app.route("/api", bungalowsRoute);
 app.route("/api", userRoute);
@@ -198,6 +202,8 @@ app.route("/api", v1BungalowRoute);
 app.route("/api", homeTeamRoute);
 app.route("/api", itemsRoute);
 app.route("/api", claimsRoute);
+app.route("/api/bodega", bodegaRoute);
+app.route("/api/wallet", walletLinkRoute);
 
 // Solana RPC proxy (browser can't hit public RPC directly due to CORS/403)
 app.post("/api/solana-rpc", async (c) => {

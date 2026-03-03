@@ -26,6 +26,7 @@ export default function BungalowNode({ bungalow, x, y, index }: BungalowNodeProp
   );
   const rawTicker = bungalow.symbol?.trim() || "?";
   const ticker = rawTicker.length > 12 ? `${rawTicker.slice(0, 12)}…` : rawTicker;
+  const bungalowPath = `/bungalow/${bungalow.canonical_slug ?? bungalow.token_address}`;
 
   useEffect(() => {
     setImageSrc(getTokenImageUrl(bungalow.image_url, bungalow.token_address, bungalow.symbol));
@@ -47,7 +48,7 @@ export default function BungalowNode({ bungalow, x, y, index }: BungalowNodeProp
       onMouseLeave={() => setIsHovered(false)}
       onFocus={() => setIsHovered(true)}
       onBlur={() => setIsHovered(false)}
-      onClick={() => navigate(`/${bungalow.chain}/${bungalow.token_address}`)}
+      onClick={() => navigate(bungalowPath)}
     >
       <span className={styles.glow} />
       <img

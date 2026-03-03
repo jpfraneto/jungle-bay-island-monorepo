@@ -1,40 +1,71 @@
+import { createPublicKey, verify } from 'node:crypto'
 import { Hono } from 'hono'
 import { verifyMessage } from 'viem'
-import { createPublicKey, verify } from 'node:crypto'
 import { CONFIG, db, normalizeAddress } from '../config'
-import { getSessionFromRequest } from '../services/session'
-import { logInfo } from '../services/logger'
+import {
+  getIdentityClusterByWallet,
+  getLinkedWallets,
+  linkWallet,
+  unlinkWallet,
+} from '../db/queries'
+import { requireWalletAuth } from '../middleware/auth'
 import { ApiError } from '../services/errors'
+import type { AppEnv } from '../types'
 
-const walletLinkRoute = new Hono()
+const walletLinkRoute = new Hono<AppEnv>()
 
-// ── Base58 decoder for Solana addresses ──
-const BASE58_CHARS = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
-function base58Decode(str: string): Uint8Array {
+interface LinkedWalletCandidate {
+  address: string
+  kind: 'evm' | 'solana'
+}
+
+/**
+ * Decodes base58 strings so Solana public keys can be verified without extra dependencies.
+ */
+function base58Decode(value: string): Uint8Array {
+  const alphabet = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
   const bytes: number[] = [0]
-  for (const char of str) {
-    const idx = BASE58_CHARS.indexOf(char)
-    if (idx === -1) throw new Error('Invalid base58')
-    let carry = idx
-    for (let j = 0; j < bytes.length; j++) {
-      carry += bytes[j] * 58
-      bytes[j] = carry & 0xff
+
+  for (const character of value) {
+    const index = alphabet.indexOf(character)
+    if (index < 0) {
+      throw new ApiError(400, 'invalid_signature', 'Solana signatures require a valid base58 wallet address')
+    }
+
+    let carry = index
+    for (let pointer = 0; pointer < bytes.length; pointer += 1) {
+      carry += bytes[pointer] * 58
+      bytes[pointer] = carry & 0xff
       carry >>= 8
     }
+
     while (carry > 0) {
       bytes.push(carry & 0xff)
       carry >>= 8
     }
   }
-  for (const char of str) {
-    if (char !== '1') break
+
+  for (const character of value) {
+    if (character !== '1') break
     bytes.push(0)
   }
+
   return new Uint8Array(bytes.reverse())
 }
 
-function verifySolanaSignature(message: string, signatureBytes: Uint8Array, publicKeyBytes: Uint8Array): boolean {
+/**
+ * Verifies Solana detached signatures so linked wallets can be proven without transactions.
+ */
+function verifySolanaSignature(
+  message: string,
+  signature: string,
+  publicKey: string,
+): boolean {
   try {
+    const publicKeyBytes = base58Decode(publicKey)
+    const signatureBytes = Buffer.from(signature, 'base64')
+    if (signatureBytes.length === 0) return false
+
     const key = createPublicKey({
       key: Buffer.concat([
         Buffer.from('302a300506032b6570032100', 'hex'),
@@ -43,165 +74,184 @@ function verifySolanaSignature(message: string, signatureBytes: Uint8Array, publ
       format: 'der',
       type: 'spki',
     })
-    return verify(null, Buffer.from(message), key, Buffer.from(signatureBytes))
+
+    return verify(null, Buffer.from(message), key, signatureBytes)
   } catch {
     return false
   }
 }
 
-function buildLinkMessage(wallet: string, xUsername: string, nonce: string): string {
-  return `Link wallet ${wallet} to @${xUsername} on Memetics.\nNonce: ${nonce}`
-}
+/**
+ * Normalizes linked wallet input across EVM and Solana so the route can support both address families.
+ */
+function normalizeLinkedWallet(input: unknown): LinkedWalletCandidate | null {
+  const raw = typeof input === 'string' ? input.trim() : ''
+  if (!raw) return null
 
-// ── DB migration ──
-let migrationPromise: Promise<void> | null = null
-async function ensureXIdColumn(): Promise<void> {
-  if (!migrationPromise) {
-    migrationPromise = (async () => {
-      await db`
-        ALTER TABLE ${db(CONFIG.SCHEMA)}.user_wallet_links
-        ADD COLUMN IF NOT EXISTS x_id TEXT
-      `
-      await db`
-        CREATE INDEX IF NOT EXISTS idx_user_wallet_links_x_id
-        ON ${db(CONFIG.SCHEMA)}.user_wallet_links (x_id)
-      `
-    })()
+  const evm = normalizeAddress(raw)
+  if (evm) {
+    return { address: evm, kind: 'evm' }
   }
-  await migrationPromise
+
+  const solana = normalizeAddress(raw, 'solana')
+  if (solana) {
+    return { address: solana, kind: 'solana' }
+  }
+
+  return null
 }
 
-async function upsertWalletLink(
-  wallet: string,
-  walletKind: 'evm' | 'solana',
-  xId: string,
-  xUsername: string,
+/**
+ * Checks that the signed message includes a concrete timestamp so link proofs are replay-resistant.
+ */
+function messageHasTimestamp(message: string): boolean {
+  return (
+    /\b\d{10,13}\b/.test(message) ||
+    /\b\d{4}-\d{2}-\d{2}t\d{2}:\d{2}:\d{2}/i.test(message)
+  )
+}
+
+/**
+ * Validates that the proof message binds the link to the authenticated primary wallet.
+ */
+function assertValidLinkMessage(message: string, primaryWallet: string): void {
+  if (!message.toLowerCase().includes(primaryWallet.toLowerCase())) {
+    throw new ApiError(400, 'invalid_message', 'verification message must contain the primary_wallet address')
+  }
+
+  if (!messageHasTimestamp(message)) {
+    throw new ApiError(400, 'invalid_message', 'verification message must contain a timestamp')
+  }
+}
+
+/**
+ * Verifies ownership of the linked wallet from an off-chain signature so hardware wallets stay read-only.
+ */
+async function verifyLinkedWalletOwnership(
+  linkedWallet: LinkedWalletCandidate,
+  signature: string,
+  message: string,
 ): Promise<void> {
-  await ensureXIdColumn()
-  await db`
-    INSERT INTO ${db(CONFIG.SCHEMA)}.user_wallet_links
-      (wallet, wallet_kind, x_id, x_username, seen_via_privy, seen_via_farcaster, farcaster_verified, last_seen_requester_wallet)
-    VALUES
-      (${wallet}, ${walletKind}, ${xId}, ${xUsername}, FALSE, FALSE, FALSE, FALSE)
-    ON CONFLICT (wallet, wallet_kind) DO UPDATE SET
-      x_id = EXCLUDED.x_id,
-      x_username = EXCLUDED.x_username,
-      last_seen_at = NOW()
-  `
-}
+  if (linkedWallet.kind === 'evm') {
+    const valid = await verifyMessage({
+      address: linkedWallet.address as `0x${string}`,
+      message,
+      signature: signature as `0x${string}`,
+    })
 
-async function getWalletsByXId(xId: string): Promise<Array<{ wallet: string; wallet_kind: string; linked_at: string }>> {
-  await ensureXIdColumn()
-  return db<Array<{ wallet: string; wallet_kind: string; linked_at: string }>>`
-    SELECT wallet, wallet_kind, first_seen_at::text AS linked_at
-    FROM ${db(CONFIG.SCHEMA)}.user_wallet_links
-    WHERE x_id = ${xId}
-    ORDER BY first_seen_at ASC
-  `
-}
-
-async function removeWalletLink(wallet: string, xId: string): Promise<void> {
-  await ensureXIdColumn()
-  await db`
-    DELETE FROM ${db(CONFIG.SCHEMA)}.user_wallet_links
-    WHERE wallet = ${wallet} AND x_id = ${xId}
-  `
-}
-
-// ── Routes ──
-
-// GET /api/wallets/nonce — get a fresh nonce for signing
-walletLinkRoute.get('/wallets/nonce', async (c) => {
-  const session = await getSessionFromRequest(c.req.header('cookie'))
-  if (!session) {
-    throw new ApiError(401, 'not_authenticated', 'Login with X first')
+    if (!valid) {
+      throw new ApiError(403, 'invalid_signature', 'Signature does not recover to linked_wallet')
+    }
+    return
   }
 
-  const bytes = crypto.getRandomValues(new Uint8Array(16))
-  const nonce = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
-  return c.json({ nonce, message_template: buildLinkMessage('{wallet}', session.x_username, nonce) })
-})
+  const valid = verifySolanaSignature(message, signature, linkedWallet.address)
+  if (!valid) {
+    throw new ApiError(403, 'invalid_signature', 'Signature does not verify for linked_wallet')
+  }
+}
 
-// POST /api/wallets/link — link a wallet to X identity
-walletLinkRoute.post('/wallets/link', async (c) => {
-  const session = await getSessionFromRequest(c.req.header('cookie'))
-  if (!session) {
-    throw new ApiError(401, 'not_authenticated', 'Login with X first')
+// ── Link ────────────────────────────────────────────────────
+
+walletLinkRoute.post('/link', requireWalletAuth, async (c) => {
+  const primaryWallet = c.get('walletAddress')
+  if (!primaryWallet) {
+    throw new ApiError(401, 'auth_required', 'Wallet authentication required')
   }
 
   const body = await c.req.json<{
-    wallet: string
-    wallet_kind: 'evm' | 'solana'
-    signature: string
-    nonce: string
+    linked_wallet?: unknown
+    signature?: unknown
+    message?: unknown
   }>()
 
-  if (!body.wallet || !body.wallet_kind || !body.signature || !body.nonce) {
-    throw new ApiError(400, 'missing_fields', 'wallet, wallet_kind, signature, nonce required')
+  const linkedWallet = normalizeLinkedWallet(body.linked_wallet)
+  if (!linkedWallet) {
+    throw new ApiError(400, 'invalid_linked_wallet', 'linked_wallet must be a valid EVM or Solana address')
   }
 
-  if (body.wallet_kind !== 'evm' && body.wallet_kind !== 'solana') {
-    throw new ApiError(400, 'invalid_wallet_kind', 'wallet_kind must be evm or solana')
+  if (linkedWallet.address.toLowerCase() === primaryWallet.toLowerCase()) {
+    throw new ApiError(400, 'invalid_linked_wallet', 'linked_wallet must differ from primary_wallet')
   }
 
-  const message = buildLinkMessage(body.wallet, session.x_username, body.nonce)
-
-  if (body.wallet_kind === 'evm') {
-    const normalized = normalizeAddress(body.wallet)
-    if (!normalized) throw new ApiError(400, 'invalid_address', 'Invalid EVM address')
-
-    const valid = await verifyMessage({
-      address: normalized as `0x${string}`,
-      message,
-      signature: body.signature as `0x${string}`,
-    })
-    if (!valid) throw new ApiError(403, 'invalid_signature', 'EVM signature verification failed')
-
-    await upsertWalletLink(normalized, 'evm', session.x_id, session.x_username)
-    logInfo('WALLET LINK', `evm wallet=${normalized} x=@${session.x_username}`)
-    return c.json({ ok: true, wallet: normalized, wallet_kind: 'evm' })
+  const signature = typeof body.signature === 'string' ? body.signature.trim() : ''
+  if (!signature) {
+    throw new ApiError(400, 'invalid_signature', 'signature is required')
   }
 
-  // Solana
-  const solAddr = normalizeAddress(body.wallet, 'solana')
-  if (!solAddr) throw new ApiError(400, 'invalid_address', 'Invalid Solana address')
-
-  try {
-    const publicKeyBytes = base58Decode(solAddr)
-    const signatureBytes = Uint8Array.from(atob(body.signature), (ch) => ch.charCodeAt(0))
-    const valid = verifySolanaSignature(message, signatureBytes, publicKeyBytes)
-    if (!valid) throw new ApiError(403, 'invalid_signature', 'Solana signature verification failed')
-  } catch (err) {
-    if (err instanceof ApiError) throw err
-    throw new ApiError(403, 'invalid_signature', 'Signature verification failed')
+  const message = typeof body.message === 'string' ? body.message.trim() : ''
+  if (!message) {
+    throw new ApiError(400, 'invalid_message', 'message is required')
   }
 
-  await upsertWalletLink(solAddr, 'solana', session.x_id, session.x_username)
-  logInfo('WALLET LINK', `solana wallet=${solAddr} x=@${session.x_username}`)
-  return c.json({ ok: true, wallet: solAddr, wallet_kind: 'solana' })
+  assertValidLinkMessage(message, primaryWallet)
+  await verifyLinkedWalletOwnership(linkedWallet, signature, message)
+
+  const link = await linkWallet(
+    primaryWallet,
+    linkedWallet.address,
+    signature,
+    message,
+  )
+
+  return c.json({ link }, 201)
 })
 
-// GET /api/wallets — list linked wallets for current user
-walletLinkRoute.get('/wallets', async (c) => {
-  const session = await getSessionFromRequest(c.req.header('cookie'))
-  if (!session) {
-    throw new ApiError(401, 'not_authenticated', 'Login with X first')
+// ── Read ────────────────────────────────────────────────────
+
+walletLinkRoute.get('/links/:wallet', async (c) => {
+  const wallet = normalizeLinkedWallet(c.req.param('wallet'))
+  if (!wallet) {
+    throw new ApiError(400, 'invalid_wallet', 'Invalid wallet address')
   }
 
-  const wallets = await getWalletsByXId(session.x_id)
-  return c.json({ wallets })
+  const [linkedWallets, linkedUnder, cluster] = await Promise.all([
+    getLinkedWallets(wallet.address),
+    db<Array<{
+      id: number
+      primary_wallet: string
+      linked_wallet: string
+      verification_signature: string
+      verification_message: string
+      created_at: string
+    }>>`
+      SELECT
+        id,
+        primary_wallet,
+        linked_wallet,
+        verification_signature,
+        verification_message,
+        created_at::text AS created_at
+      FROM ${db(CONFIG.SCHEMA)}.user_wallet_links
+      WHERE linked_wallet = ${wallet.address}
+      ORDER BY created_at ASC, id ASC
+    `,
+    getIdentityClusterByWallet(wallet.address),
+  ])
+
+  return c.json({
+    wallet: wallet.address,
+    linked_wallets: linkedWallets,
+    linked_under: linkedUnder,
+    cluster,
+  })
 })
 
-// DELETE /api/wallets/:wallet — unlink a wallet
-walletLinkRoute.delete('/wallets/:wallet', async (c) => {
-  const session = await getSessionFromRequest(c.req.header('cookie'))
-  if (!session) {
-    throw new ApiError(401, 'not_authenticated', 'Login with X first')
+// ── Unlink ──────────────────────────────────────────────────
+
+walletLinkRoute.delete('/link', requireWalletAuth, async (c) => {
+  const primaryWallet = c.get('walletAddress')
+  if (!primaryWallet) {
+    throw new ApiError(401, 'auth_required', 'Wallet authentication required')
   }
 
-  const wallet = c.req.param('wallet')
-  await removeWalletLink(wallet, session.x_id)
-  logInfo('WALLET UNLINK', `wallet=${wallet} x=@${session.x_username}`)
+  const body = await c.req.json<{ linked_wallet?: unknown }>()
+  const linkedWallet = normalizeLinkedWallet(body.linked_wallet)
+  if (!linkedWallet) {
+    throw new ApiError(400, 'invalid_linked_wallet', 'linked_wallet must be a valid EVM or Solana address')
+  }
+
+  await unlinkWallet(primaryWallet, linkedWallet.address)
   return c.json({ ok: true })
 })
 

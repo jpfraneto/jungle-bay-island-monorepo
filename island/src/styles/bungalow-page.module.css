@@ -7,16 +7,18 @@
     rgba(39, 92, 60, 0.24),
     rgba(8, 18, 12, 0.96) 60%
   );
-  overflow: visible;
+  overflow-x: clip;
+  overflow-y: visible;
 }
 
 .content {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 280px);
   gap: 16px;
   align-items: start;
   height: 100%;
   min-height: 0;
+  min-width: 0;
 }
 
 .mainColumn {
@@ -181,6 +183,87 @@
   gap: 14px;
 }
 
+.assetCard {
+  background: rgba(15, 33, 21, 0.78);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+.assetCardActive {
+  border-color: rgba(121, 181, 138, 0.42);
+  box-shadow: inset 0 0 0 1px rgba(121, 181, 138, 0.08);
+}
+
+.assetHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.assetHeader > div:first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.assetEyebrow {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.assetTitle {
+  margin: 4px 0 0;
+  font-size: 18px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.assetTicker {
+  margin-left: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+.assetSummary {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.assetSummary div {
+  background: rgba(0, 0, 0, 0.16);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 8px;
+}
+
+.assetSummary span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.assetSummary strong {
+  display: block;
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.deploymentSublist {
+  display: grid;
+  gap: 10px;
+}
+
 .deploymentStack {
   display: grid;
   gap: 10px;
@@ -203,6 +286,8 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .deploymentTitle {
@@ -210,10 +295,13 @@
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .deploymentTitle strong {
   font-size: 14px;
+  overflow-wrap: anywhere;
 }
 
 .deploymentChainIcon {
@@ -227,6 +315,7 @@
   color: var(--text-muted);
   font-size: 12px;
   font-family: var(--font-mono);
+  overflow-wrap: anywhere;
 }
 
 .deploymentBadges {
@@ -235,6 +324,7 @@
   gap: 6px;
   flex-wrap: wrap;
   justify-content: flex-end;
+  max-width: 100%;
 }
 
 .deploymentPill {
@@ -323,7 +413,75 @@
   margin-top: 12px;
   min-height: 0;
   flex: 1;
-  overflow: hidden;
+  overflow: visible;
+  display: grid;
+  gap: 12px;
+}
+
+.marketStrip,
+.bodegaShelf {
+  background: rgba(15, 33, 21, 0.78);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  padding: 14px;
+}
+
+.marketStrip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.marketCopy p,
+.sectionHeading p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.marketCopy strong,
+.sectionHeading strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 16px;
+  line-height: 1.35;
+}
+
+.marketButton {
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  background: linear-gradient(135deg, #3aab68, #2b7e4b);
+  color: #f5fff7;
+  padding: 10px 16px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.sectionHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.installedGrid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.shelfStatus {
+  margin-top: 12px;
+  border: 1px dashed var(--border-subtle);
+  border-radius: 12px;
+  padding: 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .skeletonHeaderCard,
@@ -447,6 +605,17 @@
   border-radius: 10px;
 }
 
+@media (max-width: 720px) {
+  .marketStrip {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .marketButton {
+    width: 100%;
+  }
+}
+
 @keyframes skeletonShimmer {
   0% {
     background-position: 100% 0;
@@ -483,6 +652,10 @@
   }
 
   .deploymentStats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .assetSummary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

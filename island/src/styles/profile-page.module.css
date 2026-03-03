@@ -9,7 +9,7 @@
   max-width: 760px;
   width: 100%;
   border: 1px solid var(--border-subtle);
-  border-radius: 14px;
+  border-radius: 18px;
   padding: 18px;
   background:
     radial-gradient(1000px 320px at 15% -30%, rgba(46, 161, 103, 0.26), transparent 62%),
@@ -76,6 +76,33 @@
   gap: 10px;
 }
 
+.linkedWallets {
+  margin-top: 18px;
+  display: grid;
+  gap: 14px;
+  border-top: 1px solid rgba(121, 181, 138, 0.12);
+  padding-top: 18px;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sectionHeader h2 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.sectionHeader p {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.sectionButton,
 .actionButton,
 .secondaryButton,
 .logoutButton {
@@ -90,6 +117,10 @@
   background: #2a8f58;
 }
 
+.sectionButton {
+  background: rgba(14, 31, 21, 0.8);
+}
+
 .secondaryButton {
   background: rgba(14, 31, 21, 0.8);
 }
@@ -100,13 +131,183 @@
 }
 
 .actionButton:hover,
+.sectionButton:hover,
 .secondaryButton:hover,
 .logoutButton:hover {
   filter: brightness(1.07);
 }
 
+.linkComposer {
+  display: grid;
+  gap: 12px;
+  border: 1px solid rgba(121, 181, 138, 0.14);
+  border-radius: 14px;
+  background: rgba(10, 23, 16, 0.54);
+  padding: 14px;
+}
+
+.modeRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.modeButton {
+  border: 1px solid rgba(121, 181, 138, 0.16);
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: rgba(7, 17, 12, 0.74);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.modeButtonActive {
+  background: rgba(46, 161, 103, 0.18);
+  color: #d9f7df;
+  border-color: rgba(109, 202, 137, 0.34);
+}
+
+.composerGrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(7, 17, 12, 0.78);
+  color: var(--text-primary);
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.field textarea {
+  resize: vertical;
+}
+
+.field small {
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.inlineActions {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.primaryButton,
+.unlinkButton {
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 9px 12px;
+  cursor: pointer;
+}
+
+.primaryButton {
+  background: #2a8f58;
+  color: #f5fff7;
+}
+
+.unlinkButton {
+  background: rgba(7, 17, 12, 0.78);
+}
+
+.walletLists {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.walletList {
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(121, 181, 138, 0.14);
+  border-radius: 14px;
+  background: rgba(10, 23, 16, 0.54);
+  padding: 14px;
+}
+
+.walletList h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.walletRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid rgba(121, 181, 138, 0.1);
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(6, 15, 10, 0.56);
+}
+
+.walletRow strong {
+  display: block;
+  font-size: 14px;
+}
+
+.walletRow span {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.placeholder,
+.inlineError,
+.inlineStatus {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.placeholder {
+  color: var(--text-secondary);
+}
+
+.inlineError {
+  color: #ffb9b9;
+}
+
+.inlineStatus {
+  color: #bde9c8;
+}
+
 @media (max-width: 640px) {
+  .sectionHeader,
+  .walletRow,
   .actions {
     flex-direction: column;
+  }
+
+  .composerGrid,
+  .walletLists {
+    grid-template-columns: 1fr;
+  }
+
+  .inlineActions {
+    align-items: stretch;
+  }
+
+  .sectionButton,
+  .secondaryButton,
+  .logoutButton,
+  .primaryButton,
+  .unlinkButton {
+    width: 100%;
   }
 }

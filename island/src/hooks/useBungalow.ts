@@ -39,6 +39,7 @@ export interface CanonicalProjectSummary {
   slug: string | null;
   name: string | null;
   symbol: string | null;
+  asset_count: number;
   chain_count: number;
   deployment_count: number;
   total_holder_count: number;
@@ -50,6 +51,23 @@ export interface CanonicalProjectSummary {
     chain: string;
     token_address: string;
   };
+}
+
+export interface BungalowAsset {
+  id: string;
+  kind: "fungible_token" | "nft_collection";
+  name: string;
+  symbol: string | null;
+  aggregate_holder_count: number;
+  deployment_count: number;
+  chain_count: number;
+  is_primary: boolean;
+  is_active: boolean;
+  primary_deployment: {
+    chain: string;
+    token_address: string;
+  };
+  deployments: BungalowDeployment[];
 }
 
 export interface BungalowDetails {
@@ -87,6 +105,8 @@ export interface BungalowDetails {
     tier: string;
   };
   canonical_project?: CanonicalProjectSummary;
+  assets?: BungalowAsset[];
+  active_asset?: BungalowAsset | null;
   deployments?: BungalowDeployment[];
   active_deployment?: BungalowDeployment | null;
 }

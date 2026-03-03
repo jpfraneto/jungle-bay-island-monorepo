@@ -1,10 +1,18 @@
 import { Hono } from "hono";
-import { CONFIG, normalizeAddress, toSupportedChain } from "../config";
+import {
+  CONFIG,
+  db,
+  normalizeAddress,
+  toSupportedChain,
+  type SupportedChain,
+} from "../config";
 import {
   createBulletinPost,
+  findTokenDeploymentsByAddress,
   getBulletinPosts,
   getBungalow,
   getBungalowOwnerRecord,
+  getIdentityClusterByWallet,
   getTokenHeatDistribution,
   getTokenHolders,
   getTokenRegistry,
@@ -16,6 +24,9 @@ import { optionalWalletContext, requireWalletAuth } from "../middleware/auth";
 import { clearCache, getCached, setCached } from "../services/cache";
 import {
   getCanonicalProjectContext,
+  getCanonicalProjectContextByIdentifier,
+  getCanonicalProjectContextBySlug,
+  type BungalowAssetKind,
   type CanonicalDeploymentRef,
 } from "../services/canonicalProjects";
 import { ApiError } from "../services/errors";
@@ -106,6 +117,105 @@ interface LinkedDeploymentView {
   is_active: boolean;
 }
 
+interface ProjectAssetView {
+  id: string;
+  kind: BungalowAssetKind;
+  name: string;
+  symbol: string | null;
+  aggregate_holder_count: number;
+  deployment_count: number;
+  chain_count: number;
+  is_primary: boolean;
+  is_active: boolean;
+  primary_deployment: {
+    chain: string;
+    token_address: string;
+  };
+  deployments: LinkedDeploymentView[];
+}
+
+interface WalletBungalowDirectoryRow {
+  id: number;
+  token_address: string;
+  chain: string;
+  name: string | null;
+  symbol: string | null;
+  image_url: string | null;
+}
+
+type CanonicalProjectContextResult = Awaited<
+  ReturnType<typeof getCanonicalProjectContext>
+>;
+
+function walletBungalowKey(chain: string, tokenAddress: string): string {
+  return `${chain}:${tokenAddress}`;
+}
+
+function walletBungalowSortLabel(row: WalletBungalowDirectoryRow): string {
+  return row.name?.trim() || row.symbol?.trim() || row.token_address;
+}
+
+function pickDisplayRow(
+  rows: WalletBungalowDirectoryRow[],
+  context: CanonicalProjectContextResult,
+): WalletBungalowDirectoryRow {
+  const fungibleDeployments = new Set(
+    context.assets
+      .filter((asset) => asset.kind === "fungible_token")
+      .flatMap((asset) =>
+        asset.deployments.map((deployment) =>
+          walletBungalowKey(deployment.chain, deployment.token_address),
+        ),
+      ),
+  );
+
+  const preferredTokenRow = rows.find((row) =>
+    fungibleDeployments.has(walletBungalowKey(row.chain, row.token_address)),
+  );
+  if (preferredTokenRow) {
+    return preferredTokenRow;
+  }
+
+  const primaryOwnedRow = rows.find(
+    (row) =>
+      row.chain === context.primaryDeployment.chain &&
+      row.token_address === context.primaryDeployment.token_address,
+  );
+  if (primaryOwnedRow) {
+    return primaryOwnedRow;
+  }
+
+  return [...rows].sort((a, b) =>
+    walletBungalowSortLabel(a).localeCompare(walletBungalowSortLabel(b)),
+  )[0];
+}
+
+function pickPreferredImageDeployment(
+  context: CanonicalProjectContextResult,
+): CanonicalDeploymentRef {
+  const tokenAsset = context.assets.find((asset) => asset.kind === "fungible_token");
+  if (tokenAsset) {
+    return (
+      tokenAsset.deployments.find(
+        (deployment) => deployment.chain === tokenAsset.preferred_chain,
+      ) ?? tokenAsset.deployments[0]
+    );
+  }
+
+  const primaryAsset =
+    context.assets.find((asset) => asset.id === context.primaryAsset.id) ??
+    context.assets[0];
+  if (primaryAsset) {
+    return (
+      primaryAsset.deployments.find(
+        (deployment) => deployment.chain === primaryAsset.preferred_chain,
+      ) ?? primaryAsset.deployments[0]
+    );
+  }
+
+  return context.primaryDeployment;
+}
+
 function toMarketData(
   input:
     | {
@@ -127,6 +237,14 @@ function toMarketData(
     liquidity_usd: input.liquidity_usd ? Number(input.liquidity_usd) : null,
     updated_at: input.metadata_updated_at ?? null,
   };
+}
+
+function canonicalPathFor(input: {
+  slug?: string | null;
+  tokenAddress: string;
+}): string {
+  const identifier = input.slug?.trim() || input.tokenAddress;
+  return `/bungalow/${identifier}`;
 }
 
 async function buildLinkedDeploymentView(input: {
@@ -169,7 +287,7 @@ async function buildLinkedDeploymentView(input: {
   return {
     chain: deployment.chain,
     token_address: deployment.token_address,
-    route_path: `/${deployment.chain}/${deployment.token_address}`,
+    route_path: `/bungalow/${deployment.token_address}`,
     name: pickMetadataLabel(
       bungalow?.name,
       tokenRegistry?.name,
@@ -214,6 +332,211 @@ async function buildLinkedDeploymentView(input: {
   };
 }
 
+bungalowRoute.get("/bungalow/resolve/:identifier", async (c) => {
+  const identifier = c.req.param("identifier")?.trim() ?? "";
+  if (!identifier) {
+    throw new ApiError(400, "invalid_params", "Identifier is required");
+  }
+
+  const slugContext = await getCanonicalProjectContextBySlug(identifier);
+  if (slugContext) {
+    return c.json({
+      found: true,
+      identifier,
+      identifier_type: "slug",
+      canonical_slug: slugContext.project?.slug ?? null,
+      chain: slugContext.activeDeployment.chain,
+      token_address: slugContext.activeDeployment.token_address,
+      canonical_path: canonicalPathFor({
+        slug: slugContext.project?.slug ?? null,
+        tokenAddress: slugContext.activeDeployment.token_address,
+      }),
+    });
+  }
+
+  const canonicalAddressContext = await getCanonicalProjectContextByIdentifier(
+    identifier,
+  );
+  if (canonicalAddressContext) {
+    return c.json({
+      found: true,
+      identifier,
+      identifier_type: "address",
+      canonical_slug: canonicalAddressContext.project?.slug ?? null,
+      chain: canonicalAddressContext.activeDeployment.chain,
+      token_address: canonicalAddressContext.activeDeployment.token_address,
+      canonical_path: canonicalPathFor({
+        slug: canonicalAddressContext.project?.slug ?? null,
+        tokenAddress: canonicalAddressContext.activeDeployment.token_address,
+      }),
+    });
+  }
+
+  const candidates = [
+    normalizeAddress(identifier, "base"),
+    normalizeAddress(identifier, "ethereum"),
+    normalizeAddress(identifier, "solana"),
+  ].filter((value): value is string => Boolean(value));
+
+  const uniqueCandidates = [...new Set(candidates)];
+  for (const candidate of uniqueCandidates) {
+    const matches = await findTokenDeploymentsByAddress(candidate);
+    if (matches.length === 0) continue;
+
+    const preferredMatch =
+      matches.find((match) => match.chain === "base") ??
+      matches.find((match) => match.chain === "ethereum") ??
+      matches[0];
+
+    return c.json({
+      found: true,
+      identifier,
+      identifier_type: "address",
+      canonical_slug: null,
+      chain: preferredMatch.chain,
+      token_address: preferredMatch.token_address,
+      canonical_path: canonicalPathFor({
+        tokenAddress: preferredMatch.token_address,
+      }),
+    });
+  }
+
+  throw new ApiError(404, "bungalow_not_found", "Bungalow not found");
+});
+
+bungalowRoute.get("/bungalow/resolve/:chain/:ca", async (c) => {
+  const chain = toSupportedChain(c.req.param("chain"));
+  if (!chain) {
+    throw new ApiError(400, "invalid_params", "Invalid chain");
+  }
+
+  const tokenAddress = normalizeAddress(c.req.param("ca"), chain);
+  if (!tokenAddress) {
+    throw new ApiError(400, "invalid_params", "Invalid token address");
+  }
+
+  const projectContext = await getCanonicalProjectContext(chain, tokenAddress);
+
+  return c.json({
+    found: true,
+    identifier: tokenAddress,
+    identifier_type: "address",
+    canonical_slug: projectContext.project?.slug ?? null,
+    chain: projectContext.activeDeployment.chain,
+    token_address: projectContext.activeDeployment.token_address,
+    canonical_path: canonicalPathFor({
+      slug: projectContext.project?.slug ?? null,
+      tokenAddress: projectContext.activeDeployment.token_address,
+    }),
+  });
+});
+
+bungalowRoute.get("/address/:wallet/bungalows", async (c) => {
+  const walletRaw = c.req.param("wallet");
+  const wallet =
+    normalizeAddress(walletRaw) ?? normalizeAddress(walletRaw, "solana");
+  if (!wallet) {
+    throw new ApiError(400, "invalid_wallet", "Invalid wallet address");
+  }
+
+  const identityCluster = await getIdentityClusterByWallet(wallet);
+  const scopedWallets = identityCluster?.wallets.length
+    ? identityCluster.wallets.map((entry) => entry.wallet)
+    : [wallet];
+
+  const rows = await db<WalletBungalowDirectoryRow[]>`
+    SELECT
+      id,
+      token_address,
+      chain,
+      NULLIF(btrim(name), '') AS name,
+      NULLIF(btrim(symbol), '') AS symbol,
+      image_url
+    FROM ${db(CONFIG.SCHEMA)}.bungalows
+    WHERE current_owner IN ${db(scopedWallets)}
+      OR verified_admin IN ${db(scopedWallets)}
+    ORDER BY
+      COALESCE(NULLIF(btrim(name), ''), NULLIF(btrim(symbol), ''), token_address) ASC,
+      id ASC
+  `;
+
+  if (rows.length === 0) {
+    return c.json([]);
+  }
+
+  const groupedRows = new Map<string, { context: CanonicalProjectContextResult; rows: WalletBungalowDirectoryRow[] }>();
+
+  const resolvedRows = await Promise.all(
+    rows.map(async (row) => ({
+      row,
+      context: await getCanonicalProjectContext(
+        row.chain as SupportedChain,
+        row.token_address,
+      ),
+    })),
+  );
+
+  for (const entry of resolvedRows) {
+    const groupKey =
+      entry.context.project?.id ??
+      walletBungalowKey(
+        entry.context.primaryDeployment.chain,
+        entry.context.primaryDeployment.token_address,
+      );
+    const existing = groupedRows.get(groupKey);
+    if (existing) {
+      existing.rows.push(entry.row);
+      continue;
+    }
+
+    groupedRows.set(groupKey, {
+      context: entry.context,
+      rows: [entry.row],
+    });
+  }
+
+  const directory = await Promise.all(
+    [...groupedRows.values()].map(async (group) => {
+      const displayRow = pickDisplayRow(group.rows, group.context);
+      const imageDeployment = pickPreferredImageDeployment(group.context);
+
+      const [displayBungalow, displayTokenRegistry, imageBungalow] =
+        await Promise.all([
+          getBungalow(displayRow.token_address, displayRow.chain),
+          getTokenRegistry(displayRow.token_address, displayRow.chain),
+          getBungalow(imageDeployment.token_address, imageDeployment.chain),
+        ]);
+
+      return {
+        id: displayRow.id,
+        token_address: displayRow.token_address,
+        chain: displayRow.chain,
+        name:
+          group.context.project?.name ??
+          displayBungalow?.name ??
+          displayTokenRegistry?.name ??
+          displayRow.name,
+        symbol:
+          group.context.project?.symbol ??
+          displayBungalow?.symbol ??
+          displayTokenRegistry?.symbol ??
+          displayRow.symbol,
+        image_url:
+          imageBungalow?.image_url ??
+          displayBungalow?.image_url ??
+          group.rows.find((row) => row.image_url)?.image_url ??
+          null,
+      };
+    }),
+  );
+
+  directory.sort((a, b) =>
+    walletBungalowSortLabel(a).localeCompare(walletBungalowSortLabel(b)),
+  );
+
+  return c.json(directory);
+});
+
 bungalowRoute.get("/bungalow/:chain/:ca", async (c) => {
   const requestId = c.get("requestId") ?? "unknown";
   const chain = toSupportedChain(c.req.param("chain"));
@@ -239,7 +562,7 @@ bungalowRoute.get("/bungalow/:chain/:ca", async (c) => {
     return c.json(cached);
   }
 
-  const projectContext = getCanonicalProjectContext(chain, tokenAddress);
+  const projectContext = await getCanonicalProjectContext(chain, tokenAddress);
   const deploymentViews = await Promise.all(
     projectContext.deployments.map((deployment) =>
       buildLinkedDeploymentView({
@@ -252,6 +575,44 @@ bungalowRoute.get("/bungalow/:chain/:ca", async (c) => {
       }),
     ),
   );
+  const assetViews: ProjectAssetView[] = projectContext.assets.map((asset) => {
+    const assetDeployments = deploymentViews.filter((deployment) =>
+      asset.deployments.some(
+        (candidate) =>
+          candidate.chain === deployment.chain &&
+          candidate.token_address === deployment.token_address,
+      ),
+    );
+    const primaryAssetDeployment =
+      assetDeployments.find(
+        (deployment) => deployment.chain === asset.preferred_chain,
+      ) ?? assetDeployments[0];
+
+    return {
+      id: asset.id,
+      kind: asset.kind,
+      name: asset.name,
+      symbol: asset.symbol,
+      aggregate_holder_count: assetDeployments.reduce(
+        (sum, deployment) => sum + Math.max(0, deployment.holder_count),
+        0,
+      ),
+      deployment_count: assetDeployments.length,
+      chain_count: new Set(assetDeployments.map((deployment) => deployment.chain))
+        .size,
+      is_primary: asset.id === projectContext.primaryAsset.id,
+      is_active: asset.id === projectContext.activeAsset.id,
+      primary_deployment: {
+        chain: primaryAssetDeployment?.chain ?? asset.preferred_chain,
+        token_address:
+          primaryAssetDeployment?.token_address ??
+          asset.deployments[0]?.token_address ??
+          tokenAddress,
+      },
+      deployments: assetDeployments,
+    };
+  });
+  const activeAssetView = assetViews.find((asset) => asset.is_active) ?? assetViews[0];
 
   const activeDeployment =
     deploymentViews.find((deployment) => deployment.is_active) ?? deploymentViews[0];
@@ -273,7 +634,11 @@ bungalowRoute.get("/bungalow/:chain/:ca", async (c) => {
       `${displaySource.chain}:${displaySource.token_address}`,
     slug: projectContext.project?.slug ?? null,
     name: projectContext.project?.name ?? displaySource.name,
-    symbol: projectContext.project?.symbol ?? displaySource.symbol,
+    symbol:
+      projectContext.project?.symbol ??
+      activeAssetView?.symbol ??
+      displaySource.symbol,
+    asset_count: assetViews.length,
     chain_count: chainCount,
     deployment_count: deploymentViews.length,
     total_holder_count: aggregateHolderCount,
@@ -310,6 +675,8 @@ bungalowRoute.get("/bungalow/:chain/:ca", async (c) => {
       holders: [],
       heat_distribution: null,
       canonical_project: canonicalProject,
+      assets: assetViews,
+      active_asset: activeAssetView,
       deployments: deploymentViews,
       active_deployment: activeDeployment,
     };
@@ -332,7 +699,7 @@ bungalowRoute.get("/bungalow/:chain/:ca", async (c) => {
     token_address: tokenAddress,
     chain,
     name: canonicalProject.name,
-    symbol: canonicalProject.symbol,
+    symbol: activeAssetView?.symbol ?? canonicalProject.symbol,
     decimals: displaySource.decimals,
     is_nft: displaySource.is_nft,
     exists: true,
@@ -361,6 +728,8 @@ bungalowRoute.get("/bungalow/:chain/:ca", async (c) => {
     })),
     heat_distribution: heatDistribution,
     canonical_project: canonicalProject,
+    assets: assetViews,
+    active_asset: activeAssetView,
     deployments: deploymentViews,
     active_deployment: activeDeployment,
   };
@@ -456,7 +825,8 @@ bungalowRoute.put("/bungalow/:chain/:ca/curate", requireWalletAuth, async (c) =>
   }
 
   await updateBungalowCuration(tokenAddress, chain, fields);
-  for (const deployment of getCanonicalProjectContext(chain, tokenAddress).deployments) {
+  const projectContext = await getCanonicalProjectContext(chain, tokenAddress);
+  for (const deployment of projectContext.deployments) {
     clearCache(`bungalow:${deployment.chain}:${deployment.token_address}`);
   }
   logInfo("BUNGALOW CURATE", `wallet=${wallet} token=${tokenAddress} chain=${chain} fields=${Object.keys(fields).join(",")}`);

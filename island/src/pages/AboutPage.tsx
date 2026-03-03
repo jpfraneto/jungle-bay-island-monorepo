@@ -21,6 +21,13 @@ export default function AboutPage() {
           people disperse, and every cycle starts from scratch. Jungle Bay
           exists to give that context a home.
         </p>
+        <button
+          type="button"
+          className={styles.linkButton}
+          onClick={() => navigate("/changelog")}
+        >
+          Read the current changelog
+        </button>
       </article>
 
       <article className={styles.card}>
@@ -53,12 +60,55 @@ export default function AboutPage() {
       </article>
 
       <article className={styles.card}>
+        <h2 className={styles.heading}>The New Bungalow Model</h2>
+        <p>
+          A bungalow now represents the <strong>project</strong>, not just one
+          contract. That matters because real internet projects usually extend
+          beyond a single deployment. A memecoin can live on multiple chains. A
+          project can also carry a token and an NFT collection at the same time.
+          The Island now treats those as one place with internal structure,
+          instead of fragmenting them into unrelated pages.
+        </p>
+        <div className={styles.modelGrid}>
+          <div className={styles.modelCard}>
+            <p className={styles.modelLabel}>Bungalow</p>
+            <h3 className={styles.modelTitle}>The Project</h3>
+            <p>
+              This is the cultural unit. It owns the name, story, wall, zone,
+              and the sense of place.
+            </p>
+          </div>
+          <div className={styles.modelCard}>
+            <p className={styles.modelLabel}>Asset</p>
+            <h3 className={styles.modelTitle}>The Official Things Inside It</h3>
+            <p>
+              A bungalow can hold multiple official assets: a fungible token, an
+              NFT collection, and later other artifacts that belong to the same
+              project.
+            </p>
+          </div>
+          <div className={styles.modelCard}>
+            <p className={styles.modelLabel}>Deployment</p>
+            <h3 className={styles.modelTitle}>The Chain-Specific Door</h3>
+            <p>
+              Each asset can have one or many deployments. Chain routes are now
+              entry points into the same place, not separate bungalows.
+            </p>
+          </div>
+        </div>
+      </article>
+
+      <article className={styles.card}>
         <h2 className={styles.heading}>How It Works</h2>
         <ol className={styles.steps}>
           <li>
-            <strong>A project gets territory</strong> &mdash; each supported
-            token is anchored as a bungalow on the Island, with its own place,
-            identity, and wall.
+            <strong>A project gets territory</strong> &mdash; the bungalow is
+            the home of the project itself, not just a contract page.
+          </li>
+          <li>
+            <strong>Assets live inside the bungalow</strong> &mdash; one
+            project can contain multiple official assets, each with its own
+            chain panels and operational logic.
           </li>
           <li>
             <strong>Time becomes signal</strong> &mdash; holdings are observed
@@ -78,36 +128,55 @@ export default function AboutPage() {
             and repeated presence allow projects to accumulate meaning instead
             of disappearing between cycles.
           </li>
+          <li>
+            <strong>The Bodega closes the loop</strong> &mdash; builders can
+            publish an asset once, let any bungalow install it, and earn JBM
+            when the Island reuses that work.
+          </li>
         </ol>
       </article>
 
       <article className={styles.card}>
-        <h2 className={styles.heading}>Bungalows</h2>
+        <h2 className={styles.heading}>What This Enables</h2>
         <p>
-          A bungalow is not a listing. It is the project&apos;s territorial
-          anchor on the Island. Inside each one, the product should feel more
-          like visiting a location than checking a profile card.
+          This lets the Island represent projects more truthfully. If the same
+          token exists on multiple chains, those routes now open the same
+          bungalow. If a project has both a token and an NFT collection, they
+          can live under one umbrella without pretending they are the same
+          instrument.
         </p>
         <ul className={styles.list}>
           <li>
-            <strong>The Wall</strong> &mdash; a persistent public surface where
-            the community can leave posts, images, links, and portals.
+            <strong>One identity, many doors</strong> &mdash; `/base/:ca` and
+            `/solana/:ca` can resolve into the same cultural place when they are
+            part of the same project.
           </li>
           <li>
-            <strong>Heat and holders</strong> &mdash; a read on who has stayed
-            close to the project over time, without turning that into a carnival
-            of engagement mechanics.
+            <strong>One wall, shared memory</strong> &mdash; related assets feed
+            into the same public surface instead of splitting the community
+            across duplicate pages.
           </li>
           <li>
-            <strong>Identity</strong> &mdash; a token address, a one-line
-            presence, and a durable place in relation to the rest of the Island.
+            <strong>Per-chain reality where it matters</strong> &mdash; claims,
+            liquidity, market cap, and contract operations still stay on the
+            deployment where they actually live.
           </li>
           <li>
-            <strong>Atmosphere</strong> &mdash; the Island is designed to feel
-            alive through place, adjacency, and return, not through constant
-            prompts.
+            <strong>Clearer storytelling</strong> &mdash; the project can be
+            understood as one thing even when it expresses itself through
+            multiple on-chain artifacts.
           </li>
         </ul>
+        <p>
+          Jungle Bay is the first clean example of this. The bungalow can now
+          hold both <strong>JBM</strong> and <strong>JBAC</strong> as sibling
+          assets inside the same project.
+        </p>
+        <p>
+          Each project can now have one stable public path, while old chain
+          routes resolve into that same bungalow instead of fragmenting the
+          identity across multiple URLs.
+        </p>
       </article>
 
       <article className={styles.card}>
@@ -122,6 +191,11 @@ export default function AboutPage() {
           The intent is not to create pressure or urgency. The intent is to make
           continuity legible, and then use that continuity to quietly unlock
           opportunity for the people who keep showing up.
+        </p>
+        <p>
+          That continuity can now follow the same person across linked wallets,
+          so cold storage and secondary holding addresses do not have to split
+          your heat profile apart.
         </p>
         <button
           type="button"
@@ -138,7 +212,9 @@ export default function AboutPage() {
           Phase 1 is about making the Island feel real. The goal is not growth
           hacking or feature completeness. The goal is to establish ground: seed
           the first twelve home-team bungalows, make heat legible, and prove
-          that a quieter on-chain place can still feel alive.
+          that a quieter on-chain place can still feel alive. The new
+          project-asset-deployment structure is part of that same work: the
+          Island now models projects the way they actually exist.
         </p>
       </article>
     </section>

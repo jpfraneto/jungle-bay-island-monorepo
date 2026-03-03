@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 export interface HomeTeamBungalow {
   token_address: string;
   chain: string;
+  canonical_slug?: string | null;
   name: string | null;
   symbol: string | null;
   holder_count: number;
@@ -216,6 +217,7 @@ interface BungalowsListResponse {
   items?: Array<{
     chain?: string;
     token_address?: string;
+    canonical_slug?: string | null;
     name?: string | null;
     symbol?: string | null;
     holder_count?: number;
@@ -233,6 +235,7 @@ function normalizeBungalowsList(
     .map((item) => ({
       token_address: item.token_address as string,
       chain: item.chain as string,
+      canonical_slug: item.canonical_slug ?? null,
       name: item.name ?? item.symbol ?? null,
       symbol: item.symbol ?? null,
       holder_count: Number.isFinite(item.holder_count) ? Number(item.holder_count) : 0,

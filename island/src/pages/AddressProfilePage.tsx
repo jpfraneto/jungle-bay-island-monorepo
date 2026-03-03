@@ -226,7 +226,7 @@ export default function AddressProfilePage() {
               styles.cardD,
               styles.cardE,
             ][index % 5];
-            const bungalowPath = `/${item.chain}/${item.token_address}`;
+            const bungalowPath = `/bungalow/${item.token_address}`;
             const imageUrl = getTokenImageUrl(
               item.bungalow_image_url,
               item.token_address,

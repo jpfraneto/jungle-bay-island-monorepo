@@ -35,6 +35,7 @@ export default function Layout() {
         {showSidebar ? (
           <Sidebar
             bungalows={bungalows}
+            isLoading={isLoading}
             isOpen={sidebarOpen}
             onClose={() => setSidebarOpen(false)}
           />

@@ -66,7 +66,7 @@ homeTeamRoute.get("/home-team", async (c) => {
   const grouped = new Map<string, typeof rawBungalows>();
 
   for (const bungalow of rawBungalows) {
-    const context = getCanonicalProjectContext(
+    const context = await getCanonicalProjectContext(
       bungalow.chain as SupportedChain,
       bungalow.token_address,
     );
@@ -81,8 +81,8 @@ homeTeamRoute.get("/home-team", async (c) => {
   }
 
   const bungalows = [...grouped.values()]
-    .map((group) => {
-      const context = getCanonicalProjectContext(
+    .map(async (group) => {
+      const context = await getCanonicalProjectContext(
         group[0].chain as SupportedChain,
         group[0].token_address,
       );
@@ -95,6 +95,7 @@ homeTeamRoute.get("/home-team", async (c) => {
 
       return {
         ...primary,
+        canonical_slug: context.project?.slug ?? null,
         name: context.project?.name ?? primary.name,
         symbol: context.project?.symbol ?? primary.symbol,
         holder_count: group.reduce(
@@ -114,9 +115,14 @@ homeTeamRoute.get("/home-team", async (c) => {
           null,
       };
     })
+    ;
+
+  const resolvedBungalows = await Promise.all(bungalows);
+
+  const sortedBungalows = resolvedBungalows
     .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
 
-  return c.json({ bungalows });
+  return c.json({ bungalows: sortedBungalows });
 });
 
 export { homeTeamRoute };

@@ -3,6 +3,9 @@ import { addHeatToDistribution, emptyTierDistribution, getTierFromHeat } from '.
 import type { ScanResult } from '../services/scanner'
 import type {
   AssetPurchaseRow,
+  BodegaCatalogRow,
+  BodegaInstallRow,
+  BonusHeatEventRow,
   BungalowSceneRow,
   BungalowWidgetInstallRow,
   BulletinPostRow,
@@ -11,10 +14,12 @@ import type {
   ScanLogRow,
   TokenHolderRow,
   TokenRegistryRow,
+  UserWalletLinkRow,
 } from './schema'
 import type { DexScreenerData } from '../services/dexscreener'
 
 const SCHEMA = `"${CONFIG.SCHEMA}"`
+const MAX_HEAT = 100
 
 function parseJsonArray<T>(value: unknown): T[] {
   if (Array.isArray(value)) return value as T[]
@@ -27,6 +32,31 @@ function parseJsonArray<T>(value: unknown): T[] {
     }
   }
   return []
+}
+
+/**
+ * Infers wallet kind from address shape so mixed clusters can be typed consistently.
+ */
+function getWalletKind(wallet: string): 'evm' | 'solana' | null {
+  if (normalizeAddress(wallet)) return 'evm'
+  if (normalizeAddress(wallet, 'solana')) return 'solana'
+  return null
+}
+
+/**
+ * Layers additive bonus heat on top of scanner-derived heat without changing stored scans.
+ */
+async function getHeatWithBonus(
+  wallet: string,
+  tokenAddress: string,
+  chain: string | null,
+  baseHeat: number,
+): Promise<number> {
+  const normalizedBase = Number.isFinite(baseHeat) ? baseHeat : 0
+  if (!chain) return Math.min(MAX_HEAT, normalizedBase)
+
+  const bonus = await getBonusHeatPoints(wallet, tokenAddress, chain)
+  return Math.min(MAX_HEAT, normalizedBase + bonus)
 }
 
 function isMeaningfulMetadataLabel(value: string | null | undefined): boolean {
@@ -145,6 +175,24 @@ export async function getTokenRegistry(tokenAddress: string, chain?: string): Pr
     `
 
   return rows[0] ?? null
+}
+
+export async function findTokenDeploymentsByAddress(
+  tokenAddress: string,
+): Promise<Array<{ token_address: string; chain: string }>> {
+  return db<Array<{ token_address: string; chain: string }>>`
+    SELECT DISTINCT token_address, chain
+    FROM (
+      SELECT token_address, chain
+      FROM ${db(CONFIG.SCHEMA)}.token_registry
+      WHERE token_address = ${tokenAddress}
+      UNION
+      SELECT token_address, chain
+      FROM ${db(CONFIG.SCHEMA)}.bungalows
+      WHERE token_address = ${tokenAddress}
+    ) AS matches
+    ORDER BY chain ASC
+  `
 }
 
 export async function getBungalow(tokenAddress: string, chain: string): Promise<BungalowRow | null> {
@@ -942,8 +990,30 @@ export async function getUserByWallet(wallet: string): Promise<{
   const hasData = tokenRows.length > 0 || scanRows.length > 0
   if (!profile && !hasData) return null
 
-  const islandHeat = Number(profile?.island_heat ?? 0)
-  const tier = profile?.tier ?? getTierFromHeat(islandHeat)
+  const tokenBreakdown = await Promise.all(
+    tokenRows.map(async (row) => {
+      const adjustedHeat = await getHeatWithBonus(
+        wallet,
+        row.token,
+        row.chain ?? null,
+        Number(row.heat_degrees),
+      )
+
+      return {
+        token: row.token,
+        token_name: row.token_name ?? row.token,
+        token_symbol: row.token_symbol ?? null,
+        chain: row.chain ?? null,
+        heat_degrees: adjustedHeat,
+      }
+    }),
+  )
+
+  const fallbackIslandHeat = Number(profile?.island_heat ?? 0)
+  const islandHeat = tokenBreakdown.length > 0
+    ? tokenBreakdown.reduce((sum, row) => sum + row.heat_degrees, 0)
+    : fallbackIslandHeat
+  const tier = getTierFromHeat(islandHeat)
 
   if (!hasIdentity && !hasData && islandHeat <= 0) return null
 
@@ -959,13 +1029,7 @@ export async function getUserByWallet(wallet: string): Promise<{
           pfp_url: profile?.pfp_url ?? null,
         }
       : null,
-    token_breakdown: tokenRows.map((row) => ({
-      token: row.token,
-      token_name: row.token_name ?? row.token,
-      token_symbol: row.token_symbol ?? null,
-      chain: row.chain ?? null,
-      heat_degrees: Number(row.heat_degrees),
-    })),
+    token_breakdown: tokenBreakdown,
     scans: scanRows,
   }
 }
@@ -976,29 +1040,62 @@ export async function getLinkedWalletsByWallet(wallet: string): Promise<{
   x_username: string | null
   wallets: Array<{ wallet: string; wallet_kind: string }>
 } | null> {
-  // First find x_id for this wallet
-  const linkRows = await db<Array<{ x_id: string | null; x_username: string | null }>>`
-    SELECT x_id, x_username
+  await ensureUserWalletLinksTable()
+
+  const normalizedWallet = normalizeAddress(wallet) ?? normalizeAddress(wallet, 'solana')
+  if (!normalizedWallet) return null
+
+  const directRows = await db<Array<{ primary_wallet: string | null; linked_wallet: string | null }>>`
+    SELECT primary_wallet, linked_wallet
     FROM ${db(CONFIG.SCHEMA)}.user_wallet_links
-    WHERE wallet = ${wallet} AND x_id IS NOT NULL
-    LIMIT 1
+    WHERE primary_wallet = ${normalizedWallet}
+       OR linked_wallet = ${normalizedWallet}
   `
 
-  const link = linkRows[0]
-  if (!link?.x_id) return null
+  const primaryWallets = new Set<string>()
+  for (const row of directRows) {
+    if (row.primary_wallet) {
+      primaryWallets.add(row.primary_wallet)
+    }
+  }
 
-  // Fetch all wallets for this x_id
-  const walletRows = await db<Array<{ wallet: string; wallet_kind: string }>>`
-    SELECT wallet, wallet_kind
-    FROM ${db(CONFIG.SCHEMA)}.user_wallet_links
-    WHERE x_id = ${link.x_id}
-    ORDER BY first_seen_at ASC
-  `
+  const primaryList = [...primaryWallets]
+  const clusterRows = primaryList.length > 0
+    ? await db<Array<{ primary_wallet: string | null; linked_wallet: string | null }>>`
+      SELECT primary_wallet, linked_wallet
+      FROM ${db(CONFIG.SCHEMA)}.user_wallet_links
+      WHERE primary_wallet IN ${db(primaryList)}
+    `
+    : []
+
+  const walletMap = new Map<string, { wallet: string; wallet_kind: string }>()
+  for (const candidate of [normalizedWallet, ...primaryList]) {
+    const walletKind = getWalletKind(candidate)
+    if (!walletKind) continue
+    walletMap.set(`${walletKind}:${candidate}`, {
+      wallet: candidate,
+      wallet_kind: walletKind,
+    })
+  }
+
+  for (const row of clusterRows) {
+    for (const candidate of [row.primary_wallet, row.linked_wallet]) {
+      if (!candidate) continue
+      const walletKind = getWalletKind(candidate)
+      if (!walletKind) continue
+      walletMap.set(`${walletKind}:${candidate}`, {
+        wallet: candidate,
+        wallet_kind: walletKind,
+      })
+    }
+  }
+
+  if (walletMap.size === 0) return null
 
   return {
-    x_id: link.x_id,
-    x_username: link.x_username,
-    wallets: walletRows,
+    x_id: `wallet:${normalizedWallet}`,
+    x_username: null,
+    wallets: [...walletMap.values()],
   }
 }
 
@@ -1056,23 +1153,40 @@ export async function getAggregatedUserByWallets(wallets: string[]): Promise<{
     ORDER BY sl.token_address, sl.completed_at DESC
   `
 
-  const tokenBreakdown = tokenRows.map((row) => {
-    let walletHeats: Array<{ wallet: string; heat_degrees: number }> = []
-    try {
-      walletHeats = JSON.parse(row.wallet_heats)
-    } catch {}
-    return {
-      token: row.token,
-      token_name: row.token_name ?? row.token,
-      token_symbol: row.token_symbol ?? null,
-      chain: row.chain ?? null,
-      heat_degrees: Number(row.total_heat),
-      wallet_heats: walletHeats.map((wh) => ({
-        wallet: wh.wallet,
-        heat_degrees: Number(wh.heat_degrees),
-      })),
-    }
-  })
+  const tokenBreakdown = await Promise.all(
+    tokenRows.map(async (row) => {
+      let walletHeats: Array<{ wallet: string; heat_degrees: number }> = []
+      try {
+        walletHeats = JSON.parse(row.wallet_heats)
+      } catch {}
+
+      const adjustedWalletHeats = await Promise.all(
+        walletHeats.map(async (walletHeat) => ({
+          wallet: walletHeat.wallet,
+          heat_degrees: await getHeatWithBonus(
+            walletHeat.wallet,
+            row.token,
+            row.chain ?? null,
+            Number(walletHeat.heat_degrees),
+          ),
+        })),
+      )
+
+      const totalHeat = adjustedWalletHeats.reduce(
+        (sum, walletHeat) => sum + walletHeat.heat_degrees,
+        0,
+      )
+
+      return {
+        token: row.token,
+        token_name: row.token_name ?? row.token,
+        token_symbol: row.token_symbol ?? null,
+        chain: row.chain ?? null,
+        heat_degrees: totalHeat,
+        wallet_heats: adjustedWalletHeats,
+      }
+    }),
+  )
 
   const islandHeat = tokenBreakdown.reduce((sum, t) => sum + t.heat_degrees, 0)
 
@@ -1124,30 +1238,49 @@ async function ensureUserWalletLinksTable(): Promise<void> {
     userWalletLinksTablePromise = (async () => {
       await db`
         CREATE TABLE IF NOT EXISTS ${db(CONFIG.SCHEMA)}.user_wallet_links (
-          wallet TEXT NOT NULL,
-          wallet_kind TEXT NOT NULL,
-          privy_user_id TEXT,
-          fid BIGINT,
-          x_username TEXT,
-          seen_via_privy BOOLEAN NOT NULL DEFAULT FALSE,
-          seen_via_farcaster BOOLEAN NOT NULL DEFAULT FALSE,
-          farcaster_verified BOOLEAN NOT NULL DEFAULT FALSE,
-          last_seen_requester_wallet BOOLEAN NOT NULL DEFAULT FALSE,
-          first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          PRIMARY KEY (wallet, wallet_kind),
-          CHECK (wallet_kind IN ('evm', 'solana'))
+          id BIGSERIAL PRIMARY KEY,
+          primary_wallet TEXT NOT NULL,
+          linked_wallet TEXT NOT NULL,
+          verification_signature TEXT NOT NULL,
+          verification_message TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          UNIQUE (primary_wallet, linked_wallet)
         )
       `
 
+      await db.unsafe(
+        `ALTER TABLE "${CONFIG.SCHEMA}".user_wallet_links ADD COLUMN IF NOT EXISTS id BIGSERIAL`,
+      )
+      await db.unsafe(
+        `ALTER TABLE "${CONFIG.SCHEMA}".user_wallet_links ADD COLUMN IF NOT EXISTS primary_wallet TEXT`,
+      )
+      await db.unsafe(
+        `ALTER TABLE "${CONFIG.SCHEMA}".user_wallet_links ADD COLUMN IF NOT EXISTS linked_wallet TEXT`,
+      )
+      await db.unsafe(
+        `ALTER TABLE "${CONFIG.SCHEMA}".user_wallet_links ADD COLUMN IF NOT EXISTS verification_signature TEXT`,
+      )
+      await db.unsafe(
+        `ALTER TABLE "${CONFIG.SCHEMA}".user_wallet_links ADD COLUMN IF NOT EXISTS verification_message TEXT`,
+      )
+      await db.unsafe(
+        `ALTER TABLE "${CONFIG.SCHEMA}".user_wallet_links ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`,
+      )
+
+      await db.unsafe(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_user_wallet_links_primary_linked_unique
+        ON "${CONFIG.SCHEMA}".user_wallet_links (primary_wallet, linked_wallet)
+        WHERE primary_wallet IS NOT NULL AND linked_wallet IS NOT NULL
+      `)
+
       await db`
-        CREATE INDEX IF NOT EXISTS idx_user_wallet_links_privy
-        ON ${db(CONFIG.SCHEMA)}.user_wallet_links (privy_user_id, last_seen_at DESC)
+        CREATE INDEX IF NOT EXISTS idx_user_wallet_links_primary_wallet
+        ON ${db(CONFIG.SCHEMA)}.user_wallet_links (primary_wallet)
       `
 
       await db`
-        CREATE INDEX IF NOT EXISTS idx_user_wallet_links_fid
-        ON ${db(CONFIG.SCHEMA)}.user_wallet_links (fid, last_seen_at DESC)
+        CREATE INDEX IF NOT EXISTS idx_user_wallet_links_linked_wallet
+        ON ${db(CONFIG.SCHEMA)}.user_wallet_links (linked_wallet)
       `
     })()
   }
@@ -1195,46 +1328,7 @@ export async function upsertUserWalletLinks(input: {
   xUsername: string | null
   rows: UserWalletLinkUpsertRow[]
 }): Promise<void> {
-  await ensureUserWalletLinksTable()
-
-  if (input.rows.length === 0) return
-
-  const rows = input.rows.map((row) => ({
-    wallet: row.wallet,
-    wallet_kind: row.wallet_kind,
-    privy_user_id: input.privyUserId,
-    fid: input.fid,
-    x_username: input.xUsername,
-    seen_via_privy: row.seen_via_privy,
-    seen_via_farcaster: row.seen_via_farcaster,
-    farcaster_verified: row.farcaster_verified,
-    last_seen_requester_wallet: row.last_seen_requester_wallet,
-  }))
-
-  await db`
-    INSERT INTO ${db(CONFIG.SCHEMA)}.user_wallet_links
-      ${db(
-        rows,
-        'wallet',
-        'wallet_kind',
-        'privy_user_id',
-        'fid',
-        'x_username',
-        'seen_via_privy',
-        'seen_via_farcaster',
-        'farcaster_verified',
-        'last_seen_requester_wallet',
-      )}
-    ON CONFLICT (wallet, wallet_kind) DO UPDATE SET
-      privy_user_id = COALESCE(EXCLUDED.privy_user_id, ${db(CONFIG.SCHEMA)}.user_wallet_links.privy_user_id),
-      fid = COALESCE(EXCLUDED.fid, ${db(CONFIG.SCHEMA)}.user_wallet_links.fid),
-      x_username = COALESCE(EXCLUDED.x_username, ${db(CONFIG.SCHEMA)}.user_wallet_links.x_username),
-      seen_via_privy = ${db(CONFIG.SCHEMA)}.user_wallet_links.seen_via_privy OR EXCLUDED.seen_via_privy,
-      seen_via_farcaster = ${db(CONFIG.SCHEMA)}.user_wallet_links.seen_via_farcaster OR EXCLUDED.seen_via_farcaster,
-      farcaster_verified = ${db(CONFIG.SCHEMA)}.user_wallet_links.farcaster_verified OR EXCLUDED.farcaster_verified,
-      last_seen_requester_wallet = EXCLUDED.last_seen_requester_wallet,
-      last_seen_at = NOW()
-  `
+  void input
 }
 
 export async function getIdentityClusterByWallet(wallet: string): Promise<IdentityCluster | null> {
@@ -1242,270 +1336,124 @@ export async function getIdentityClusterByWallet(wallet: string): Promise<Identi
 
   const normalizedWallet = normalizeAddress(wallet) ?? normalizeAddress(wallet, 'solana')
   if (!normalizedWallet) return null
-  const requesterKind: 'evm' | 'solana' = normalizeAddress(wallet) ? 'evm' : 'solana'
+  const requesterKind = getWalletKind(normalizedWallet)
+  if (!requesterKind) return null
 
-  const requesterRow = await db<Array<{
-    wallet: string
-    wallet_kind: 'evm' | 'solana'
-    privy_user_id: string | null
-    fid: number | null
-    x_username: string | null
-    seen_via_privy: boolean
-    seen_via_farcaster: boolean
-    farcaster_verified: boolean
-    last_seen_requester_wallet: boolean
-    last_seen_at: string
-  }>>`
-    SELECT
-      wallet,
-      wallet_kind,
-      privy_user_id,
-      fid,
-      x_username,
-      seen_via_privy,
-      seen_via_farcaster,
-      farcaster_verified,
-      last_seen_requester_wallet,
-      last_seen_at::text AS last_seen_at
+  const directRows = await db<Array<{ primary_wallet: string | null; linked_wallet: string | null }>>`
+    SELECT primary_wallet, linked_wallet
     FROM ${db(CONFIG.SCHEMA)}.user_wallet_links
-    WHERE wallet = ${normalizedWallet}
-    ORDER BY last_seen_requester_wallet DESC, last_seen_at DESC
-    LIMIT 1
+    WHERE primary_wallet = ${normalizedWallet}
+       OR linked_wallet = ${normalizedWallet}
   `
 
-  const requesterLink = requesterRow[0] ?? null
-
-  let identitySource: 'privy' | 'farcaster' | 'wallet' = 'wallet'
-  let identityValue = normalizedWallet
-  let fid: number | null = requesterLink?.fid ?? null
-
-  if (requesterLink?.privy_user_id) {
-    identitySource = 'privy'
-    identityValue = requesterLink.privy_user_id
-  } else {
-    let resolvedFid = requesterLink?.fid ?? null
-    if (!resolvedFid) {
-      const wfpRows = await db<Array<{ fid: number | null }>>`
-        SELECT fid
-        FROM ${db(CONFIG.SCHEMA)}.wallet_farcaster_profiles
-        WHERE wallet = ${normalizedWallet}
-        LIMIT 1
-      `
-      resolvedFid = wfpRows[0]?.fid ?? null
-    }
-
-    if (resolvedFid) {
-      identitySource = 'farcaster'
-      identityValue = String(resolvedFid)
-      fid = resolvedFid
+  const primaryWallets = new Set<string>()
+  for (const row of directRows) {
+    if (row.primary_wallet) {
+      primaryWallets.add(row.primary_wallet)
     }
   }
 
-  let identityRows: IdentityClusterWallet[] = []
-  let xUsername: string | null = requesterLink?.x_username ?? null
-
-  if (identitySource === 'privy') {
-    const rows = await db<Array<{
-      wallet: string
-      wallet_kind: 'evm' | 'solana'
-      seen_via_privy: boolean
-      seen_via_farcaster: boolean
-      farcaster_verified: boolean
-      last_seen_requester_wallet: boolean
-      x_username: string | null
-    }>>`
-      SELECT
-        wallet,
-        wallet_kind,
-        seen_via_privy,
-        seen_via_farcaster,
-        farcaster_verified,
-        last_seen_requester_wallet,
-        x_username
+  const primaryList = [...primaryWallets]
+  const clusterRows = primaryList.length > 0
+    ? await db<Array<{ primary_wallet: string | null; linked_wallet: string | null }>>`
+      SELECT primary_wallet, linked_wallet
       FROM ${db(CONFIG.SCHEMA)}.user_wallet_links
-      WHERE privy_user_id = ${identityValue}
-      ORDER BY last_seen_requester_wallet DESC, last_seen_at DESC
+      WHERE primary_wallet IN ${db(primaryList)}
     `
-
-    identityRows = rows.map((row) => ({
-      wallet: row.wallet,
-      wallet_kind: row.wallet_kind,
-      linked_via_privy: row.seen_via_privy,
-      linked_via_farcaster: row.seen_via_farcaster,
-      farcaster_verified: row.farcaster_verified,
-      is_requester_wallet: row.last_seen_requester_wallet || row.wallet === normalizedWallet,
-    }))
-    xUsername = rows.find((row) => row.x_username)?.x_username ?? xUsername
-    if (!fid) {
-      const fidRows = await db<Array<{ fid: number | null }>>`
-        SELECT fid
-        FROM ${db(CONFIG.SCHEMA)}.user_wallet_links
-        WHERE privy_user_id = ${identityValue}
-          AND fid IS NOT NULL
-        ORDER BY last_seen_at DESC
-        LIMIT 1
-      `
-      fid = fidRows[0]?.fid ?? null
-    }
-  } else if (identitySource === 'farcaster' && fid) {
-    const rows = await db<Array<{
-      wallet: string
-      wallet_kind: 'evm' | 'solana'
-      seen_via_privy: boolean
-      seen_via_farcaster: boolean
-      farcaster_verified: boolean
-      last_seen_requester_wallet: boolean
-      x_username: string | null
-    }>>`
-      SELECT
-        wallet,
-        wallet_kind,
-        seen_via_privy,
-        seen_via_farcaster,
-        farcaster_verified,
-        last_seen_requester_wallet,
-        x_username
-      FROM ${db(CONFIG.SCHEMA)}.user_wallet_links
-      WHERE fid = ${fid}
-      ORDER BY last_seen_requester_wallet DESC, last_seen_at DESC
-    `
-
-    identityRows = rows.map((row) => ({
-      wallet: row.wallet,
-      wallet_kind: row.wallet_kind,
-      linked_via_privy: row.seen_via_privy,
-      linked_via_farcaster: row.seen_via_farcaster,
-      farcaster_verified: row.farcaster_verified,
-      is_requester_wallet: row.last_seen_requester_wallet || row.wallet === normalizedWallet,
-    }))
-    xUsername = rows.find((row) => row.x_username)?.x_username ?? xUsername
-
-    const farcasterWalletRows = await db<Array<{ wallet: string }>>`
-      SELECT wallet
-      FROM ${db(CONFIG.SCHEMA)}.wallet_farcaster_profiles
-      WHERE fid = ${fid}
-      ORDER BY resolved_at DESC
-    `
-    for (const row of farcasterWalletRows) {
-      const walletKind = normalizeAddress(row.wallet) ? 'evm' : (normalizeAddress(row.wallet, 'solana') ? 'solana' : null)
-      if (!walletKind) continue
-      identityRows.push({
-        wallet: row.wallet,
-        wallet_kind: walletKind,
-        linked_via_privy: false,
-        linked_via_farcaster: true,
-        farcaster_verified: true,
-        is_requester_wallet: row.wallet === normalizedWallet,
-      })
-    }
-  }
-
-  if (identityRows.length === 0) {
-    identityRows = [
-      {
-        wallet: normalizedWallet,
-        wallet_kind: requesterKind,
-        linked_via_privy: Boolean(requesterLink?.seen_via_privy),
-        linked_via_farcaster: Boolean(requesterLink?.seen_via_farcaster),
-        farcaster_verified: Boolean(requesterLink?.farcaster_verified),
-        is_requester_wallet: true,
-      },
-    ]
-  }
+    : []
 
   const dedup = new Map<string, IdentityClusterWallet>()
-  for (const row of identityRows) {
-    const key = `${row.wallet_kind}:${row.wallet}`
-    const existing = dedup.get(key)
-    if (!existing) {
-      dedup.set(key, row)
-      continue
-    }
-    existing.linked_via_privy = existing.linked_via_privy || row.linked_via_privy
-    existing.linked_via_farcaster = existing.linked_via_farcaster || row.linked_via_farcaster
-    existing.farcaster_verified = existing.farcaster_verified || row.farcaster_verified
-    existing.is_requester_wallet = existing.is_requester_wallet || row.is_requester_wallet
-  }
+  // Fold manual link rows into one typed cluster map without duplicating wallets.
+  const addClusterWallet = (candidate: string | null): void => {
+    if (!candidate) return
+    const walletKind = getWalletKind(candidate)
+    if (!walletKind) return
 
-  const wallets = [...dedup.values()]
-  if (!wallets.some((row) => row.wallet === normalizedWallet)) {
-    wallets.push({
-      wallet: normalizedWallet,
-      wallet_kind: requesterKind,
+    const key = `${walletKind}:${candidate}`
+    const existing = dedup.get(key)
+    if (existing) {
+      existing.is_requester_wallet = existing.is_requester_wallet || candidate === normalizedWallet
+      return
+    }
+
+    dedup.set(key, {
+      wallet: candidate,
+      wallet_kind: walletKind,
       linked_via_privy: false,
       linked_via_farcaster: false,
       farcaster_verified: false,
-      is_requester_wallet: true,
+      is_requester_wallet: candidate === normalizedWallet,
     })
   }
 
-  const evmWallets = wallets.filter((row) => row.wallet_kind === 'evm').map((row) => row.wallet)
-  const solanaWallets = wallets.filter((row) => row.wallet_kind === 'solana').map((row) => row.wallet)
+  addClusterWallet(normalizedWallet)
+  for (const candidate of primaryList) {
+    addClusterWallet(candidate)
+  }
+  for (const row of clusterRows) {
+    addClusterWallet(row.primary_wallet)
+    addClusterWallet(row.linked_wallet)
+  }
 
-  let farcaster: IdentityCluster['farcaster'] = null
-  if (fid) {
-    const profileRows = await db<Array<{
-      fid: number
-      username: string | null
-      display_name: string | null
-      pfp_url: string | null
-    }>>`
-      SELECT
-        ${fid}::bigint AS fid,
-        COALESCE(fip.username, wfp.username) AS username,
-        COALESCE(fip.display_name, wfp.display_name) AS display_name,
-        COALESCE(fip.pfp_url, wfp.pfp_url) AS pfp_url
-      FROM (
-        SELECT 1 AS marker
-      ) marker
-      LEFT JOIN ${db(CONFIG.SCHEMA)}.fid_island_profiles fip
-        ON fip.fid = ${fid}
-      LEFT JOIN ${db(CONFIG.SCHEMA)}.wallet_farcaster_profiles wfp
-        ON wfp.fid = ${fid}
-      LIMIT 1
-    `
-    const profile = profileRows[0]
-    farcaster = profile
-      ? {
-          fid: Number(profile.fid),
-          username: profile.username,
-          display_name: profile.display_name,
-          pfp_url: profile.pfp_url,
-        }
-      : null
-  } else {
-    const wfpRows = await db<Array<{
+  const wallets = [...dedup.values()]
+  const clusterWallets = wallets.map((entry) => entry.wallet)
+
+  const farcasterRows = clusterWallets.length > 0
+    ? await db<Array<{
+      wallet: string
       fid: number | null
       username: string | null
       display_name: string | null
       pfp_url: string | null
     }>>`
-      SELECT fid, username, display_name, pfp_url
+      SELECT wallet, fid, username, display_name, pfp_url
       FROM ${db(CONFIG.SCHEMA)}.wallet_farcaster_profiles
-      WHERE wallet = ${normalizedWallet}
-      LIMIT 1
+      WHERE wallet IN ${db(clusterWallets)}
+      ORDER BY CASE WHEN wallet = ${normalizedWallet} THEN 0 ELSE 1 END, resolved_at DESC
     `
-    const wfp = wfpRows[0]
-    if (wfp?.fid) {
-      farcaster = {
-        fid: Number(wfp.fid),
-        username: wfp.username,
-        display_name: wfp.display_name,
-        pfp_url: wfp.pfp_url,
-      }
-      identitySource = 'farcaster'
-      identityValue = String(wfp.fid)
-    }
+    : []
+
+  const verifiedWallets = new Set(
+    farcasterRows
+      .filter((row) => row.fid !== null)
+      .map((row) => row.wallet),
+  )
+
+  for (const entry of wallets) {
+    if (!verifiedWallets.has(entry.wallet)) continue
+    entry.linked_via_farcaster = true
+    entry.farcaster_verified = true
   }
+
+  const farcasterProfile = farcasterRows.find((row) => row.fid !== null) ?? null
+  const farcaster = farcasterProfile?.fid
+    ? {
+        fid: Number(farcasterProfile.fid),
+        username: farcasterProfile.username,
+        display_name: farcasterProfile.display_name,
+        pfp_url: farcasterProfile.pfp_url,
+      }
+    : null
+
+  const identitySource: 'privy' | 'farcaster' | 'wallet' = farcaster && primaryList.length === 0
+    ? 'farcaster'
+    : 'wallet'
+  const identityValue = identitySource === 'farcaster'
+    ? String(farcaster?.fid ?? normalizedWallet)
+    : primaryList[0] ?? normalizedWallet
 
   return {
     identity_key: `${identitySource}:${identityValue}`,
     identity_source: identitySource,
     identity_value: identityValue,
     wallets,
-    evm_wallets: [...new Set(evmWallets)],
-    solana_wallets: [...new Set(solanaWallets)],
-    x_username: xUsername,
+    evm_wallets: wallets
+      .filter((entry) => entry.wallet_kind === 'evm')
+      .map((entry) => entry.wallet),
+    solana_wallets: wallets
+      .filter((entry) => entry.wallet_kind === 'solana')
+      .map((entry) => entry.wallet),
+    x_username: farcaster?.username ?? null,
     farcaster,
   }
 }
@@ -2182,5 +2130,573 @@ export async function updateAgentProfile(agentName: string, fields: {
       description = CASE WHEN ${hasDesc} THEN ${fields.description ?? null} ELSE description END,
       wallet = CASE WHEN ${hasWallet} THEN ${fields.wallet ?? null} ELSE wallet END
     WHERE agent_name = ${agentName}
+  `
+}
+
+// ═══ BODEGA ═══
+
+export interface BodegaCatalogFilters {
+  asset_type?: BodegaCatalogRow['asset_type']
+  creator_wallet?: string
+  active?: boolean
+}
+
+export interface BodegaInstallWithCatalogRow extends BodegaInstallRow {
+  catalog_item: BodegaCatalogRow
+}
+
+/**
+ * Builds a safe WHERE clause for catalog filters so the Bodega can paginate flexibly.
+ */
+function buildBodegaCatalogWhereClause(
+  filters?: BodegaCatalogFilters,
+): { clause: string; params: Array<string | boolean> } {
+  const clauses: string[] = []
+  const params: Array<string | boolean> = []
+
+  if (filters?.asset_type) {
+    params.push(filters.asset_type)
+    clauses.push(`bc.asset_type = $${params.length}`)
+  }
+
+  if (filters?.creator_wallet) {
+    params.push(filters.creator_wallet)
+    clauses.push(`bc.creator_wallet = $${params.length}`)
+  }
+
+  if (typeof filters?.active === 'boolean') {
+    params.push(filters.active)
+    clauses.push(`bc.active = $${params.length}`)
+  }
+
+  return {
+    clause: clauses.length > 0 ? clauses.join(' AND ') : 'TRUE',
+    params,
+  }
+}
+
+/**
+ * Creates a catalog listing so Bodega assets can exist independently of one bungalow install.
+ */
+export async function createCatalogItem(data: {
+  creator_wallet: string
+  creator_handle?: string | null
+  origin_bungalow_token_address?: string | null
+  origin_bungalow_chain?: string | null
+  asset_type: BodegaCatalogRow['asset_type']
+  title: string
+  description?: string | null
+  content: unknown
+  preview_url?: string | null
+  price_in_jbm: string
+}): Promise<BodegaCatalogRow> {
+  const rows = await db<BodegaCatalogRow[]>`
+    INSERT INTO ${db(CONFIG.SCHEMA)}.bodega_catalog (
+      creator_wallet,
+      creator_handle,
+      origin_bungalow_token_address,
+      origin_bungalow_chain,
+      asset_type,
+      title,
+      description,
+      content,
+      preview_url,
+      price_in_jbm
+    )
+    VALUES (
+      ${data.creator_wallet},
+      ${data.creator_handle ?? null},
+      ${data.origin_bungalow_token_address ?? null},
+      ${data.origin_bungalow_chain ?? null},
+      ${data.asset_type},
+      ${data.title},
+      ${data.description ?? null},
+      ${JSON.stringify(data.content)}::jsonb,
+      ${data.preview_url ?? null},
+      ${data.price_in_jbm}
+    )
+    RETURNING
+      id,
+      creator_wallet,
+      creator_handle,
+      origin_bungalow_token_address,
+      origin_bungalow_chain,
+      asset_type,
+      title,
+      description,
+      content,
+      preview_url,
+      price_in_jbm::text AS price_in_jbm,
+      install_count,
+      active,
+      created_at::text AS created_at
+  `
+
+  return rows[0]
+}
+
+/**
+ * Reads one catalog listing so install and detail routes can validate against stored inventory.
+ */
+export async function getCatalogItem(id: number): Promise<BodegaCatalogRow | null> {
+  const rows = await db<BodegaCatalogRow[]>`
+    SELECT
+      id,
+      creator_wallet,
+      creator_handle,
+      origin_bungalow_token_address,
+      origin_bungalow_chain,
+      asset_type,
+      title,
+      description,
+      content,
+      preview_url,
+      price_in_jbm::text AS price_in_jbm,
+      install_count,
+      active,
+      created_at::text AS created_at
+    FROM ${db(CONFIG.SCHEMA)}.bodega_catalog
+    WHERE id = ${id}
+    LIMIT 1
+  `
+
+  return rows[0] ?? null
+}
+
+/**
+ * Lists catalog items with optional filtering so the Bodega storefront can paginate cheaply.
+ */
+export async function getCatalogItems(
+  filters?: BodegaCatalogFilters,
+  limit = 20,
+  offset = 0,
+): Promise<BodegaCatalogRow[]> {
+  const safeLimit = Math.max(1, Math.min(limit, 100))
+  const safeOffset = Math.max(offset, 0)
+  const where = buildBodegaCatalogWhereClause(filters)
+  const limitParam = where.params.length + 1
+  const offsetParam = where.params.length + 2
+
+  return db.unsafe<BodegaCatalogRow[]>(
+    `SELECT
+      bc.id,
+      bc.creator_wallet,
+      bc.creator_handle,
+      bc.origin_bungalow_token_address,
+      bc.origin_bungalow_chain,
+      bc.asset_type,
+      bc.title,
+      bc.description,
+      bc.content,
+      bc.preview_url,
+      bc.price_in_jbm::text AS price_in_jbm,
+      bc.install_count,
+      bc.active,
+      bc.created_at::text AS created_at
+    FROM "${CONFIG.SCHEMA}".bodega_catalog bc
+    WHERE ${where.clause}
+    ORDER BY bc.created_at DESC, bc.id DESC
+    LIMIT $${limitParam}
+    OFFSET $${offsetParam}`,
+    [...where.params, safeLimit, safeOffset],
+  )
+}
+
+/**
+ * Lists all catalog items by a creator so profile surfaces can show their published work.
+ */
+export async function getCatalogItemsByCreator(wallet: string): Promise<BodegaCatalogRow[]> {
+  return getCatalogItems({ creator_wallet: wallet }, 100, 0)
+}
+
+/**
+ * Increments install_count so the catalog reflects demand without recalculating on every read.
+ */
+export async function incrementInstallCount(catalog_item_id: number): Promise<void> {
+  await db`
+    UPDATE ${db(CONFIG.SCHEMA)}.bodega_catalog
+    SET install_count = install_count + 1
+    WHERE id = ${catalog_item_id}
+  `
+}
+
+/**
+ * Deactivates a creator-owned listing so delisted assets stop appearing in the public catalog.
+ */
+export async function deactivateCatalogItem(
+  id: number,
+  requesting_wallet: string,
+): Promise<BodegaCatalogRow | null> {
+  const rows = await db<BodegaCatalogRow[]>`
+    UPDATE ${db(CONFIG.SCHEMA)}.bodega_catalog
+    SET active = FALSE
+    WHERE id = ${id}
+      AND creator_wallet = ${requesting_wallet}
+    RETURNING
+      id,
+      creator_wallet,
+      creator_handle,
+      origin_bungalow_token_address,
+      origin_bungalow_chain,
+      asset_type,
+      title,
+      description,
+      content,
+      preview_url,
+      price_in_jbm::text AS price_in_jbm,
+      install_count,
+      active,
+      created_at::text AS created_at
+  `
+
+  return rows[0] ?? null
+}
+
+/**
+ * Writes a Bodega install and calculates the creator credit at insert time.
+ */
+export async function createBodegaInstall(data: {
+  catalog_item_id: number
+  installed_to_token_address: string
+  installed_to_chain: string
+  installed_by_wallet: string
+  tx_hash: string
+  jbm_amount: string
+}): Promise<BodegaInstallRow> {
+  const rows = await db<BodegaInstallRow[]>`
+    INSERT INTO ${db(CONFIG.SCHEMA)}.bodega_installs (
+      catalog_item_id,
+      installed_to_token_address,
+      installed_to_chain,
+      installed_by_wallet,
+      tx_hash,
+      jbm_amount,
+      creator_credit_jbm
+    )
+    VALUES (
+      ${data.catalog_item_id},
+      ${data.installed_to_token_address},
+      ${data.installed_to_chain},
+      ${data.installed_by_wallet},
+      ${data.tx_hash},
+      ${data.jbm_amount},
+      (${data.jbm_amount}::numeric * 30 / 100)
+    )
+    RETURNING
+      id,
+      catalog_item_id,
+      installed_to_token_address,
+      installed_to_chain,
+      installed_by_wallet,
+      tx_hash,
+      jbm_amount::text AS jbm_amount,
+      creator_credit_jbm::text AS creator_credit_jbm,
+      credit_claimed,
+      created_at::text AS created_at
+  `
+
+  return rows[0]
+}
+
+/**
+ * Lists installs for one bungalow with embedded catalog metadata for the bungalow page.
+ */
+export async function getBodegaInstallsByBungalow(
+  token_address: string,
+  chain: string,
+): Promise<BodegaInstallWithCatalogRow[]> {
+  const rows = await db<Array<BodegaInstallRow & { catalog_item: unknown }>>`
+    SELECT
+      bi.id,
+      bi.catalog_item_id,
+      bi.installed_to_token_address,
+      bi.installed_to_chain,
+      bi.installed_by_wallet,
+      bi.tx_hash,
+      bi.jbm_amount::text AS jbm_amount,
+      bi.creator_credit_jbm::text AS creator_credit_jbm,
+      bi.credit_claimed,
+      bi.created_at::text AS created_at,
+      jsonb_build_object(
+        'id', bc.id,
+        'creator_wallet', bc.creator_wallet,
+        'creator_handle', bc.creator_handle,
+        'origin_bungalow_token_address', bc.origin_bungalow_token_address,
+        'origin_bungalow_chain', bc.origin_bungalow_chain,
+        'asset_type', bc.asset_type,
+        'title', bc.title,
+        'description', bc.description,
+        'content', bc.content,
+        'preview_url', bc.preview_url,
+        'price_in_jbm', bc.price_in_jbm::text,
+        'install_count', bc.install_count,
+        'active', bc.active,
+        'created_at', bc.created_at::text
+      ) AS catalog_item
+    FROM ${db(CONFIG.SCHEMA)}.bodega_installs bi
+    INNER JOIN ${db(CONFIG.SCHEMA)}.bodega_catalog bc
+      ON bc.id = bi.catalog_item_id
+    WHERE bi.installed_to_token_address = ${token_address}
+      AND bi.installed_to_chain = ${chain}
+    ORDER BY bi.created_at DESC, bi.id DESC
+  `
+
+  return rows.map((row) => ({
+    ...row,
+    catalog_item: row.catalog_item as BodegaCatalogRow,
+  }))
+}
+
+/**
+ * Summarizes unpaid creator credits from raw installs so the rewards inbox can show Bodega revenue.
+ */
+export async function getUnclaimedCreatorCredits(
+  creator_wallet: string,
+): Promise<{ total_jbm: number; installs: BodegaInstallWithCatalogRow[] }> {
+  const installs = await db<Array<BodegaInstallRow & { catalog_item: unknown }>>`
+    SELECT
+      bi.id,
+      bi.catalog_item_id,
+      bi.installed_to_token_address,
+      bi.installed_to_chain,
+      bi.installed_by_wallet,
+      bi.tx_hash,
+      bi.jbm_amount::text AS jbm_amount,
+      bi.creator_credit_jbm::text AS creator_credit_jbm,
+      bi.credit_claimed,
+      bi.created_at::text AS created_at,
+      jsonb_build_object(
+        'id', bc.id,
+        'creator_wallet', bc.creator_wallet,
+        'creator_handle', bc.creator_handle,
+        'origin_bungalow_token_address', bc.origin_bungalow_token_address,
+        'origin_bungalow_chain', bc.origin_bungalow_chain,
+        'asset_type', bc.asset_type,
+        'title', bc.title,
+        'description', bc.description,
+        'content', bc.content,
+        'preview_url', bc.preview_url,
+        'price_in_jbm', bc.price_in_jbm::text,
+        'install_count', bc.install_count,
+        'active', bc.active,
+        'created_at', bc.created_at::text
+      ) AS catalog_item
+    FROM ${db(CONFIG.SCHEMA)}.bodega_installs bi
+    INNER JOIN ${db(CONFIG.SCHEMA)}.bodega_catalog bc
+      ON bc.id = bi.catalog_item_id
+    WHERE bc.creator_wallet = ${creator_wallet}
+      AND bi.credit_claimed = FALSE
+    ORDER BY bi.created_at DESC, bi.id DESC
+  `
+
+  const totalRows = await db<Array<{ total_jbm: string | null }>>`
+    SELECT COALESCE(SUM(bi.creator_credit_jbm), 0)::text AS total_jbm
+    FROM ${db(CONFIG.SCHEMA)}.bodega_installs bi
+    INNER JOIN ${db(CONFIG.SCHEMA)}.bodega_catalog bc
+      ON bc.id = bi.catalog_item_id
+    WHERE bc.creator_wallet = ${creator_wallet}
+      AND bi.credit_claimed = FALSE
+  `
+
+  return {
+    total_jbm: Number(totalRows[0]?.total_jbm ?? 0),
+    installs: installs.map((row) => ({
+      ...row,
+      catalog_item: row.catalog_item as BodegaCatalogRow,
+    })),
+  }
+}
+
+/**
+ * Marks installs as claimed after the creator payout has been reconciled.
+ */
+export async function markCreditsAsClaimed(install_ids: number[]): Promise<void> {
+  if (install_ids.length === 0) return
+
+  await db`
+    UPDATE ${db(CONFIG.SCHEMA)}.bodega_installs
+    SET credit_claimed = TRUE
+    WHERE id IN ${db(install_ids)}
+  `
+}
+
+/**
+ * Records a bonus heat event so engagement bonuses live in their own additive ledger.
+ */
+export async function createBonusHeatEvent(data: {
+  wallet: string
+  token_address: string
+  chain: string
+  event_type: BonusHeatEventRow['event_type']
+  bonus_points: number
+}): Promise<BonusHeatEventRow> {
+  const rows = await db<BonusHeatEventRow[]>`
+    INSERT INTO ${db(CONFIG.SCHEMA)}.bonus_heat_events (
+      wallet,
+      token_address,
+      chain,
+      event_type,
+      bonus_points
+    )
+    VALUES (
+      ${data.wallet},
+      ${data.token_address},
+      ${data.chain},
+      ${data.event_type},
+      ${data.bonus_points}
+    )
+    RETURNING
+      id,
+      wallet,
+      token_address,
+      chain,
+      event_type,
+      bonus_points,
+      created_at::text AS created_at
+  `
+
+  return rows[0]
+}
+
+/**
+ * Sums additive bonus heat for one wallet and bungalow deployment.
+ */
+export async function getBonusHeatPoints(
+  wallet: string,
+  token_address: string,
+  chain: string,
+): Promise<number> {
+  const rows = await db<Array<{ total_points: string | null }>>`
+    SELECT COALESCE(SUM(bonus_points), 0)::text AS total_points
+    FROM ${db(CONFIG.SCHEMA)}.bonus_heat_events
+    WHERE wallet = ${wallet}
+      AND token_address = ${token_address}
+      AND chain = ${chain}
+  `
+
+  return Number(rows[0]?.total_points ?? 0)
+}
+
+/**
+ * Creates or refreshes a manual signature-backed wallet link without changing older auto-discovery flows.
+ */
+export async function linkWallet(
+  primary_wallet: string,
+  linked_wallet: string,
+  signature: string,
+  message: string,
+): Promise<UserWalletLinkRow> {
+  await ensureUserWalletLinksTable()
+
+  const existing = await db<UserWalletLinkRow[]>`
+    SELECT
+      id,
+      primary_wallet,
+      linked_wallet,
+      verification_signature,
+      verification_message,
+      created_at::text AS created_at
+    FROM ${db(CONFIG.SCHEMA)}.user_wallet_links
+    WHERE primary_wallet = ${primary_wallet}
+      AND linked_wallet = ${linked_wallet}
+    LIMIT 1
+  `
+
+  if (existing.length > 0) {
+    const rows = await db<UserWalletLinkRow[]>`
+      UPDATE ${db(CONFIG.SCHEMA)}.user_wallet_links
+      SET
+        verification_signature = ${signature},
+        verification_message = ${message},
+        created_at = NOW()
+      WHERE primary_wallet = ${primary_wallet}
+        AND linked_wallet = ${linked_wallet}
+      RETURNING
+        id,
+        primary_wallet,
+        linked_wallet,
+        verification_signature,
+        verification_message,
+        created_at::text AS created_at
+    `
+
+    return rows[0]
+  }
+
+  const rows = await db<UserWalletLinkRow[]>`
+    INSERT INTO ${db(CONFIG.SCHEMA)}.user_wallet_links (
+      primary_wallet,
+      linked_wallet,
+      verification_signature,
+      verification_message
+    )
+    VALUES (
+      ${primary_wallet},
+      ${linked_wallet},
+      ${signature},
+      ${message}
+    )
+    RETURNING
+      id,
+      primary_wallet,
+      linked_wallet,
+      verification_signature,
+      verification_message,
+      created_at::text AS created_at
+  `
+
+  return rows[0]
+}
+
+/**
+ * Lists every manual link under a primary wallet so account settings can render the current link set.
+ */
+export async function getLinkedWallets(primary_wallet: string): Promise<UserWalletLinkRow[]> {
+  await ensureUserWalletLinksTable()
+
+  return db<UserWalletLinkRow[]>`
+    SELECT
+      id,
+      primary_wallet,
+      linked_wallet,
+      verification_signature,
+      verification_message,
+      created_at::text AS created_at
+    FROM ${db(CONFIG.SCHEMA)}.user_wallet_links
+    WHERE primary_wallet = ${primary_wallet}
+    ORDER BY created_at ASC, id ASC
+  `
+}
+
+/**
+ * Finds one primary wallet for a linked wallet so legacy callers can still resolve a simple anchor.
+ */
+export async function getPrimaryWalletForLinked(linked_wallet: string): Promise<string | null> {
+  await ensureUserWalletLinksTable()
+
+  const rows = await db<Array<{ primary_wallet: string }>>`
+    SELECT primary_wallet
+    FROM ${db(CONFIG.SCHEMA)}.user_wallet_links
+    WHERE linked_wallet = ${linked_wallet}
+    ORDER BY created_at ASC, id ASC
+    LIMIT 1
+  `
+
+  return rows[0]?.primary_wallet ?? null
+}
+
+/**
+ * Removes a manual wallet link so users can revoke read-only linked identities.
+ */
+export async function unlinkWallet(
+  primary_wallet: string,
+  linked_wallet: string,
+): Promise<void> {
+  await ensureUserWalletLinksTable()
+
+  await db`
+    DELETE FROM ${db(CONFIG.SCHEMA)}.user_wallet_links
+    WHERE primary_wallet = ${primary_wallet}
+      AND linked_wallet = ${linked_wallet}
   `
 }

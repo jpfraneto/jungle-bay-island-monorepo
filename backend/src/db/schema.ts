@@ -153,6 +153,62 @@ export interface BungalowItemRow {
   created_at: string
 }
 
+export interface BodegaCatalogRow {
+  id: number
+  creator_wallet: string
+  creator_handle: string | null
+  origin_bungalow_token_address: string | null
+  origin_bungalow_chain: 'base' | 'ethereum' | 'solana' | null
+  asset_type: 'decoration' | 'miniapp' | 'game' | 'link' | 'image'
+  title: string
+  description: string | null
+  /**
+   * decoration: { preview_url, external_url, format: 'image' | 'glb' | 'usdz' }
+   * miniapp: { url, name, description }
+   * game: { url, name, description }
+   * link: { url, title }
+   * image: { image_url, caption }
+   */
+  content: unknown
+  preview_url: string | null
+  price_in_jbm: string
+  install_count: number
+  active: boolean
+  created_at: string
+}
+
+export interface BodegaInstallRow {
+  id: number
+  catalog_item_id: number
+  installed_to_token_address: string
+  installed_to_chain: 'base' | 'ethereum' | 'solana'
+  installed_by_wallet: string
+  tx_hash: string
+  jbm_amount: string
+  creator_credit_jbm: string
+  credit_claimed: boolean
+  created_at: string
+}
+
+export interface BonusHeatEventRow {
+  id: number
+  wallet: string
+  token_address: string
+  chain: 'base' | 'ethereum' | 'solana'
+  event_type: 'item_added' | 'bodega_install' | 'bodega_submission'
+  bonus_points: number
+  created_at: string
+}
+
+export interface UserWalletLinkRow {
+  id: number
+  primary_wallet: string
+  linked_wallet: string
+  verification_signature: string
+  verification_message: string
+  created_at: string
+}
+
 export interface ClaimHistoryRow {
   id: number
   wallet: string

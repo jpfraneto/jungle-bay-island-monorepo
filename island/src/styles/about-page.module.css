@@ -92,6 +92,38 @@
   color: #c8f5c4;
 }
 
+.modelGrid {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.modelCard {
+  border: 1px solid var(--border-subtle);
+  background: rgba(10, 26, 15, 0.45);
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.modelCard p {
+  margin: 8px 0 0;
+}
+
+.modelLabel {
+  margin: 0;
+  color: #a8e6a3 !important;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.modelTitle {
+  margin: 6px 0 0;
+  font-size: 16px;
+  color: var(--text-primary);
+}
+
 .chains {
   display: flex;
   gap: 10px;
@@ -106,4 +138,10 @@
   color: var(--text-secondary);
   font-size: 14px;
   font-family: var(--font-mono);
+}
+
+@media (max-width: 900px) {
+  .modelGrid {
+    grid-template-columns: 1fr;
+  }
 }

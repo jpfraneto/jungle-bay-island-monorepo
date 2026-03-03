@@ -83,7 +83,7 @@ export default function WallItem({ item }: WallItemProps) {
           className={styles.portalButton}
           onClick={() => {
             if (portalChain && portalCa) {
-              navigate(`/${portalChain}/${portalCa}`);
+              navigate(`/bungalow/${portalCa}`);
             }
           }}
         >

@@ -7,11 +7,17 @@ import ChainIcon from "./ChainIcon";
 
 interface SidebarProps {
   bungalows: HomeTeamBungalow[];
+  isLoading: boolean;
   isOpen: boolean;
   onClose: () => void;
 }
 
-export default function Sidebar({ bungalows, isOpen, onClose }: SidebarProps) {
+export default function Sidebar({
+  bungalows,
+  isLoading,
+  isOpen,
+  onClose,
+}: SidebarProps) {
   const navigate = useNavigate();
 
   return (
@@ -50,6 +56,17 @@ export default function Sidebar({ bungalows, isOpen, onClose }: SidebarProps) {
             <span>🔥</span>
             <span>Heat Score</span>
           </button>
+          <button
+            type="button"
+            className={styles.itemButton}
+            onClick={() => {
+              navigate("/changelog");
+              onClose();
+            }}
+          >
+            <span>📝</span>
+            <span>Changelog</span>
+          </button>
         </section>
 
         <section className={styles.section}>
@@ -70,12 +87,21 @@ export default function Sidebar({ bungalows, isOpen, onClose }: SidebarProps) {
         <section className={styles.section}>
           <h2 className={styles.heading}>BUNGALOWS</h2>
           <div className={styles.bungalowList}>
-            {bungalows.length === 0 ? (
+            {isLoading ? (
+              Array.from({ length: 8 }).map((_, index) => (
+                <div
+                  key={`bungalow-skeleton-${index}`}
+                  className={styles.skeletonRow}
+                />
+              ))
+            ) : bungalows.length === 0 ? (
               <div className={styles.empty}>
                 No bungalows yet. Try again in a moment.
               </div>
             ) : (
               bungalows.map((bungalow, index) => {
+                const bungalowPath =
+                  `/bungalow/${bungalow.canonical_slug ?? bungalow.token_address}`;
                 const symbol = bungalow.symbol ?? "?";
                 return (
                   <button
@@ -83,7 +109,7 @@ export default function Sidebar({ bungalows, isOpen, onClose }: SidebarProps) {
                     type="button"
                     className={styles.bungalowButton}
                     onClick={() => {
-                      navigate(`/${bungalow.chain}/${bungalow.token_address}`);
+                      navigate(bungalowPath);
                       onClose();
                     }}
                   >

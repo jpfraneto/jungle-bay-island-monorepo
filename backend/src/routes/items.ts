@@ -243,7 +243,7 @@ itemsRoute.get("/bungalow/:chain/:ca/items", async (c) => {
     throw new ApiError(400, "invalid_token", "Invalid token address");
   }
 
-  const projectContext = getCanonicalProjectContext(chain, tokenAddress);
+  const projectContext = await getCanonicalProjectContext(chain, tokenAddress);
   const filter = buildDeploymentWhereClause("bi", projectContext.deployments);
 
   const rows = await db.unsafe<BungalowItemRow[]>(
@@ -283,7 +283,7 @@ itemsRoute.post("/bungalow/:chain/:ca/items", async (c) => {
     throw new ApiError(400, "invalid_token", "Invalid token address");
   }
 
-  const projectContext = getCanonicalProjectContext(chain, tokenAddress);
+  const projectContext = await getCanonicalProjectContext(chain, tokenAddress);
   const storageDeployment = projectContext.primaryDeployment;
 
   const body = await c.req.json<{

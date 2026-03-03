@@ -174,6 +174,8 @@ export interface BodegaCatalogRow {
   price_in_jbm: string
   install_count: number
   active: boolean
+  submission_tx_hash: string | null
+  submission_fee_jbm: string | null
   created_at: string
 }
 

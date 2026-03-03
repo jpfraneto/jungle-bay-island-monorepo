@@ -19,6 +19,32 @@ export default function ChangelogPage() {
       <article className={styles.entry}>
         <div className={styles.entryHeader}>
           <span className={styles.date}>March 3, 2026</span>
+          <h2 className={styles.heading}>Bodega Submission Fees Are Now Server-Recorded</h2>
+        </div>
+        <p>
+          Bodega publishing fees no longer rely on frontend-only state. The
+          server now records the submission payment hash and fee amount with the
+          listing itself.
+        </p>
+        <ul className={styles.list}>
+          <li>
+            Publishing a Bodega listing now sends the JBM transfer hash to the
+            backend along with the submission payload.
+          </li>
+          <li>
+            The backend rejects the wrong submission fee and blocks reuse of the
+            same payment hash across different listings.
+          </li>
+          <li>
+            If the first save succeeds and the client retries, the server can
+            now return the existing listing for that paid submission.
+          </li>
+        </ul>
+      </article>
+
+      <article className={styles.entry}>
+        <div className={styles.entryHeader}>
+          <span className={styles.date}>March 3, 2026</span>
           <h2 className={styles.heading}>Bodega Frontend And Identity Linking</h2>
         </div>
         <p>

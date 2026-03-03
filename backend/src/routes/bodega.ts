@@ -12,6 +12,7 @@ import {
   createCatalogItem,
   getBodegaInstallsByBungalow,
   getCatalogItem,
+  getCatalogItemBySubmissionTxHash,
   getCatalogItems,
   getCatalogItemsByCreator,
   getIdentityClusterByWallet,
@@ -27,6 +28,7 @@ const bodegaRoute = new Hono<AppEnv>()
 
 const REWARD_RESET_HOUR_UTC = 12
 const REWARD_RESET_OFFSET_SECONDS = REWARD_RESET_HOUR_UTC * 3600
+const BODEGA_SUBMISSION_FEE = 69_000n
 const VALID_ASSET_TYPES = new Set(['decoration', 'miniapp', 'game', 'link', 'image'])
 const VALID_DECORATION_FORMATS = new Set(['image', 'glb', 'usdz'])
 
@@ -37,6 +39,8 @@ interface BodegaSubmitBody {
   content?: unknown
   preview_url?: unknown
   price_in_jbm?: unknown
+  tx_hash?: unknown
+  jbm_amount?: unknown
   origin_bungalow_token_address?: unknown
   origin_bungalow_chain?: unknown
 }
@@ -104,6 +108,29 @@ function parsePositiveNumericString(input: unknown, fieldName: string): string {
   }
 
   return raw
+}
+
+/**
+ * Parses whole-number JBM amounts for payment proofs so fixed-fee flows cannot send decimals.
+ */
+function parseWholeJbmAmount(input: unknown, fieldName: string): bigint {
+  const raw = asString(input)
+  if (!/^\d+$/.test(raw)) {
+    throw new ApiError(400, 'invalid_numeric', `${fieldName} must be a whole-number JBM amount`)
+  }
+
+  try {
+    const value = BigInt(raw)
+    if (value <= 0n) {
+      throw new ApiError(400, 'invalid_numeric', `${fieldName} must be a positive JBM amount`)
+    }
+    return value
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error
+    }
+    throw new ApiError(400, 'invalid_numeric', `${fieldName} must be a whole-number JBM amount`)
+  }
 }
 
 /**
@@ -389,8 +416,24 @@ bodegaRoute.post('/submit', requireWalletAuth, async (c) => {
 
   const normalizedContent = normalizeBodegaContent(assetType, body.content)
   const priceInJbm = parsePositiveNumericString(body.price_in_jbm, 'price_in_jbm')
+  const submissionTxHash = validateTxHash(body.tx_hash)
+  const submissionFee = parseWholeJbmAmount(body.jbm_amount, 'jbm_amount')
+  if (submissionFee !== BODEGA_SUBMISSION_FEE) {
+    throw new ApiError(
+      400,
+      'invalid_submission_fee',
+      `jbm_amount must equal ${BODEGA_SUBMISSION_FEE.toString()} for Bodega submissions`,
+    )
+  }
   const origin = parseOriginBungalow(body)
   const creatorHandle = await getCreatorHandle(creatorWallet)
+  const existingItem = await getCatalogItemBySubmissionTxHash(submissionTxHash)
+  if (existingItem) {
+    if (existingItem.creator_wallet !== creatorWallet) {
+      throw new ApiError(409, 'duplicate_tx_hash', 'tx_hash has already been used')
+    }
+    return c.json({ item: existingItem })
+  }
   const previewUrl = (() => {
     const explicitPreview = asString(body.preview_url)
     if (explicitPreview) {
@@ -422,6 +465,8 @@ bodegaRoute.post('/submit', requireWalletAuth, async (c) => {
     content: normalizedContent,
     preview_url: previewUrl,
     price_in_jbm: priceInJbm,
+    submission_tx_hash: submissionTxHash,
+    submission_fee_jbm: submissionFee.toString(),
   })
 
   if (origin.chain && origin.token_address) {

@@ -479,6 +479,10 @@ export default function BodegaSubmitModal({
 
       setStatus("Publishing your listing to the Bodega...");
 
+      if (!confirmedPayment) {
+        throw new Error("Missing publishing fee confirmation");
+      }
+
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
       };
@@ -487,8 +491,6 @@ export default function BodegaSubmitModal({
         headers.Authorization = `Bearer ${token}`;
       }
 
-      // The current submit endpoint does not persist payment proof yet, so the
-      // publish fee is enforced client-side until the catalog schema stores it.
       const response = await fetch("/api/bodega/submit", {
         method: "POST",
         headers,
@@ -499,6 +501,8 @@ export default function BodegaSubmitModal({
           content: draftItem.content,
           preview_url: draftItem.preview_url ?? undefined,
           price_in_jbm: asPositiveNumber(price),
+          tx_hash: confirmedPayment.txHash,
+          jbm_amount: BODEGA_SUBMISSION_FEE,
           origin_bungalow_token_address: selectedOrigin?.token_address,
           origin_bungalow_chain: selectedOrigin?.chain,
         }),

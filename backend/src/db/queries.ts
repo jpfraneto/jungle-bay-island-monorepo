@@ -2189,6 +2189,8 @@ export async function createCatalogItem(data: {
   content: unknown
   preview_url?: string | null
   price_in_jbm: string
+  submission_tx_hash?: string | null
+  submission_fee_jbm?: string | null
 }): Promise<BodegaCatalogRow> {
   const rows = await db<BodegaCatalogRow[]>`
     INSERT INTO ${db(CONFIG.SCHEMA)}.bodega_catalog (
@@ -2201,7 +2203,9 @@ export async function createCatalogItem(data: {
       description,
       content,
       preview_url,
-      price_in_jbm
+      price_in_jbm,
+      submission_tx_hash,
+      submission_fee_jbm
     )
     VALUES (
       ${data.creator_wallet},
@@ -2213,7 +2217,9 @@ export async function createCatalogItem(data: {
       ${data.description ?? null},
       ${JSON.stringify(data.content)}::jsonb,
       ${data.preview_url ?? null},
-      ${data.price_in_jbm}
+      ${data.price_in_jbm},
+      ${data.submission_tx_hash ?? null},
+      ${data.submission_fee_jbm ?? null}
     )
     RETURNING
       id,
@@ -2229,6 +2235,8 @@ export async function createCatalogItem(data: {
       price_in_jbm::text AS price_in_jbm,
       install_count,
       active,
+      submission_tx_hash,
+      submission_fee_jbm::text AS submission_fee_jbm,
       created_at::text AS created_at
   `
 
@@ -2254,9 +2262,43 @@ export async function getCatalogItem(id: number): Promise<BodegaCatalogRow | nul
       price_in_jbm::text AS price_in_jbm,
       install_count,
       active,
+      submission_tx_hash,
+      submission_fee_jbm::text AS submission_fee_jbm,
       created_at::text AS created_at
     FROM ${db(CONFIG.SCHEMA)}.bodega_catalog
     WHERE id = ${id}
+    LIMIT 1
+  `
+
+  return rows[0] ?? null
+}
+
+/**
+ * Reads one catalog listing by submission hash so retrying after payment does not duplicate the listing.
+ */
+export async function getCatalogItemBySubmissionTxHash(
+  tx_hash: string,
+): Promise<BodegaCatalogRow | null> {
+  const rows = await db<BodegaCatalogRow[]>`
+    SELECT
+      id,
+      creator_wallet,
+      creator_handle,
+      origin_bungalow_token_address,
+      origin_bungalow_chain,
+      asset_type,
+      title,
+      description,
+      content,
+      preview_url,
+      price_in_jbm::text AS price_in_jbm,
+      install_count,
+      active,
+      submission_tx_hash,
+      submission_fee_jbm::text AS submission_fee_jbm,
+      created_at::text AS created_at
+    FROM ${db(CONFIG.SCHEMA)}.bodega_catalog
+    WHERE submission_tx_hash = ${tx_hash}
     LIMIT 1
   `
 
@@ -2292,6 +2334,8 @@ export async function getCatalogItems(
       bc.price_in_jbm::text AS price_in_jbm,
       bc.install_count,
       bc.active,
+      bc.submission_tx_hash,
+      bc.submission_fee_jbm::text AS submission_fee_jbm,
       bc.created_at::text AS created_at
     FROM "${CONFIG.SCHEMA}".bodega_catalog bc
     WHERE ${where.clause}
@@ -2346,6 +2390,8 @@ export async function deactivateCatalogItem(
       price_in_jbm::text AS price_in_jbm,
       install_count,
       active,
+      submission_tx_hash,
+      submission_fee_jbm::text AS submission_fee_jbm,
       created_at::text AS created_at
   `
 
@@ -2431,6 +2477,8 @@ export async function getBodegaInstallsByBungalow(
         'price_in_jbm', bc.price_in_jbm::text,
         'install_count', bc.install_count,
         'active', bc.active,
+        'submission_tx_hash', bc.submission_tx_hash,
+        'submission_fee_jbm', bc.submission_fee_jbm::text,
         'created_at', bc.created_at::text
       ) AS catalog_item
     FROM ${db(CONFIG.SCHEMA)}.bodega_installs bi
@@ -2479,6 +2527,8 @@ export async function getUnclaimedCreatorCredits(
         'price_in_jbm', bc.price_in_jbm::text,
         'install_count', bc.install_count,
         'active', bc.active,
+        'submission_tx_hash', bc.submission_tx_hash,
+        'submission_fee_jbm', bc.submission_fee_jbm::text,
         'created_at', bc.created_at::text
       ) AS catalog_item
     FROM ${db(CONFIG.SCHEMA)}.bodega_installs bi

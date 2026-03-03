@@ -36,12 +36,70 @@ interface PendingPayment {
   amount: string;
 }
 
+const PENDING_INSTALL_PAYMENT_STORAGE_KEY = "jbi:bodega:pending-install-payment";
+
 function getBungalowKey(bungalow: DirectoryBungalow): string {
   return `${bungalow.chain}:${bungalow.token_address}`;
 }
 
 function isHexTxHash(value: string): boolean {
   return /^0x[0-9a-fA-F]{64}$/.test(value);
+}
+
+/**
+ * Restores a pending install payment so the user can retry after refresh.
+ */
+function readPendingInstallPayment(): PendingPayment | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.localStorage.getItem(PENDING_INSTALL_PAYMENT_STORAGE_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as Partial<PendingPayment> | null;
+    if (
+      !parsed ||
+      typeof parsed.catalogItemId !== "number" ||
+      !Number.isFinite(parsed.catalogItemId) ||
+      parsed.catalogItemId <= 0 ||
+      typeof parsed.targetKey !== "string" ||
+      typeof parsed.txHash !== "string" ||
+      typeof parsed.payer !== "string" ||
+      typeof parsed.amount !== "string" ||
+      !isHexTxHash(parsed.txHash)
+    ) {
+      window.localStorage.removeItem(PENDING_INSTALL_PAYMENT_STORAGE_KEY);
+      return null;
+    }
+
+    return {
+      catalogItemId: parsed.catalogItemId,
+      targetKey: parsed.targetKey,
+      txHash: parsed.txHash,
+      payer: parsed.payer,
+      amount: parsed.amount,
+    };
+  } catch {
+    window.localStorage.removeItem(PENDING_INSTALL_PAYMENT_STORAGE_KEY);
+    return null;
+  }
+}
+
+/**
+ * Persists or clears the pending install payment between page loads.
+ */
+function writePendingInstallPayment(payment: PendingPayment | null): void {
+  if (typeof window === "undefined") return;
+
+  if (!payment) {
+    window.localStorage.removeItem(PENDING_INSTALL_PAYMENT_STORAGE_KEY);
+    return;
+  }
+
+  window.localStorage.setItem(
+    PENDING_INSTALL_PAYMENT_STORAGE_KEY,
+    JSON.stringify(payment),
+  );
 }
 
 function normalizeInstallRecord(input: unknown): BodegaInstallRecord | null {
@@ -93,9 +151,12 @@ export default function BodegaInstallModal({
   const { authenticated, getAccessToken, login } = usePrivy();
   const { transfer, isTransferring } = useJBMTransfer();
 
-  const [selectedKey, setSelectedKey] = useState("");
+  const [selectedKey, setSelectedKey] = useState(() => {
+    const pending = readPendingInstallPayment();
+    return pending?.targetKey ?? "";
+  });
   const [pendingPayment, setPendingPayment] = useState<PendingPayment | null>(
-    null,
+    () => readPendingInstallPayment(),
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -107,20 +168,33 @@ export default function BodegaInstallModal({
   useEffect(() => {
     if (!open || !item) return;
 
-    const preferredBungalow = bungalowOptions[0]
-      ? bungalowOptions[0]
-      : !isWalletScoped && preselectedBungalow
+    const storedTargetKey = pendingPayment?.targetKey ?? "";
+    const matchingStoredBungalow =
+      bungalowOptions.find((bungalow) => getBungalowKey(bungalow) === storedTargetKey) ??
+      (!isWalletScoped &&
+      preselectedBungalow &&
+      getBungalowKey(preselectedBungalow) === storedTargetKey
         ? preselectedBungalow
-        : null;
+        : null);
+    const preferredBungalow =
+      matchingStoredBungalow ??
+      (bungalowOptions[0]
+        ? bungalowOptions[0]
+        : !isWalletScoped && preselectedBungalow
+          ? preselectedBungalow
+          : null);
     const fallbackKey = preferredBungalow ? getBungalowKey(preferredBungalow) : "";
 
     setSelectedKey(fallbackKey);
-    setPendingPayment(null);
     setIsSubmitting(false);
     setStatus(null);
     setError(null);
     setSuccessBungalow(null);
-  }, [bungalowOptions, isWalletScoped, item, open, preselectedBungalow]);
+  }, [bungalowOptions, isWalletScoped, item, open, pendingPayment, preselectedBungalow]);
+
+  useEffect(() => {
+    writePendingInstallPayment(pendingPayment);
+  }, [pendingPayment]);
 
   if (!open || !item) return null;
 
@@ -196,6 +270,7 @@ export default function BodegaInstallModal({
         headers,
         body: JSON.stringify({
           catalog_item_id: item.id,
+          installed_by_wallet: payer,
           installed_to_token_address: selectedBungalow.token_address,
           installed_to_chain: selectedBungalow.chain,
           tx_hash: txHash,

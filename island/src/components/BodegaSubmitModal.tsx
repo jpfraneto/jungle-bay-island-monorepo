@@ -30,6 +30,8 @@ interface BodegaSubmitModalProps {
 
 type ModalStep = 1 | 2 | 3;
 const BODEGA_SUBMISSION_FEE = 69_000;
+const PENDING_SUBMISSION_PAYMENT_STORAGE_KEY =
+  "jbi:bodega:pending-submission-payment";
 
 interface PendingSubmissionPayment {
   draftFingerprint: string;
@@ -46,6 +48,60 @@ type DraftFieldKey =
   | "imageUrl";
 
 type DraftFieldErrors = Partial<Record<DraftFieldKey, string>>;
+
+/**
+ * Restores a pending publishing-fee payment so retries can survive refreshes.
+ */
+function readPendingSubmissionPayment(): PendingSubmissionPayment | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.localStorage.getItem(
+      PENDING_SUBMISSION_PAYMENT_STORAGE_KEY,
+    );
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as Partial<PendingSubmissionPayment> | null;
+    if (
+      !parsed ||
+      typeof parsed.draftFingerprint !== "string" ||
+      typeof parsed.txHash !== "string" ||
+      typeof parsed.payer !== "string" ||
+      !/^0x[0-9a-fA-F]{64}$/.test(parsed.txHash)
+    ) {
+      window.localStorage.removeItem(PENDING_SUBMISSION_PAYMENT_STORAGE_KEY);
+      return null;
+    }
+
+    return {
+      draftFingerprint: parsed.draftFingerprint,
+      txHash: parsed.txHash,
+      payer: parsed.payer,
+    };
+  } catch {
+    window.localStorage.removeItem(PENDING_SUBMISSION_PAYMENT_STORAGE_KEY);
+    return null;
+  }
+}
+
+/**
+ * Persists or clears the pending publishing-fee payment between page loads.
+ */
+function writePendingSubmissionPayment(
+  payment: PendingSubmissionPayment | null,
+): void {
+  if (typeof window === "undefined") return;
+
+  if (!payment) {
+    window.localStorage.removeItem(PENDING_SUBMISSION_PAYMENT_STORAGE_KEY);
+    return;
+  }
+
+  window.localStorage.setItem(
+    PENDING_SUBMISSION_PAYMENT_STORAGE_KEY,
+    JSON.stringify(payment),
+  );
+}
 
 function isHttpUrl(value: string): boolean {
   try {
@@ -217,7 +273,7 @@ export default function BodegaSubmitModal({
   const [fieldErrors, setFieldErrors] = useState<DraftFieldErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pendingPayment, setPendingPayment] =
-    useState<PendingSubmissionPayment | null>(null);
+    useState<PendingSubmissionPayment | null>(() => readPendingSubmissionPayment());
   const [pendingFocusField, setPendingFocusField] = useState<DraftFieldKey | null>(
     null,
   );
@@ -263,10 +319,13 @@ export default function BodegaSubmitModal({
     setError(null);
     setFieldErrors({});
     setIsSubmitting(false);
-    setPendingPayment(null);
     setPendingFocusField(null);
     setSubmittedItem(null);
   }, [bungalowOptions, defaultOriginBungalow, isWalletScoped, open]);
+
+  useEffect(() => {
+    writePendingSubmissionPayment(pendingPayment);
+  }, [pendingPayment]);
 
   const clearFieldError = (field: DraftFieldKey) => {
     setFieldErrors((current) => {
@@ -495,6 +554,7 @@ export default function BodegaSubmitModal({
         method: "POST",
         headers,
         body: JSON.stringify({
+          creator_wallet: confirmedPayment.payer,
           asset_type: assetType,
           title: title.trim(),
           description: description.trim() || undefined,

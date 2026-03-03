@@ -19,7 +19,7 @@ import {
   getUnclaimedCreatorCredits,
   incrementInstallCount,
 } from '../db/queries'
-import { requireWalletAuth } from '../middleware/auth'
+import { optionalWalletContext } from '../middleware/auth'
 import { getCanonicalProjectContext } from '../services/canonicalProjects'
 import { ApiError } from '../services/errors'
 import type { AppEnv } from '../types'
@@ -33,6 +33,7 @@ const VALID_ASSET_TYPES = new Set(['decoration', 'miniapp', 'game', 'link', 'ima
 const VALID_DECORATION_FORMATS = new Set(['image', 'glb', 'usdz'])
 
 interface BodegaSubmitBody {
+  creator_wallet?: unknown
   asset_type?: unknown
   title?: unknown
   description?: unknown
@@ -46,6 +47,7 @@ interface BodegaSubmitBody {
 }
 
 interface BodegaInstallBody {
+  installed_by_wallet?: unknown
   catalog_item_id?: unknown
   installed_to_token_address?: unknown
   installed_to_chain?: unknown
@@ -397,13 +399,18 @@ async function upsertCreatorClaimAllocation(input: {
 
 // ── Submit ───────────────────────────────────────────────────
 
-bodegaRoute.post('/submit', requireWalletAuth, async (c) => {
-  const creatorWallet = c.get('walletAddress')
+bodegaRoute.post('/submit', optionalWalletContext, async (c) => {
+  const body = await c.req.json<BodegaSubmitBody>()
+  const creatorWallet =
+    normalizeWallet(body.creator_wallet) ?? c.get('walletAddress') ?? null
   if (!creatorWallet) {
-    throw new ApiError(401, 'auth_required', 'Wallet authentication required')
+    throw new ApiError(
+      400,
+      'invalid_wallet',
+      'creator_wallet is required when wallet authentication is unavailable',
+    )
   }
 
-  const body = await c.req.json<BodegaSubmitBody>()
   const assetType = asString(body.asset_type).toLowerCase()
   if (!VALID_ASSET_TYPES.has(assetType)) {
     throw new ApiError(400, 'invalid_asset_type', 'asset_type must be one of: decoration, miniapp, game, link, image')
@@ -555,13 +562,18 @@ bodegaRoute.get('/catalog/:id', async (c) => {
 
 // ── Install ────────────────────────────────────────────────
 
-bodegaRoute.post('/install', requireWalletAuth, async (c) => {
-  const installedByWallet = c.get('walletAddress')
+bodegaRoute.post('/install', optionalWalletContext, async (c) => {
+  const body = await c.req.json<BodegaInstallBody>()
+  const installedByWallet =
+    normalizeWallet(body.installed_by_wallet) ?? c.get('walletAddress') ?? null
   if (!installedByWallet) {
-    throw new ApiError(401, 'auth_required', 'Wallet authentication required')
+    throw new ApiError(
+      400,
+      'invalid_wallet',
+      'installed_by_wallet is required when wallet authentication is unavailable',
+    )
   }
 
-  const body = await c.req.json<BodegaInstallBody>()
   const catalogItemId = Number.parseInt(String(body.catalog_item_id ?? ''), 10)
   if (!Number.isFinite(catalogItemId) || catalogItemId <= 0) {
     throw new ApiError(400, 'invalid_catalog_item', 'catalog_item_id must be a positive integer')

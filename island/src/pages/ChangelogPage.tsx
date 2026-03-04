@@ -47,6 +47,11 @@ export default function ChangelogPage() {
             Reward claims now run a contract preflight check before opening the
             wallet, so obviously failing claim attempts are blocked earlier.
           </li>
+          <li>
+            Single claims now sign against the current onchain nonce instead of
+            stale reserved nonce slots from earlier attempts, which fixes false
+            invalid-signature failures after interrupted claim sessions.
+          </li>
         </ul>
       </article>
 

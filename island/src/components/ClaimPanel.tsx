@@ -44,6 +44,22 @@ function getNextClaimCountdown(
   return `Next claim in ${minutes}m`;
 }
 
+function getClaimErrorMessage(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return "Claim failed";
+  }
+
+  const reasonMatch = error.message.match(
+    /reverted with the following reason:\s*([\s\S]*?)(?:\n\s*Contract Call:|$)/i,
+  );
+  if (reasonMatch?.[1]) {
+    return reasonMatch[1].trim();
+  }
+
+  const compact = error.message.split("\nContract Call:")[0]?.trim();
+  return compact || "Claim failed";
+}
+
 export default function ClaimPanel({
   chain,
   ca,
@@ -103,6 +119,7 @@ export default function ClaimPanel({
         headers,
         body: JSON.stringify({
           wallet: address,
+          nonce_strategy: "single",
         }),
       });
 
@@ -187,7 +204,7 @@ export default function ClaimPanel({
       setStatus("Claim successful");
       await refetch().catch(() => undefined);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Claim failed");
+      setError(getClaimErrorMessage(err));
       setStatus(null);
       await refetch().catch(() => undefined);
     } finally {

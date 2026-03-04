@@ -429,28 +429,17 @@ async function resolveIdentity(input: {
   };
 }
 
-async function getNextClaimNonceTx(
-  tx: typeof db,
-  claimantWallet: string,
-): Promise<number> {
-  const rows = await tx<Array<{ max_nonce: number | null }>>`
-    SELECT MAX(claim_nonce) AS max_nonce
-    FROM ${db(CONFIG.SCHEMA)}.claim_daily_allocations
-    WHERE claimant_wallet = ${claimantWallet}
-  `;
-
-  return Number(rows[0]?.max_nonce ?? -1) + 1;
-}
-
 async function getPendingClaimNoncesTx(
   tx: typeof db,
   claimantWallet: string,
+  periodId: number,
   minNonce = 0,
 ): Promise<number[]> {
   const rows = await tx<Array<{ claim_nonce: number }>>`
     SELECT claim_nonce
     FROM ${db(CONFIG.SCHEMA)}.claim_daily_allocations
     WHERE claimant_wallet = ${claimantWallet}
+      AND period_id = ${periodId}
       AND claim_nonce IS NOT NULL
       AND claimed_at IS NULL
       AND claim_nonce >= ${minNonce}
@@ -822,6 +811,7 @@ claimsRoute.post("/claims/:chain/:ca/sign", async (c) => {
   const body = await c.req.json<{
     wallet?: unknown;
     payout_wallet?: unknown;
+    nonce_strategy?: unknown;
   }>();
 
   const contextWallet = c.get("walletAddress") ?? null;
@@ -852,6 +842,8 @@ claimsRoute.post("/claims/:chain/:ca/sign", async (c) => {
     typeof body.payout_wallet === "string"
       ? normalizeAddress(body.payout_wallet)
       : null;
+  const nonceStrategy =
+    body.nonce_strategy === "single" ? "single" : "batch";
 
   const payoutWallet = requestedPayoutWallet ?? pickDefaultPayoutWallet(identity, requesterWallet);
   if (!payoutWallet) {
@@ -1041,16 +1033,14 @@ claimsRoute.post("/claims/:chain/:ca/sign", async (c) => {
     const pendingNonces = await getPendingClaimNoncesTx(
       trx,
       payoutWallet,
+      periodId,
       onchainNonce,
     );
     const canReuseStoredNonce = (
+      nonceStrategy === "batch" &&
       lockedAllocation.claimant_wallet === payoutWallet &&
       lockedAllocation.claim_nonce !== null &&
       lockedAllocation.claim_nonce >= onchainNonce
-    );
-    const nextReservedNonce = Math.max(
-      await getNextClaimNonceTx(trx, payoutWallet),
-      onchainNonce,
     );
     const pendingIndex = canReuseStoredNonce
       ? pendingNonces.findIndex((value) => value === lockedAllocation.claim_nonce)
@@ -1058,15 +1048,11 @@ claimsRoute.post("/claims/:chain/:ca/sign", async (c) => {
     const expectedStoredNonce = pendingIndex >= 0
       ? onchainNonce + pendingIndex
       : null;
-    const shouldRebaseStoredNonce = Boolean(
-      canReuseStoredNonce &&
-      expectedStoredNonce !== null &&
-      lockedAllocation.claim_nonce !== expectedStoredNonce,
-    );
-    const nonce = shouldRebaseStoredNonce
-      ? (expectedStoredNonce ?? onchainNonce)
-      : canReuseStoredNonce
-        ? (lockedAllocation.claim_nonce ?? nextReservedNonce)
+    const nextReservedNonce = onchainNonce + pendingNonces.length;
+    const nonce = nonceStrategy === "single"
+      ? onchainNonce
+      : canReuseStoredNonce && expectedStoredNonce !== null
+        ? expectedStoredNonce
         : nextReservedNonce;
     const amountInWei = hasReservedAmount
       ? parseNumericBigInt(lockedAllocation.amount_wei)

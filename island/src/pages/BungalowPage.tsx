@@ -15,7 +15,7 @@ import { useBungalowDirectory } from "../hooks/useBungalowDirectory";
 import { useBungalowItems } from "../hooks/useBungalowItems";
 import { useBungalowResolver } from "../hooks/useBungalowResolver";
 import NotFoundPage from "./NotFoundPage";
-import { formatCompactUsd, formatNumber } from "../utils/formatters";
+import { formatNumber } from "../utils/formatters";
 import {
   getBungalowLookupKey,
   normalizeBodegaInstallRecords,
@@ -555,7 +555,6 @@ export default function BungalowPage() {
                         : "Token"}
                     </p>
                     <h2 className={styles.assetTitle}>
-                      {asset.name}
                       {asset.symbol ? (
                         <span className={styles.assetTicker}>
                           ${asset.symbol}
@@ -568,13 +567,6 @@ export default function BungalowPage() {
                     {asset.is_primary ? (
                       <span className={styles.deploymentPill}>
                         Primary Asset
-                      </span>
-                    ) : null}
-                    {asset.is_active ? (
-                      <span
-                        className={`${styles.deploymentPill} ${styles.deploymentPillActive}`}
-                      >
-                        Open Asset
                       </span>
                     ) : null}
                   </div>
@@ -613,21 +605,6 @@ export default function BungalowPage() {
                                   : "?"}
                               </span>
                             </div>
-
-                            <div className={styles.deploymentBadges}>
-                              {deployment.is_primary ? (
-                                <span className={styles.deploymentPill}>
-                                  Primary
-                                </span>
-                              ) : null}
-                              {deployment.is_active ? (
-                                <span
-                                  className={`${styles.deploymentPill} ${styles.deploymentPillActive}`}
-                                >
-                                  Open
-                                </span>
-                              ) : null}
-                            </div>
                           </div>
 
                           <div className={styles.deploymentMeta}>
@@ -650,14 +627,6 @@ export default function BungalowPage() {
                               <span>Holders</span>
                               <strong>
                                 {formatNumber(deployment.holder_count)}
-                              </strong>
-                            </div>
-                            <div>
-                              <span>Market Cap</span>
-                              <strong>
-                                {formatCompactUsd(
-                                  deployment.market_data?.market_cap ?? null,
-                                )}
                               </strong>
                             </div>
                             <div>

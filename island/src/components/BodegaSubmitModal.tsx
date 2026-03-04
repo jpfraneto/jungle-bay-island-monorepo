@@ -38,11 +38,7 @@ interface PendingSubmissionPayment {
   payer: string;
 }
 
-type DraftFieldKey =
-  | "title"
-  | "price"
-  | "previewUrl"
-  | "url";
+type DraftFieldKey = "title" | "price" | "previewUrl" | "url";
 
 type DraftFieldErrors = Partial<Record<DraftFieldKey, string>>;
 
@@ -131,9 +127,7 @@ function asPositiveNumber(value: string): number | null {
   return numeric;
 }
 
-function getFirstInvalidField(
-  errors: DraftFieldErrors,
-): DraftFieldKey | null {
+function getFirstInvalidField(errors: DraftFieldErrors): DraftFieldKey | null {
   const orderedFields: DraftFieldKey[] = [
     "title",
     "previewUrl",
@@ -158,8 +152,7 @@ function buildContentPayload(input: {
   if (input.assetType === "decoration") {
     return {
       preview_url: input.previewUrl,
-      external_url:
-        input.artFormat === "glb" ? input.url : input.previewUrl,
+      external_url: input.artFormat === "glb" ? input.url : input.previewUrl,
       format: input.artFormat,
     };
   }
@@ -251,10 +244,11 @@ export default function BodegaSubmitModal({
   const [fieldErrors, setFieldErrors] = useState<DraftFieldErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pendingPayment, setPendingPayment] =
-    useState<PendingSubmissionPayment | null>(() => readPendingSubmissionPayment());
-  const [pendingFocusField, setPendingFocusField] = useState<DraftFieldKey | null>(
-    null,
-  );
+    useState<PendingSubmissionPayment | null>(() =>
+      readPendingSubmissionPayment(),
+    );
+  const [pendingFocusField, setPendingFocusField] =
+    useState<DraftFieldKey | null>(null);
   const [submittedItem, setSubmittedItem] = useState<BodegaCatalogItem | null>(
     null,
   );
@@ -328,9 +322,7 @@ export default function BodegaSubmitModal({
     });
   };
 
-  const getFieldTarget = (
-    field: DraftFieldKey,
-  ): HTMLInputElement | null => {
+  const getFieldTarget = (field: DraftFieldKey): HTMLInputElement | null => {
     if (field === "title") return titleInputRef.current;
     if (field === "price") return priceInputRef.current;
     if (field === "previewUrl") return previewUrlInputRef.current;
@@ -360,15 +352,15 @@ export default function BodegaSubmitModal({
   }, [pendingFocusField, step]);
 
   const creatorWallet =
-    user?.wallet?.address ??
-    (wallets.length > 0 ? wallets[0].address : "");
+    user?.wallet?.address ?? (wallets.length > 0 ? wallets[0].address : "");
   const assetType: BodegaAssetType =
     listingType === "art" ? "decoration" : "miniapp";
   const listingTitle = listingType === "art" ? "Art" : "Miniapp";
 
   const selectedOrigin =
-    bungalowOptions.find((bungalow) => getBungalowKey(bungalow) === originKey) ??
-    (!isWalletScoped ? defaultOriginBungalow ?? null : null);
+    bungalowOptions.find(
+      (bungalow) => getBungalowKey(bungalow) === originKey,
+    ) ?? (!isWalletScoped ? (defaultOriginBungalow ?? null) : null);
 
   const draftItem = useMemo<BodegaCatalogItem>(() => {
     const content = buildContentPayload({
@@ -390,7 +382,8 @@ export default function BodegaSubmitModal({
       title: title.trim() || `Untitled ${listingTitle}`,
       description: description.trim() || null,
       content,
-      preview_url: assetType === "decoration" ? previewUrl.trim() || null : null,
+      preview_url:
+        assetType === "decoration" ? previewUrl.trim() || null : null,
       price_in_jbm: price.trim() || "0",
       install_count: 0,
       active: true,
@@ -544,12 +537,10 @@ export default function BodegaSubmitModal({
         }),
       });
 
-      const data = (await response.json().catch(() => null)) as
-        | {
-            item?: unknown;
-            error?: unknown;
-          }
-        | null;
+      const data = (await response.json().catch(() => null)) as {
+        item?: unknown;
+        error?: unknown;
+      } | null;
 
       const item = normalizeBodegaCatalogItem(data?.item);
       const apiError =
@@ -569,10 +560,7 @@ export default function BodegaSubmitModal({
       setStatus(null);
       const message =
         err instanceof Error ? err.message : "Failed to submit Bodega listing";
-      if (
-        usedExistingPayment ||
-        Boolean(confirmedPayment)
-      ) {
+      if (usedExistingPayment || Boolean(confirmedPayment)) {
         setError(
           `${message}. The ${formatJbmAmount(BODEGA_SUBMISSION_FEE)} publishing fee is already paid, so you can retry without paying again.`,
         );
@@ -641,11 +629,11 @@ export default function BodegaSubmitModal({
               }`}
               onClick={() => setListingType("art")}
             >
-              <span className={styles.typeIcon}>{getBodegaAssetIcon("decoration")}</span>
+              <span className={styles.typeIcon}>
+                {getBodegaAssetIcon("decoration")}
+              </span>
               <strong>Art</strong>
-              <small>
-                Images and GLB-based decorative assets live in one lane.
-              </small>
+              <small>Images and GLB-based decorative assets.</small>
             </button>
             <button
               type="button"
@@ -654,11 +642,11 @@ export default function BodegaSubmitModal({
               }`}
               onClick={() => setListingType("miniapp")}
             >
-              <span className={styles.typeIcon}>{getBodegaAssetIcon("miniapp")}</span>
+              <span className={styles.typeIcon}>
+                {getBodegaAssetIcon("miniapp")}
+              </span>
               <strong>Miniapp</strong>
-              <small>
-                Tools, links, and lightweight games all publish here now.
-              </small>
+              <small>Tools, links, and lightweight games.</small>
             </button>
           </section>
         ) : null}
@@ -678,7 +666,9 @@ export default function BodegaSubmitModal({
                 aria-invalid={Boolean(fieldErrors.title)}
               />
               {fieldErrors.title ? (
-                <span className={styles.fieldErrorText}>{fieldErrors.title}</span>
+                <span className={styles.fieldErrorText}>
+                  {fieldErrors.title}
+                </span>
               ) : null}
             </label>
 
@@ -753,10 +743,13 @@ export default function BodegaSubmitModal({
                       aria-invalid={Boolean(fieldErrors.url)}
                     />
                     {fieldErrors.url ? (
-                      <span className={styles.fieldErrorText}>{fieldErrors.url}</span>
+                      <span className={styles.fieldErrorText}>
+                        {fieldErrors.url}
+                      </span>
                     ) : null}
                     <small>
-                      Export from Blender as `.glb`, host the file, and paste the public URL here.
+                      Export from Blender as `.glb`, host the file, and paste
+                      the public URL here.
                     </small>
                   </label>
                 ) : null}
@@ -777,7 +770,9 @@ export default function BodegaSubmitModal({
                   aria-invalid={Boolean(fieldErrors.url)}
                 />
                 {fieldErrors.url ? (
-                  <span className={styles.fieldErrorText}>{fieldErrors.url}</span>
+                  <span className={styles.fieldErrorText}>
+                    {fieldErrors.url}
+                  </span>
                 ) : null}
                 <small>
                   Links, tools, embeds, and tiny games all publish as miniapps.
@@ -799,7 +794,9 @@ export default function BodegaSubmitModal({
                 aria-invalid={Boolean(fieldErrors.price)}
               />
               {fieldErrors.price ? (
-                <span className={styles.fieldErrorText}>{fieldErrors.price}</span>
+                <span className={styles.fieldErrorText}>
+                  {fieldErrors.price}
+                </span>
               ) : null}
               <small>
                 This is the amount another bungalow pays each time it installs
@@ -807,12 +804,15 @@ export default function BodegaSubmitModal({
               </small>
             </label>
 
-            {isWalletScoped && bungalowOptions.length === 0 && !isDirectoryLoading ? (
+            {isWalletScoped &&
+            bungalowOptions.length === 0 &&
+            !isDirectoryLoading ? (
               <div className={styles.lockedField}>
                 <span>Originating bungalow (optional)</span>
                 <strong>You don't own any bungalows yet.</strong>
                 <small>
-                  You can still submit without a source bungalow, or claim one first.
+                  You can still submit without a source bungalow, or claim one
+                  first.
                 </small>
                 <button
                   type="button"
@@ -858,7 +858,8 @@ export default function BodegaSubmitModal({
             />
             <div className={styles.feeCard}>
               <strong>
-                One-time publishing fee: {formatJbmAmount(BODEGA_SUBMISSION_FEE)}
+                One-time publishing fee:{" "}
+                {formatJbmAmount(BODEGA_SUBMISSION_FEE)}
               </strong>
               <span>
                 This fee is paid once when the listing is first published. It is
@@ -881,7 +882,9 @@ export default function BodegaSubmitModal({
                   className={styles.secondaryButton}
                   onClick={() => {
                     setError(null);
-                    setStep((current) => (current > 1 ? ((current - 1) as ModalStep) : current));
+                    setStep((current) =>
+                      current > 1 ? ((current - 1) as ModalStep) : current,
+                    );
                   }}
                   disabled={isSubmitting}
                 >
@@ -894,11 +897,11 @@ export default function BodegaSubmitModal({
                 onClick={step === 3 ? handleSubmit : handleStepAdvance}
                 disabled={isSubmitting || isTransferring}
               >
-                  {isSubmitting || isTransferring
-                    ? "Submitting..."
-                    : step === 3
+                {isSubmitting || isTransferring
+                  ? "Submitting..."
+                  : step === 3
                     ? pendingPayment &&
-                        pendingPayment.draftFingerprint === draftFingerprint
+                      pendingPayment.draftFingerprint === draftFingerprint
                       ? "Retry Save"
                       : `Pay ${formatJbmAmount(BODEGA_SUBMISSION_FEE)} & Submit`
                     : "Continue"}

@@ -30,6 +30,21 @@ const WEI_PER_JBM = 10n ** 18n;
 
 const CLAIM_ESCROW_ABI = [
   {
+    name: "claim",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "escrow", type: "address" },
+      { name: "recipient", type: "address" },
+      { name: "amount", type: "uint256" },
+      { name: "bungalowId", type: "bytes32" },
+      { name: "periodId", type: "uint256" },
+      { name: "deadline", type: "uint256" },
+      { name: "signature", type: "bytes" },
+    ],
+    outputs: [],
+  },
+  {
     name: "hasClaimed",
     type: "function",
     stateMutability: "view",
@@ -192,6 +207,15 @@ function parseNumericBigInt(value: string | null | undefined): bigint {
   }
 }
 
+function extractRevertReason(error: unknown): string | null {
+  if (!(error instanceof Error)) return null;
+  const match = error.message.match(
+    /reverted with the following reason:\s*([\s\S]*?)(?:\n\s*Contract Call:|$)/i,
+  );
+  if (match?.[1]) return match[1].trim();
+  return null;
+}
+
 function minBigInt(a: bigint, b: bigint): bigint {
   return a < b ? a : b;
 }
@@ -274,6 +298,30 @@ async function readOnchainClaimNonce(input: {
   });
 
   return Number(result);
+}
+
+async function readOnchainClaimNonceWithRetry(input: {
+  claimContractAddress: `0x${string}`;
+  payoutWallet: string;
+  retries?: number;
+}): Promise<number> {
+  const attempts = Math.max(1, input.retries ?? 2);
+  let lastError: unknown = null;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await readOnchainClaimNonce({
+        claimContractAddress: input.claimContractAddress,
+        payoutWallet: input.payoutWallet,
+      });
+    } catch (error) {
+      lastError = error;
+      if (attempt >= attempts) break;
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("nonce read failed");
 }
 
 async function getPeriodCap(periodId: number): Promise<{
@@ -905,6 +953,23 @@ claimsRoute.post("/claims/:chain/:ca/sign", async (c) => {
 
   let claimedToday = Boolean(allocation.claimed_at);
   let onchainNonce = 0;
+
+  // Nonce must come from chain to avoid signing with stale local reservations.
+  try {
+    onchainNonce = await readOnchainClaimNonceWithRetry({
+      claimContractAddress,
+      payoutWallet,
+      retries: 2,
+    });
+  } catch {
+    throw new ApiError(
+      503,
+      "nonce_unavailable",
+      "Could not read onchain claim nonce. Please retry in a few seconds.",
+    );
+  }
+
+  // Claimed status can safely fall back to DB if the read path is temporarily unavailable.
   try {
     claimedToday = await readOnchainClaimStatus({
       claimContractAddress,
@@ -912,13 +977,8 @@ claimsRoute.post("/claims/:chain/:ca/sign", async (c) => {
       bungalowId,
       payoutWallet,
     });
-    onchainNonce = await readOnchainClaimNonce({
-      claimContractAddress,
-      payoutWallet,
-    });
   } catch {
     claimedToday = Boolean(allocation.claimed_at);
-    onchainNonce = Math.max(0, allocation.claim_nonce ?? 0);
   }
 
   if (claimedToday) {
@@ -1062,6 +1122,34 @@ claimsRoute.post("/claims/:chain/:ca/sign", async (c) => {
       },
     });
 
+    // Validate the generated payload against the contract before returning it.
+    try {
+      await publicClients.base.simulateContract({
+        address: claimContractAddress,
+        abi: CLAIM_ESCROW_ABI,
+        functionName: "claim",
+        args: [
+          escrowAddress as `0x${string}`,
+          payoutWallet as `0x${string}`,
+          amountInWei,
+          bungalowId,
+          BigInt(periodId),
+          BigInt(deadline),
+          signature,
+        ],
+        account: payoutWallet as `0x${string}`,
+      });
+    } catch (error) {
+      const reason = extractRevertReason(error);
+      throw new ApiError(
+        500,
+        "claim_signature_preflight_failed",
+        reason
+          ? `Claim payload preflight failed: ${reason}`
+          : "Claim payload preflight failed",
+      );
+    }
+
     await trx`
       UPDATE ${db(CONFIG.SCHEMA)}.claim_daily_allocations
       SET
@@ -1079,6 +1167,7 @@ claimsRoute.post("/claims/:chain/:ca/sign", async (c) => {
 
     return {
       signature,
+      claim_contract: claimContractAddress,
       escrow: escrowAddress,
       amount_jbm: grantedJbm.toString(),
       amount_wei: amountInWei.toString(),

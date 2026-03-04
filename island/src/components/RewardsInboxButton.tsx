@@ -20,6 +20,7 @@ interface SignedReward {
   tokenAddress: string;
   payload: {
     signature: `0x${string}`;
+    claimContract: `0x${string}`;
     escrow: `0x${string}`;
     amountWei: bigint;
     bungalowId: `0x${string}`;
@@ -94,11 +95,6 @@ export default function RewardsInboxButton() {
       return;
     }
 
-    if (!isHexAddress(CLAIM_CONTRACT_ADDRESS)) {
-      setError("Set VITE_CLAIM_CONTRACT_ADDRESS to enable batch claims");
-      return;
-    }
-
     if (claimableItems.length === 0) {
       setStatus("No rewards ready to claim");
       return;
@@ -159,12 +155,23 @@ export default function RewardsInboxButton() {
         ) {
           throw new Error("Invalid batch claim payload from backend");
         }
+        const claimContract =
+          typeof signData.claim_contract === "string" &&
+          isHexAddress(signData.claim_contract)
+            ? signData.claim_contract
+            : CLAIM_CONTRACT_ADDRESS;
+        if (!isHexAddress(claimContract)) {
+          throw new Error(
+            "Claim contract address is missing. Set VITE_CLAIM_CONTRACT_ADDRESS or return claim_contract from /sign.",
+          );
+        }
 
         signedRewards.push({
           chain: item.chain,
           tokenAddress: item.token_address,
           payload: {
             signature: signData.signature,
+            claimContract,
             escrow: signData.escrow,
             amountWei: BigInt(signData.amount_wei),
             bungalowId: signData.bungalowId,
@@ -215,7 +222,7 @@ export default function RewardsInboxButton() {
           ] as const;
 
           const hash = await walletClient.writeContract({
-            address: CLAIM_CONTRACT_ADDRESS,
+            address: reward.payload.claimContract,
             abi: claimEscrowAbi,
             functionName: "claim",
             args: claimArgs,
@@ -238,7 +245,7 @@ export default function RewardsInboxButton() {
       setStatus("Checking claims...");
       for (const reward of signedRewards) {
         await publicClient.simulateContract({
-          address: CLAIM_CONTRACT_ADDRESS,
+          address: reward.payload.claimContract,
           abi: claimEscrowAbi,
           functionName: "claim",
           args: [
@@ -260,7 +267,7 @@ export default function RewardsInboxButton() {
           account: address,
           forceAtomic: true,
           calls: signedRewards.map((reward) => ({
-            to: CLAIM_CONTRACT_ADDRESS,
+            to: reward.payload.claimContract,
             abi: claimEscrowAbi,
             functionName: "claim",
             args: [

@@ -61,6 +61,13 @@ export const db = postgres(CONFIG.DATABASE_URL, {
   max: 12,
   idle_timeout: 20,
   connect_timeout: 15,
+  // Suppress noisy idempotent DDL notices from ensure-table guards.
+  onnotice: (notice) => {
+    if (notice.code === '42P07' || notice.code === '42701') return
+    console.warn(
+      `[PG NOTICE] code=${notice.code ?? 'unknown'} message=${notice.message ?? 'unknown notice'}`,
+    )
+  },
 })
 
 export const publicClients = {

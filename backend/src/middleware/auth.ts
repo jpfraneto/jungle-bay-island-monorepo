@@ -161,7 +161,7 @@ function walletFromClaims(payload: JWTPayload): string | null {
   return null
 }
 
-async function verifyPrivyToken(token: string): Promise<{ walletAddress: string; payload: JWTPayload }> {
+export async function verifyPrivyToken(token: string): Promise<{ walletAddress: string; payload: JWTPayload }> {
   const algorithmCandidates = getPrivyAlgorithmCandidates(token)
   const issuerCandidates = [
     'privy.io',

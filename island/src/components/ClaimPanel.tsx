@@ -90,11 +90,6 @@ export default function ClaimPanel({
       return;
     }
 
-    if (!isHexAddress(CLAIM_CONTRACT_ADDRESS)) {
-      setError("Set VITE_CLAIM_CONTRACT_ADDRESS to enable claims");
-      return;
-    }
-
     if (!publicClient) {
       setError("Missing Base public client");
       return;
@@ -144,6 +139,16 @@ export default function ClaimPanel({
       if (!isHexSignature(signData.signature)) {
         throw new Error("Invalid signature from backend");
       }
+      const claimContract =
+        typeof signData.claim_contract === "string" &&
+        isHexAddress(signData.claim_contract)
+          ? signData.claim_contract
+          : CLAIM_CONTRACT_ADDRESS;
+      if (!isHexAddress(claimContract)) {
+        throw new Error(
+          "Claim contract address is missing. Set VITE_CLAIM_CONTRACT_ADDRESS or return claim_contract from /sign.",
+        );
+      }
       if (
         !isHexAddress(signData.escrow) ||
         !isHexAddress(signData.payout_wallet) ||
@@ -164,7 +169,7 @@ export default function ClaimPanel({
 
       setStatus("Checking claim...");
       await publicClient.simulateContract({
-        address: CLAIM_CONTRACT_ADDRESS,
+        address: claimContract,
         abi: claimEscrowAbi,
         functionName: "claim",
         args: claimArgs,
@@ -172,7 +177,7 @@ export default function ClaimPanel({
       });
 
       const hash = await walletClient.writeContract({
-        address: CLAIM_CONTRACT_ADDRESS,
+        address: claimContract,
         abi: claimEscrowAbi,
         functionName: "claim",
         args: claimArgs,

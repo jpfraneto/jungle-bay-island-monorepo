@@ -18,6 +18,7 @@ export const claimEscrowAbi = [
 
 export interface ClaimSignaturePayload {
   signature?: string;
+  claim_contract?: string;
   escrow?: string;
   amount_jbm?: string;
   amount_wei?: string;

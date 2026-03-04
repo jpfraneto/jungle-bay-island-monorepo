@@ -82,6 +82,16 @@ export default function ChangelogPage() {
             stale reserved nonce slots from earlier attempts, which fixes false
             invalid-signature failures after interrupted claim sessions.
           </li>
+          <li>
+            Claim payloads now include the signed contract address, and both
+            single and batch claim submits use that exact address instead of a
+            stale frontend env value, preventing signature-domain drift.
+          </li>
+          <li>
+            Claim signing now runs a server-side contract preflight before
+            returning signatures, so configuration mismatches surface as clear
+            API errors instead of wallet-level reverts.
+          </li>
         </ul>
       </article>
 

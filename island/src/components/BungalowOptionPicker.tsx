@@ -32,14 +32,10 @@ export default function BungalowOptionPicker({
         {options.map((bungalow) => {
           const optionKey = getBungalowKey(bungalow);
           const label = bungalow.symbol ?? bungalow.name ?? "Unknown bungalow";
-          const subtitle =
-            bungalow.symbol && bungalow.name && bungalow.name !== bungalow.symbol
-              ? bungalow.name
-              : bungalow.chain;
 
           return (
             <option key={optionKey} value={optionKey}>
-              {label} · {subtitle}
+              {label}
             </option>
           );
         })}

@@ -26,6 +26,7 @@ import itemsRoute from "./routes/items";
 import claimsRoute from "./routes/claims";
 import bodegaRoute from "./routes/bodega";
 import walletLinkRoute from "./routes/wallet-link";
+import opsRoute from "./routes/ops";
 import { startDailyHeatRefreshScheduler } from "./services/dailyHeatRefresh";
 import { isApiError } from "./services/errors";
 import { logError, logWarn } from "./services/logger";
@@ -118,6 +119,8 @@ function renderSpaShell(): string {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
   <title>Jungle Bay Island</title>
   <meta property="og:title" content="Jungle Bay Island" />
   <meta property="og:description" content="Where meme culture finds a home" />
@@ -207,6 +210,7 @@ app.route("/api", itemsRoute);
 app.route("/api", claimsRoute);
 app.route("/api/bodega", bodegaRoute);
 app.route("/api/wallet", walletLinkRoute);
+app.route("/api/ops", opsRoute);
 
 // Solana RPC proxy (browser can't hit public RPC directly due to CORS/403)
 app.post("/api/solana-rpc", async (c) => {

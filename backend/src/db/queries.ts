@@ -2137,6 +2137,7 @@ export async function updateAgentProfile(agentName: string, fields: {
 
 export interface BodegaCatalogFilters {
   asset_type?: BodegaCatalogRow['asset_type']
+  asset_types?: BodegaCatalogRow['asset_type'][]
   creator_wallet?: string
   active?: boolean
 }
@@ -2154,7 +2155,13 @@ function buildBodegaCatalogWhereClause(
   const clauses: string[] = []
   const params: Array<string | boolean> = []
 
-  if (filters?.asset_type) {
+  if (filters?.asset_types && filters.asset_types.length > 0) {
+    const typeClauses = filters.asset_types.map((assetType) => {
+      params.push(assetType)
+      return `bc.asset_type = $${params.length}`
+    })
+    clauses.push(`(${typeClauses.join(' OR ')})`)
+  } else if (filters?.asset_type) {
     params.push(filters.asset_type)
     clauses.push(`bc.asset_type = $${params.length}`)
   }

@@ -4,7 +4,6 @@ import { useNavigate, useParams } from "react-router-dom";
 import AddItemModal from "../components/AddItemModal";
 import BodegaCard from "../components/BodegaCard";
 import ChainIcon, { getChainLabel } from "../components/ChainIcon";
-import ClaimPanel from "../components/ClaimPanel";
 import Wall from "../components/Wall";
 import {
   useBungalow,
@@ -177,12 +176,15 @@ function BungalowSkeleton() {
 }
 
 export default function BungalowPage() {
-  const { chain: routeChain, ca: routeCa, identifier: routeIdentifier } =
-    useParams<{
-      chain?: string;
-      ca?: string;
-      identifier?: string;
-    }>();
+  const {
+    chain: routeChain,
+    ca: routeCa,
+    identifier: routeIdentifier,
+  } = useParams<{
+    chain?: string;
+    ca?: string;
+    identifier?: string;
+  }>();
   const navigate = useNavigate();
   const { authenticated, login } = usePrivy();
   const hasDirectRoute = Boolean(routeChain && routeCa);
@@ -191,8 +193,12 @@ export default function BungalowPage() {
     isLoading: resolveLoading,
     error: resolveError,
   } = useBungalowResolver(hasDirectRoute ? undefined : routeIdentifier);
-  const chain = hasDirectRoute ? routeChain ?? "" : resolvedTarget?.chain ?? "";
-  const ca = hasDirectRoute ? routeCa ?? "" : resolvedTarget?.token_address ?? "";
+  const chain = hasDirectRoute
+    ? (routeChain ?? "")
+    : (resolvedTarget?.chain ?? "");
+  const ca = hasDirectRoute
+    ? (routeCa ?? "")
+    : (resolvedTarget?.token_address ?? "");
   const { bungalow, isLoading, error } = useBungalow(
     chain || undefined,
     ca || undefined,
@@ -202,7 +208,9 @@ export default function BungalowPage() {
     isLoading: itemsLoading,
     refetch,
   } = useBungalowItems(chain, ca);
-  const { bungalows: directoryBungalows } = useBungalowDirectory({ limit: 200 });
+  const { bungalows: directoryBungalows } = useBungalowDirectory({
+    limit: 200,
+  });
 
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [bodegaInstalls, setBodegaInstalls] = useState<BodegaInstallRecord[]>(
@@ -250,9 +258,9 @@ export default function BungalowPage() {
           },
         );
 
-        const data = (await response.json().catch(() => null)) as
-          | BodegaInstallsResponse
-          | null;
+        const data = (await response
+          .json()
+          .catch(() => null)) as BodegaInstallsResponse | null;
 
         const apiError =
           typeof data?.error === "string" && data.error.trim().length > 0
@@ -345,7 +353,8 @@ export default function BungalowPage() {
     deployments.find((deployment) => deployment.is_active) ??
     deployments[0];
   const canonicalProject = bungalow.canonical_project;
-  const displayName = canonicalProject?.name ?? bungalow.name ?? "Unknown Token";
+  const displayName =
+    canonicalProject?.name ?? bungalow.name ?? "Unknown Token";
   const displaySymbol = canonicalProject?.symbol ?? null;
   const activeChain = activeDeployment.chain || bungalow.chain || chain;
   const headerImage = getTokenImageUrl(
@@ -412,9 +421,7 @@ export default function BungalowPage() {
                     </div>
                   ))}
                 </div>
-                <p className={styles.contractAddress}>
-                  Active entry: {getChainLabel(activeChain)} · {activeDeployment.token_address}
-                </p>
+
                 {assetCount > 1 || deploymentCount > 1 ? (
                   <p className={styles.identityNote}>
                     This bungalow groups {assetCount} official assets across{" "}
@@ -454,7 +461,9 @@ export default function BungalowPage() {
             <section className={styles.marketStrip}>
               <div className={styles.marketCopy}>
                 <p>Island Bodega</p>
-                <strong>Bring creator-made tools and decor into this bungalow.</strong>
+                <strong>
+                  Bring creator-made tools and decor into this bungalow.
+                </strong>
               </div>
               <button
                 type="button"
@@ -481,7 +490,9 @@ export default function BungalowPage() {
               <div className={styles.sectionHeading}>
                 <div>
                   <p>Installed from the Bodega</p>
-                  <strong>Marketplace items already living in this bungalow.</strong>
+                  <strong>
+                    Marketplace items already living in this bungalow.
+                  </strong>
                 </div>
               </div>
 
@@ -493,8 +504,8 @@ export default function BungalowPage() {
                 <div className={styles.shelfStatus}>
                   Failed to load Bodega installs: {bodegaInstallsError}
                 </div>
-              ) : bodegaInstalls.filter((install) => install.catalog_item).length ===
-                0 ? (
+              ) : bodegaInstalls.filter((install) => install.catalog_item)
+                  .length === 0 ? (
                 <div className={styles.shelfStatus}>
                   No Bodega items are installed here yet.
                 </div>
@@ -513,7 +524,9 @@ export default function BungalowPage() {
                         key={install.id}
                         item={install.catalog_item}
                         originBungalow={
-                          originKey ? originLookup.get(originKey) ?? null : null
+                          originKey
+                            ? (originLookup.get(originKey) ?? null)
+                            : null
                         }
                         actionLabel="From Bodega"
                       />
@@ -537,19 +550,25 @@ export default function BungalowPage() {
                 <div className={styles.assetHeader}>
                   <div>
                     <p className={styles.assetEyebrow}>
-                      {asset.kind === "nft_collection" ? "NFT Collection" : "Token"}
+                      {asset.kind === "nft_collection"
+                        ? "NFT Collection"
+                        : "Token"}
                     </p>
                     <h2 className={styles.assetTitle}>
                       {asset.name}
                       {asset.symbol ? (
-                        <span className={styles.assetTicker}>${asset.symbol}</span>
+                        <span className={styles.assetTicker}>
+                          ${asset.symbol}
+                        </span>
                       ) : null}
                     </h2>
                   </div>
 
                   <div className={styles.deploymentBadges}>
                     {asset.is_primary ? (
-                      <span className={styles.deploymentPill}>Primary Asset</span>
+                      <span className={styles.deploymentPill}>
+                        Primary Asset
+                      </span>
                     ) : null}
                     {asset.is_active ? (
                       <span
@@ -558,21 +577,6 @@ export default function BungalowPage() {
                         Open Asset
                       </span>
                     ) : null}
-                  </div>
-                </div>
-
-                <div className={styles.assetSummary}>
-                  <div>
-                    <span>Holders</span>
-                    <strong>{formatNumber(asset.aggregate_holder_count)}</strong>
-                  </div>
-                  <div>
-                    <span>Deployments</span>
-                    <strong>{formatNumber(asset.deployment_count)}</strong>
-                  </div>
-                  <div>
-                    <span>Chains</span>
-                    <strong>{formatNumber(asset.chain_count)}</strong>
                   </div>
                 </div>
 
@@ -590,7 +594,9 @@ export default function BungalowPage() {
                       >
                         <section
                           className={`${styles.deploymentCard} ${
-                            deployment.is_active ? styles.deploymentCardActive : ""
+                            deployment.is_active
+                              ? styles.deploymentCardActive
+                              : ""
                           }`}
                         >
                           <div className={styles.deploymentHeader}>
@@ -602,13 +608,17 @@ export default function BungalowPage() {
                               />
                               <strong>{getChainLabel(deployment.chain)}</strong>
                               <span className={styles.deploymentTicker}>
-                                {deploymentSymbol ? `$${deploymentSymbol}` : "?"}
+                                {deploymentSymbol
+                                  ? `$${deploymentSymbol}`
+                                  : "?"}
                               </span>
                             </div>
 
                             <div className={styles.deploymentBadges}>
                               {deployment.is_primary ? (
-                                <span className={styles.deploymentPill}>Primary</span>
+                                <span className={styles.deploymentPill}>
+                                  Primary
+                                </span>
                               ) : null}
                               {deployment.is_active ? (
                                 <span
@@ -624,7 +634,10 @@ export default function BungalowPage() {
                             <span
                               className={`${styles.chainBadge} ${chainToneClass(deployment.chain)}`}
                             >
-                              {tokenStandardLabel(deployment.chain, deploymentIsNft)}
+                              {tokenStandardLabel(
+                                deployment.chain,
+                                deploymentIsNft,
+                              )}
                             </span>
                           </div>
 
@@ -635,12 +648,16 @@ export default function BungalowPage() {
                           <div className={styles.deploymentStats}>
                             <div>
                               <span>Holders</span>
-                              <strong>{formatNumber(deployment.holder_count)}</strong>
+                              <strong>
+                                {formatNumber(deployment.holder_count)}
+                              </strong>
                             </div>
                             <div>
                               <span>Market Cap</span>
                               <strong>
-                                {formatCompactUsd(deployment.market_data?.market_cap ?? null)}
+                                {formatCompactUsd(
+                                  deployment.market_data?.market_cap ?? null,
+                                )}
                               </strong>
                             </div>
                             <div>
@@ -653,34 +670,7 @@ export default function BungalowPage() {
                               </strong>
                             </div>
                           </div>
-
-                          {!deployment.is_active ? (
-                            <button
-                              type="button"
-                              className={styles.switchButton}
-                              onClick={() => navigate(deployment.route_path)}
-                            >
-                              Open {getChainLabel(deployment.chain)}
-                            </button>
-                          ) : null}
                         </section>
-
-                        {asset.kind === "fungible_token" && deployment.exists ? (
-                          <ClaimPanel
-                            chain={deployment.chain}
-                            ca={deployment.token_address}
-                            tokenSymbol={deploymentSymbol ?? "TOKEN"}
-                            sticky={false}
-                          />
-                        ) : !deployment.exists ? (
-                          <div className={styles.deploymentNote}>
-                            This deployment has not been scanned yet.
-                          </div>
-                        ) : (
-                          <div className={styles.deploymentNote}>
-                            NFT collections do not use the token claim flow.
-                          </div>
-                        )}
                       </div>
                     );
                   })}

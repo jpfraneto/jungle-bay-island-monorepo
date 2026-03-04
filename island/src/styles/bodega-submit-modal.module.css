@@ -8,15 +8,15 @@
   align-items: center;
   justify-content: center;
   padding: 18px;
-  overflow-y: auto;
+  overflow: hidden;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
 }
 
 .modal {
   width: min(920px, 100%);
-  max-height: min(92vh, 980px);
-  overflow: auto;
+  max-height: min(92dvh, 980px);
+  overflow-y: auto;
   border-radius: 20px;
   border: 1px solid var(--border-subtle);
   background:
@@ -296,8 +296,8 @@
   }
 
   .modal {
-    max-height: none;
-    overflow: visible;
+    max-height: calc(100dvh - 20px - env(safe-area-inset-bottom));
+    overflow-y: auto;
   }
 
   .header,

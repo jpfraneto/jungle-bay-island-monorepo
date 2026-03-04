@@ -19,6 +19,31 @@ export default function ChangelogPage() {
       <article className={styles.entry}>
         <div className={styles.entryHeader}>
           <span className={styles.date}>March 4, 2026</span>
+          <h2 className={styles.heading}>Bodega Is Now Two-Lane: Art + Miniapps</h2>
+        </div>
+        <p>
+          The Bodega publishing flow was simplified around two creator-facing
+          listing lanes so builders can move faster with less UI noise.
+        </p>
+        <ul className={styles.list}>
+          <li>
+            Bodega submission now asks creators to pick only one of two types:
+            <strong> Art</strong> or <strong>Miniapp</strong>.
+          </li>
+          <li>
+            Art listings now support both standard image art and <strong>GLB</strong>{" "}
+            3D assets (with a preview image URL plus a GLB file URL).
+          </li>
+          <li>
+            Catalog filtering now follows the same two-lane model so browsing
+            and publishing use one shared mental model.
+          </li>
+        </ul>
+      </article>
+
+      <article className={styles.entry}>
+        <div className={styles.entryHeader}>
+          <span className={styles.date}>March 4, 2026</span>
           <h2 className={styles.heading}>Mobile Bodega Cleanup And Safer Wallet Flows</h2>
         </div>
         <p>
@@ -42,6 +67,11 @@ export default function ChangelogPage() {
           <li>
             Profile wallet linking now only uses connected-wallet signing, while
             Mining Zones moved out of the profile into its own drawer-linked page.
+          </li>
+          <li>
+            Privy auth verification now accepts key rotation-safe validation
+            paths so linking a second wallet no longer fails on strict token
+            format drift.
           </li>
           <li>
             Reward claims now run a contract preflight check before opening the

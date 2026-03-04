@@ -63,12 +63,14 @@
   margin-top: 10px;
   color: #9eeec0;
   font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .error {
   margin-top: 10px;
   color: #ff8e83;
   font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 980px) {

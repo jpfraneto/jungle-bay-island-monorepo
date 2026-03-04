@@ -168,6 +168,9 @@ app.use("*", async (c, next) => {
   if (ct.includes("text/html")) {
     c.res.headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
     c.res.headers.set("Pragma", "no-cache");
+    // Tell Cloudflare's edge cache not to store HTML (separate from browser Cache-Control)
+    c.res.headers.set("Cloudflare-CDN-Cache-Control", "no-store");
+    c.res.headers.set("CDN-Cache-Control", "no-store");
   }
 
   if (c.req.path.startsWith("/api/") && !c.res.headers.has("Cache-Control")) {
@@ -293,7 +296,8 @@ app.use("*", async (c, next) => {
   }
 
   c.header("Content-Type", MIME_TYPES[ext]);
-  c.header("Cache-Control", "public, max-age=86400");
+  // Hashed assets are content-addressed — safe to cache for 1 year
+  c.header("Cache-Control", "public, max-age=31536000, immutable");
   return c.body(await file.arrayBuffer());
 });
 

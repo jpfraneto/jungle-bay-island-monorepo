@@ -130,8 +130,9 @@ export default function AboutPage() {
           </li>
           <li>
             <strong>The Bodega closes the loop</strong> &mdash; builders can
-            publish an asset once, let any bungalow install it, and earn JBM
-            when the Island reuses that work.
+            publish an asset once through two clear lanes (<strong>Art</strong>{" "}
+            and <strong>Miniapps</strong>), let any bungalow install it, and
+            earn JBM when the Island reuses that work.
           </li>
         </ol>
       </article>

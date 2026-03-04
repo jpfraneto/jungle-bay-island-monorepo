@@ -7,16 +7,15 @@ import BodegaSubmitModal from "../components/BodegaSubmitModal";
 import { useBungalowDirectory } from "../hooks/useBungalowDirectory";
 import styles from "../styles/bodega-page.module.css";
 import {
-  BODEGA_ASSET_LABELS,
+  BODEGA_ASSET_GROUP_LABELS,
   getBungalowLookupKey,
   normalizeBodegaCatalogItems,
   normalizeDirectoryBungalows,
-  type BodegaAssetType,
   type BodegaCatalogItem,
   type DirectoryBungalow,
 } from "../utils/bodega";
 
-type AssetFilter = "all" | BodegaAssetType;
+type AssetFilter = "all" | "art" | "miniapp";
 
 interface BodegaCatalogResponse {
   items?: unknown[];
@@ -147,7 +146,7 @@ export default function BodegaPage() {
         params.set("limit", String(PAGE_SIZE));
         params.set("offset", String(offset));
         if (filter !== "all") {
-          params.set("asset_type", filter);
+          params.set("asset_group", filter);
         }
 
         const response = await fetch(`/api/bodega/catalog?${params.toString()}`, {
@@ -271,8 +270,8 @@ export default function BodegaPage() {
           <p className={styles.kicker}>Island Bodega</p>
           <h1>The market stall where the island's builders put their work into circulation.</h1>
           <p className={styles.summary}>
-            Decorations, games, miniapps, links, and images can live here once,
-            then travel into any bungalow that wants them.
+            Art and miniapps can live here once, then travel into any bungalow
+            that wants them.
           </p>
           {effectivePreselectedBungalow ? (
             <div className={styles.targetChip}>
@@ -305,9 +304,9 @@ export default function BodegaPage() {
             onChange={(event) => setFilter(event.target.value as AssetFilter)}
           >
             <option value="all">All listings</option>
-            {(Object.keys(BODEGA_ASSET_LABELS) as BodegaAssetType[]).map((assetType) => (
-              <option key={assetType} value={assetType}>
-                {BODEGA_ASSET_LABELS[assetType]}
+            {(Object.keys(BODEGA_ASSET_GROUP_LABELS) as Array<Exclude<AssetFilter, "all">>).map((assetGroup) => (
+              <option key={assetGroup} value={assetGroup}>
+                {BODEGA_ASSET_GROUP_LABELS[assetGroup]}
               </option>
             ))}
           </select>

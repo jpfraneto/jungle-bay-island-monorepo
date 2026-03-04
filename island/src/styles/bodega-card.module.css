@@ -182,11 +182,85 @@
   background: rgba(70, 53, 10, 0.48);
 }
 
+.compactCard {
+  grid-template-columns: 50px minmax(0, 1fr);
+  gap: 8px;
+  padding: 8px;
+  border-radius: 10px;
+  background: rgba(11, 24, 17, 0.86);
+  box-shadow: none;
+}
+
+.compactCard:hover {
+  transform: none;
+  border-color: rgba(121, 181, 138, 0.2);
+  box-shadow: none;
+}
+
+.compactCard .media {
+  width: 50px;
+  min-width: 50px;
+  min-height: 50px;
+  border-radius: 9px;
+}
+
+.compactCard .preview,
+.compactCard .placeholder {
+  height: 50px;
+}
+
+.compactCard .assetIcon {
+  font-size: 20px;
+}
+
+.compactCard .content {
+  gap: 3px;
+}
+
+.compactCard .topRow {
+  gap: 6px;
+}
+
+.compactCard .assetType,
+.compactCard .installCount {
+  padding: 2px 6px;
+  font-size: 8px;
+  letter-spacing: 0.04em;
+}
+
+.compactCard .title {
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.compactCard .footer {
+  margin-top: 1px;
+  gap: 8px;
+}
+
 .compactCard .summary {
   display: -webkit-box;
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+}
+
+.compactMeta {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compactCard .price {
+  font-size: 11px;
+}
+
+.compactCard .actionButton {
+  padding: 6px 9px;
+  font-size: 11px;
 }
 
 .featureCard {
@@ -243,6 +317,40 @@
     font-size: 15px;
   }
 
+  .compactCard {
+    grid-template-columns: 46px minmax(0, 1fr);
+    gap: 7px;
+    padding: 7px;
+  }
+
+  .compactCard .media {
+    width: 46px;
+    min-width: 46px;
+    min-height: 46px;
+  }
+
+  .compactCard .preview,
+  .compactCard .placeholder {
+    height: 46px;
+  }
+
+  .compactCard .title {
+    font-size: 12px;
+  }
+
+  .compactMeta {
+    font-size: 10px;
+  }
+
+  .compactCard .price {
+    font-size: 10px;
+  }
+
+  .compactCard .actionButton {
+    padding: 5px 8px;
+    font-size: 10px;
+  }
+
   .featureCard .preview,
   .featureCard .placeholder {
     height: 152px;
@@ -255,5 +363,11 @@
   .featureCard .footer {
     flex-direction: column;
     align-items: stretch;
+  }
+}
+
+@media (max-width: 560px) {
+  .compactCard .installCount {
+    display: none;
   }
 }

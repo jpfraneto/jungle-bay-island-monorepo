@@ -1,8 +1,8 @@
 import { formatJbmAmount } from "../utils/formatters";
 import {
-  BODEGA_ASSET_SINGULAR_LABELS,
   formatCreatorLabel,
   getBodegaAssetIcon,
+  getBodegaAssetGroupLabel,
   getBodegaPreviewUrl,
   getBodegaSummaryText,
   type BodegaCatalogItem,
@@ -35,10 +35,14 @@ export default function BodegaCard({
   const previewUrl = getBodegaPreviewUrl(item);
   const summary = getBodegaSummaryText(item);
   const creatorLabel = formatCreatorLabel(item);
+  const displayType = getBodegaAssetGroupLabel(item.asset_type);
   const originLabel =
     originBungalow?.name ??
     originBungalow?.symbol ??
     (item.origin_bungalow_token_address ? "Unknown Bungalow" : null);
+  const compactMeta = originLabel
+    ? `by ${creatorLabel} · ${originLabel}`
+    : `by ${creatorLabel}`;
 
   return (
     <article
@@ -58,45 +62,49 @@ export default function BodegaCard({
         ) : (
           <div className={styles.placeholder}>
             <span className={styles.assetIcon}>{getBodegaAssetIcon(item.asset_type)}</span>
-            <small>{BODEGA_ASSET_SINGULAR_LABELS[item.asset_type]}</small>
+            <small>{displayType}</small>
           </div>
         )}
       </div>
 
       <div className={styles.content}>
         <div className={styles.topRow}>
-          <span className={styles.assetType}>
-            {BODEGA_ASSET_SINGULAR_LABELS[item.asset_type]}
-          </span>
+          <span className={styles.assetType}>{displayType}</span>
           <span className={styles.installCount}>
             {item.install_count} bungalow{item.install_count === 1 ? "" : "s"}
           </span>
         </div>
 
         <h3 className={styles.title}>{item.title}</h3>
-        <p className={styles.creator}>by {creatorLabel}</p>
-        <p className={styles.summary}>{summary}</p>
+        {compact ? (
+          <p className={styles.compactMeta}>{compactMeta}</p>
+        ) : (
+          <>
+            <p className={styles.creator}>by {creatorLabel}</p>
+            <p className={styles.summary}>{summary}</p>
 
-        {originLabel ? (
-          <div className={styles.origin}>
-            {originBungalow ? (
-              <img
-                src={getTokenImageUrl(
-                  originBungalow.image_url,
-                  originBungalow.token_address,
-                  originBungalow.symbol,
-                )}
-                alt={originBungalow.symbol ?? originLabel}
-                onError={(event) => {
-                  event.currentTarget.src = getFallbackTokenImage(
-                    `${originBungalow.chain}:${originBungalow.token_address}`,
-                  );
-                }}
-              />
+            {originLabel ? (
+              <div className={styles.origin}>
+                {originBungalow ? (
+                  <img
+                    src={getTokenImageUrl(
+                      originBungalow.image_url,
+                      originBungalow.token_address,
+                      originBungalow.symbol,
+                    )}
+                    alt={originBungalow.symbol ?? originLabel}
+                    onError={(event) => {
+                      event.currentTarget.src = getFallbackTokenImage(
+                        `${originBungalow.chain}:${originBungalow.token_address}`,
+                      );
+                    }}
+                  />
+                ) : null}
+                <span>From: {originLabel}</span>
+              </div>
             ) : null}
-            <span>From: {originLabel}</span>
-          </div>
-        ) : null}
+          </>
+        )}
 
         <div className={styles.footer}>
           <strong className={styles.price}>

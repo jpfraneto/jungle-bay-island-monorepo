@@ -196,6 +196,21 @@ export default function BodegaInstallModal({
     writePendingInstallPayment(pendingPayment);
   }, [pendingPayment]);
 
+  useEffect(() => {
+    if (!open || typeof document === "undefined") return;
+
+    const previousRootOverflow = document.documentElement.style.overflow;
+    const previousBodyOverflow = document.body.style.overflow;
+
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.documentElement.style.overflow = previousRootOverflow;
+      document.body.style.overflow = previousBodyOverflow;
+    };
+  }, [open]);
+
   if (!open || !item) return null;
 
   const selectedBungalow = bungalowOptions.find(

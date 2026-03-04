@@ -1,37 +1,93 @@
 import type { JWK, JWTPayload, KeyLike } from 'jose'
-import { importJWK, importSPKI, jwtVerify } from 'jose'
+import { createRemoteJWKSet, decodeProtectedHeader, importJWK, importSPKI, jwtVerify } from 'jose'
 import type { MiddlewareHandler } from 'hono'
 import { CONFIG, normalizeAddress } from '../config'
 import { getAgentByKeyHash } from '../db/queries'
 import type { AppEnv } from '../types'
 import { ApiError } from '../services/errors'
+import { logInfo, logWarn } from '../services/logger'
 import { getPrivyLinkedAccounts } from '../services/privyClaims'
 
 type VerificationKey = KeyLike | Uint8Array
 
-let verificationKeyPromise: Promise<VerificationKey> | null = null
+const DEFAULT_PRIVY_ALGORITHMS = ['ES256', 'RS256', 'EdDSA'] as const
+const verificationKeyPromises = new Map<string, Promise<VerificationKey>>()
+let remotePrivyJwks: ReturnType<typeof createRemoteJWKSet> | null = null
 
-function parseVerificationKey(rawKey: string): Promise<VerificationKey> {
+function parseVerificationKey(rawKey: string, algorithm: string): Promise<VerificationKey> {
   const normalized = rawKey.trim().replace(/\\n/g, '\n')
 
   if (normalized.startsWith('-----BEGIN PUBLIC KEY-----')) {
-    return importSPKI(normalized, 'ES256')
+    return importSPKI(normalized, algorithm)
   }
 
   if (normalized.startsWith('{')) {
     const jwk = JSON.parse(normalized) as JWK
-    const alg = typeof jwk.alg === 'string' ? jwk.alg : 'ES256'
+    const alg = typeof jwk.alg === 'string' ? jwk.alg : algorithm
     return importJWK(jwk, alg)
   }
 
   throw new Error('Unsupported PRIVY_VERIFICATION_KEY format')
 }
 
-async function getVerificationKey(): Promise<VerificationKey> {
-  if (!verificationKeyPromise) {
-    verificationKeyPromise = parseVerificationKey(CONFIG.PRIVY_VERIFICATION_KEY)
+async function getVerificationKey(algorithm: string): Promise<VerificationKey> {
+  let promise = verificationKeyPromises.get(algorithm)
+  if (!promise) {
+    promise = parseVerificationKey(CONFIG.PRIVY_VERIFICATION_KEY, algorithm)
+    verificationKeyPromises.set(algorithm, promise)
   }
-  return verificationKeyPromise
+
+  try {
+    return await promise
+  } catch (error) {
+    verificationKeyPromises.delete(algorithm)
+    throw error
+  }
+}
+
+function getPrivyJwks() {
+  if (!remotePrivyJwks) {
+    remotePrivyJwks = createRemoteJWKSet(
+      new URL(`https://auth.privy.io/api/v1/apps/${CONFIG.PRIVY_APP_ID}/jwks.json`),
+    )
+  }
+
+  return remotePrivyJwks
+}
+
+function getPrivyAlgorithmCandidates(token: string): string[] {
+  const headerAlg = (() => {
+    try {
+      const header = decodeProtectedHeader(token)
+      return typeof header.alg === 'string' ? header.alg : null
+    } catch {
+      return null
+    }
+  })()
+
+  const combined = [
+    headerAlg,
+    ...DEFAULT_PRIVY_ALGORITHMS,
+  ].filter((candidate): candidate is string => typeof candidate === 'string' && candidate.length > 0)
+
+  return Array.from(new Set(combined))
+}
+
+function payloadTargetsPrivyApp(payload: JWTPayload): boolean {
+  if (typeof payload.aud === 'string') {
+    return payload.aud === CONFIG.PRIVY_APP_ID
+  }
+
+  if (Array.isArray(payload.aud)) {
+    return payload.aud.some((audience) => audience === CONFIG.PRIVY_APP_ID)
+  }
+
+  const appId = (payload as Record<string, unknown>).app_id
+  if (typeof appId === 'string') {
+    return appId === CONFIG.PRIVY_APP_ID
+  }
+
+  return false
 }
 
 function extractBearerToken(authorizationHeader?: string): string | null {
@@ -39,6 +95,18 @@ function extractBearerToken(authorizationHeader?: string): string | null {
   const [scheme, token] = authorizationHeader.split(' ')
   if (scheme?.toLowerCase() !== 'bearer' || !token) return null
   return token
+}
+
+function summarizeTokenHeader(token: string): string {
+  try {
+    const header = decodeProtectedHeader(token)
+    const alg = typeof header.alg === 'string' ? header.alg : 'unknown'
+    const kid = typeof header.kid === 'string' ? header.kid : 'unknown'
+    const typ = typeof header.typ === 'string' ? header.typ : 'unknown'
+    return `alg=${alg},kid=${kid},typ=${typ},len=${token.length}`
+  } catch {
+    return `header=unparseable,len=${token.length}`
+  }
 }
 
 export async function hashApiKey(key: string): Promise<string> {
@@ -94,11 +162,7 @@ function walletFromClaims(payload: JWTPayload): string | null {
 }
 
 async function verifyPrivyToken(token: string): Promise<{ walletAddress: string; payload: JWTPayload }> {
-  const verificationKey = await getVerificationKey()
-  const verificationOptions = {
-    algorithms: ['ES256'],
-    audience: CONFIG.PRIVY_APP_ID,
-  }
+  const algorithmCandidates = getPrivyAlgorithmCandidates(token)
   const issuerCandidates = [
     'privy.io',
     `privy.io/${CONFIG.PRIVY_APP_ID}`,
@@ -108,23 +172,93 @@ async function verifyPrivyToken(token: string): Promise<{ walletAddress: string;
   ]
 
   let payload: JWTPayload | null = null
+  let lastError: unknown = null
 
-  for (const issuer of issuerCandidates) {
+  const attemptWithVerifier = async (
+    runVerify: (options: { issuer?: string; audience?: string }) => Promise<JWTPayload>,
+  ): Promise<JWTPayload | null> => {
+    for (const issuer of issuerCandidates) {
+      try {
+        return await runVerify({
+          audience: CONFIG.PRIVY_APP_ID,
+          issuer,
+        })
+      } catch (error) {
+        lastError = error
+      }
+    }
+
     try {
-      const verified = await jwtVerify(token, verificationKey, {
-        ...verificationOptions,
-        issuer,
+      return await runVerify({
+        audience: CONFIG.PRIVY_APP_ID,
       })
-      payload = verified.payload
+    } catch (error) {
+      lastError = error
+    }
+
+    // Compatibility fallback for token variants where app scoping is not in aud.
+    for (const issuer of issuerCandidates) {
+      try {
+        const verifiedPayload = await runVerify({ issuer })
+        if (!payloadTargetsPrivyApp(verifiedPayload)) {
+          throw new Error('Privy token audience mismatch')
+        }
+        return verifiedPayload
+      } catch (error) {
+        lastError = error
+      }
+    }
+
+    try {
+      const verifiedPayload = await runVerify({})
+      if (!payloadTargetsPrivyApp(verifiedPayload)) {
+        throw new Error('Privy token audience mismatch')
+      }
+      return verifiedPayload
+    } catch (error) {
+      lastError = error
+    }
+
+    return null
+  }
+
+  for (const algorithm of algorithmCandidates) {
+    try {
+      const localKey = await getVerificationKey(algorithm)
+      payload = await attemptWithVerifier(async (options) => {
+        const verified = await jwtVerify(token, localKey, {
+          algorithms: [algorithm],
+          ...options,
+        })
+        return verified.payload
+      })
+    } catch (error) {
+      lastError = error
+    }
+
+    if (payload) {
       break
-    } catch {
-      // Fall through so older and newer issuer formats can both work.
+    }
+
+    const remoteJwks = getPrivyJwks()
+    payload = await attemptWithVerifier(async (options) => {
+      const verified = await jwtVerify(token, remoteJwks, {
+        algorithms: [algorithm],
+        ...options,
+      })
+      return verified.payload
+    })
+
+    if (payload) {
+      break
     }
   }
 
   if (!payload) {
-    const verified = await jwtVerify(token, verificationKey, verificationOptions)
-    payload = verified.payload
+    if (lastError instanceof Error) {
+      throw lastError
+    }
+    throw new Error('Unable to verify Privy token')
   }
 
   const walletAddress = walletFromClaims(payload)
@@ -172,10 +306,25 @@ export const requireWalletAuth: MiddlewareHandler<AppEnv> = async (c, next) => {
   try {
     verified = await verifyPrivyToken(token)
   } catch (error) {
+    if (c.req.path.startsWith('/api/wallet/')) {
+      const message = error instanceof Error ? error.message : 'unknown_error'
+      logWarn(
+        'AUTH',
+        `Privy verify failed for wallet route ${c.req.method} ${c.req.path} (${summarizeTokenHeader(token)}): ${message}`,
+      )
+    }
+
     if (error instanceof ApiError) {
       throw error
     }
     throw new ApiError(401, 'invalid_token', 'Privy token verification failed')
+  }
+
+  if (c.req.path.startsWith('/api/wallet/')) {
+    logInfo(
+      'AUTH',
+      `Privy verify ok for wallet route ${c.req.method} ${c.req.path} wallet=${verified.walletAddress}`,
+    )
   }
 
   c.set('walletAddress', verified.walletAddress)

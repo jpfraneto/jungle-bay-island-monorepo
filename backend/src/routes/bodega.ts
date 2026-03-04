@@ -30,6 +30,7 @@ const REWARD_RESET_HOUR_UTC = 12
 const REWARD_RESET_OFFSET_SECONDS = REWARD_RESET_HOUR_UTC * 3600
 const BODEGA_SUBMISSION_FEE = 69_000n
 const VALID_ASSET_TYPES = new Set(['decoration', 'miniapp', 'game', 'link', 'image'])
+const VALID_ASSET_GROUPS = new Set(['art', 'miniapp'])
 const VALID_DECORATION_FORMATS = new Set(['image', 'glb', 'usdz'])
 
 interface BodegaSubmitBody {
@@ -495,8 +496,13 @@ bodegaRoute.post('/submit', optionalWalletContext, async (c) => {
 bodegaRoute.get('/catalog', async (c) => {
   const rawAssetType = asString(c.req.query('asset_type'))
   const assetType = rawAssetType ? rawAssetType.toLowerCase() : ''
+  const rawAssetGroup = asString(c.req.query('asset_group'))
+  const assetGroup = rawAssetGroup ? rawAssetGroup.toLowerCase() : ''
   if (assetType && !VALID_ASSET_TYPES.has(assetType)) {
     throw new ApiError(400, 'invalid_asset_type', 'asset_type must be one of: decoration, miniapp, game, link, image')
+  }
+  if (assetGroup && !VALID_ASSET_GROUPS.has(assetGroup)) {
+    throw new ApiError(400, 'invalid_asset_group', 'asset_group must be one of: art, miniapp')
   }
 
   const rawCreatorWallet = c.req.query('creator_wallet')
@@ -518,6 +524,11 @@ bodegaRoute.get('/catalog', async (c) => {
 
   const items = await getCatalogItems(
     {
+      asset_types: assetGroup === 'art'
+        ? ['decoration', 'image']
+        : assetGroup === 'miniapp'
+          ? ['miniapp', 'game', 'link']
+          : undefined,
       asset_type: assetType
         ? (assetType as 'decoration' | 'miniapp' | 'game' | 'link' | 'image')
         : undefined,

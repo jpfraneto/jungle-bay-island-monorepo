@@ -471,7 +471,7 @@
   margin-top: 12px;
   display: grid;
   grid-template-columns: 1fr;
-  gap: 10px;
+  gap: 8px;
 }
 
 .shelfStatus {
@@ -613,6 +613,10 @@
 
   .marketButton {
     width: 100%;
+  }
+
+  .installedGrid {
+    gap: 6px;
   }
 }
 

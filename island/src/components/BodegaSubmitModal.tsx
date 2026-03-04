@@ -7,9 +7,6 @@ import { useJBMTransfer } from "../hooks/useJBMTransfer";
 import { formatJbmAmount } from "../utils/formatters";
 import styles from "../styles/bodega-submit-modal.module.css";
 import {
-  BODEGA_ASSET_DESCRIPTIONS,
-  BODEGA_ASSET_LABELS,
-  BODEGA_ASSET_SINGULAR_LABELS,
   getBodegaAssetIcon,
   normalizeBodegaCatalogItem,
   type BodegaAssetType,
@@ -28,6 +25,8 @@ interface BodegaSubmitModalProps {
   onSubmitted?: (item: BodegaCatalogItem) => void;
 }
 
+type BodegaListingType = "art" | "miniapp";
+type ArtFormat = "image" | "glb";
 type ModalStep = 1 | 2 | 3;
 const BODEGA_SUBMISSION_FEE = 69_000;
 const PENDING_SUBMISSION_PAYMENT_STORAGE_KEY =
@@ -43,8 +42,7 @@ type DraftFieldKey =
   | "title"
   | "price"
   | "previewUrl"
-  | "url"
-  | "imageUrl";
+  | "url";
 
 type DraftFieldErrors = Partial<Record<DraftFieldKey, string>>;
 
@@ -111,6 +109,15 @@ function isHttpUrl(value: string): boolean {
   }
 }
 
+function isLikelyGlbUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.pathname.toLowerCase().endsWith(".glb");
+  } catch {
+    return false;
+  }
+}
+
 function getBungalowKey(bungalow: DirectoryBungalow): string {
   return `${bungalow.chain}:${bungalow.token_address}`;
 }
@@ -131,7 +138,6 @@ function getFirstInvalidField(
     "title",
     "previewUrl",
     "url",
-    "imageUrl",
     "price",
   ];
 
@@ -143,39 +149,25 @@ function getFirstInvalidField(
  */
 function buildContentPayload(input: {
   assetType: BodegaAssetType;
+  artFormat: ArtFormat;
   title: string;
   description: string;
   previewUrl: string;
   url: string;
-  caption: string;
-  imageUrl: string;
 }): Record<string, string> {
   if (input.assetType === "decoration") {
     return {
       preview_url: input.previewUrl,
-      external_url: input.previewUrl,
-      format: "image",
-    };
-  }
-
-  if (input.assetType === "game" || input.assetType === "miniapp") {
-    return {
-      url: input.url,
-      name: input.title,
-      description: input.description,
-    };
-  }
-
-  if (input.assetType === "link") {
-    return {
-      url: input.url,
-      title: input.title,
+      external_url:
+        input.artFormat === "glb" ? input.url : input.previewUrl,
+      format: input.artFormat,
     };
   }
 
   return {
-    image_url: input.imageUrl,
-    caption: input.caption,
+    url: input.url,
+    name: input.title,
+    description: input.description,
   };
 }
 
@@ -184,11 +176,11 @@ function buildContentPayload(input: {
  */
 function validateDraft(input: {
   assetType: BodegaAssetType;
+  artFormat: ArtFormat;
   title: string;
   price: string;
   previewUrl: string;
   url: string;
-  imageUrl: string;
 }): {
   fieldErrors: DraftFieldErrors;
   firstInvalidField: DraftFieldKey | null;
@@ -206,25 +198,21 @@ function validateDraft(input: {
   if (input.assetType === "decoration") {
     if (!isHttpUrl(input.previewUrl)) {
       fieldErrors.previewUrl =
-        "Decoration preview image must be a valid http(s) URL.";
+        input.artFormat === "glb"
+          ? "Add a valid preview image URL for this GLB."
+          : "Art image must be a valid http(s) URL.";
+    }
+
+    if (input.artFormat === "glb" && !isHttpUrl(input.url)) {
+      fieldErrors.url = "GLB assets need a valid file URL.";
+    } else if (input.artFormat === "glb" && !isLikelyGlbUrl(input.url)) {
+      fieldErrors.url = "GLB file URL should end in .glb.";
     }
   }
 
-  if (input.assetType === "game" || input.assetType === "miniapp") {
+  if (input.assetType === "miniapp") {
     if (!isHttpUrl(input.url)) {
-      fieldErrors.url = "Games and miniapps need a valid http(s) URL.";
-    }
-  }
-
-  if (input.assetType === "link") {
-    if (!isHttpUrl(input.url)) {
-      fieldErrors.url = "Links need a valid http(s) URL.";
-    }
-  }
-
-  if (input.assetType === "image") {
-    if (!isHttpUrl(input.imageUrl)) {
-      fieldErrors.imageUrl = "Images need a valid http(s) image URL.";
+      fieldErrors.url = "Miniapps need a valid http(s) URL.";
     }
   }
 
@@ -250,14 +238,13 @@ export default function BodegaSubmitModal({
   const { transfer, isTransferring } = useJBMTransfer();
 
   const [step, setStep] = useState<ModalStep>(1);
-  const [assetType, setAssetType] = useState<BodegaAssetType>("decoration");
+  const [listingType, setListingType] = useState<BodegaListingType>("art");
+  const [artFormat, setArtFormat] = useState<ArtFormat>("image");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("50000");
   const [previewUrl, setPreviewUrl] = useState("");
   const [url, setUrl] = useState("");
-  const [caption, setCaption] = useState("");
-  const [imageUrl, setImageUrl] = useState("");
   const [originKey, setOriginKey] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -275,20 +262,18 @@ export default function BodegaSubmitModal({
   const priceInputRef = useRef<HTMLInputElement | null>(null);
   const previewUrlInputRef = useRef<HTMLInputElement | null>(null);
   const urlInputRef = useRef<HTMLInputElement | null>(null);
-  const imageUrlInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (!open) return;
 
     setStep(1);
-    setAssetType("decoration");
+    setListingType("art");
+    setArtFormat("image");
     setTitle("");
     setDescription("");
     setPrice("50000");
     setPreviewUrl("");
     setUrl("");
-    setCaption("");
-    setImageUrl("");
     const preferredKey = defaultOriginBungalow
       ? getBungalowKey(defaultOriginBungalow)
       : "";
@@ -350,7 +335,6 @@ export default function BodegaSubmitModal({
     if (field === "price") return priceInputRef.current;
     if (field === "previewUrl") return previewUrlInputRef.current;
     if (field === "url") return urlInputRef.current;
-    if (field === "imageUrl") return imageUrlInputRef.current;
     return null;
   };
 
@@ -378,6 +362,9 @@ export default function BodegaSubmitModal({
   const creatorWallet =
     user?.wallet?.address ??
     (wallets.length > 0 ? wallets[0].address : "");
+  const assetType: BodegaAssetType =
+    listingType === "art" ? "decoration" : "miniapp";
+  const listingTitle = listingType === "art" ? "Art" : "Miniapp";
 
   const selectedOrigin =
     bungalowOptions.find((bungalow) => getBungalowKey(bungalow) === originKey) ??
@@ -386,12 +373,11 @@ export default function BodegaSubmitModal({
   const draftItem = useMemo<BodegaCatalogItem>(() => {
     const content = buildContentPayload({
       assetType,
+      artFormat,
       title,
       description,
       previewUrl,
       url,
-      caption,
-      imageUrl,
     });
 
     return {
@@ -401,15 +387,10 @@ export default function BodegaSubmitModal({
       origin_bungalow_token_address: selectedOrigin?.token_address ?? null,
       origin_bungalow_chain: selectedOrigin?.chain ?? null,
       asset_type: assetType,
-      title: title.trim() || `Untitled ${BODEGA_ASSET_SINGULAR_LABELS[assetType]}`,
+      title: title.trim() || `Untitled ${listingTitle}`,
       description: description.trim() || null,
       content,
-      preview_url:
-        assetType === "decoration"
-          ? previewUrl.trim() || null
-          : assetType === "image"
-            ? imageUrl.trim() || null
-            : null,
+      preview_url: assetType === "decoration" ? previewUrl.trim() || null : null,
       price_in_jbm: price.trim() || "0",
       install_count: 0,
       active: true,
@@ -417,10 +398,10 @@ export default function BodegaSubmitModal({
     };
   }, [
     assetType,
-    caption,
+    artFormat,
     creatorWallet,
     description,
-    imageUrl,
+    listingTitle,
     previewUrl,
     price,
     selectedOrigin,
@@ -430,21 +411,19 @@ export default function BodegaSubmitModal({
   const draftFingerprint = useMemo(
     () =>
       JSON.stringify({
-        assetType,
+        listingType,
+        artFormat,
         title: title.trim(),
         description: description.trim(),
         price: price.trim(),
         previewUrl: previewUrl.trim(),
         url: url.trim(),
-        imageUrl: imageUrl.trim(),
-        caption: caption.trim(),
         originKey,
       }),
     [
-      assetType,
-      caption,
+      artFormat,
       description,
-      imageUrl,
+      listingType,
       originKey,
       previewUrl,
       price,
@@ -465,11 +444,11 @@ export default function BodegaSubmitModal({
 
     const validation = validateDraft({
       assetType,
+      artFormat,
       title,
       price,
       previewUrl,
       url,
-      imageUrl,
     });
 
     if (validation.firstInvalidField) {
@@ -490,11 +469,11 @@ export default function BodegaSubmitModal({
 
     const validation = validateDraft({
       assetType,
+      artFormat,
       title,
       price,
       previewUrl,
       url,
-      imageUrl,
     });
 
     if (validation.firstInvalidField) {
@@ -655,20 +634,32 @@ export default function BodegaSubmitModal({
 
         {!submittedItem && step === 1 ? (
           <section className={styles.typeGrid}>
-            {(Object.keys(BODEGA_ASSET_LABELS) as BodegaAssetType[]).map((key) => (
-              <button
-                key={key}
-                type="button"
-                className={`${styles.typeCard} ${
-                  assetType === key ? styles.typeCardActive : ""
-                }`}
-                onClick={() => setAssetType(key)}
-              >
-                <span className={styles.typeIcon}>{getBodegaAssetIcon(key)}</span>
-                <strong>{BODEGA_ASSET_SINGULAR_LABELS[key]}</strong>
-                <small>{BODEGA_ASSET_DESCRIPTIONS[key]}</small>
-              </button>
-            ))}
+            <button
+              type="button"
+              className={`${styles.typeCard} ${
+                listingType === "art" ? styles.typeCardActive : ""
+              }`}
+              onClick={() => setListingType("art")}
+            >
+              <span className={styles.typeIcon}>{getBodegaAssetIcon("decoration")}</span>
+              <strong>Art</strong>
+              <small>
+                Images and GLB-based decorative assets live in one lane.
+              </small>
+            </button>
+            <button
+              type="button"
+              className={`${styles.typeCard} ${
+                listingType === "miniapp" ? styles.typeCardActive : ""
+              }`}
+              onClick={() => setListingType("miniapp")}
+            >
+              <span className={styles.typeIcon}>{getBodegaAssetIcon("miniapp")}</span>
+              <strong>Miniapp</strong>
+              <small>
+                Tools, links, and lightweight games all publish here now.
+              </small>
+            </button>
           </section>
         ) : null}
 
@@ -683,7 +674,7 @@ export default function BodegaSubmitModal({
                   setTitle(event.target.value);
                   clearFieldError("title");
                 }}
-                placeholder={`${BODEGA_ASSET_SINGULAR_LABELS[assetType]} title`}
+                placeholder={`${listingTitle} title`}
                 aria-invalid={Boolean(fieldErrors.title)}
               />
               {fieldErrors.title ? (
@@ -691,22 +682,42 @@ export default function BodegaSubmitModal({
               ) : null}
             </label>
 
-            {assetType !== "link" && assetType !== "image" ? (
-              <label className={styles.field}>
-                Description
-                <textarea
-                  value={description}
-                  onChange={(event) => setDescription(event.target.value)}
-                  rows={3}
-                  placeholder="Tell other bungalows why this belongs in the room."
-                />
-              </label>
-            ) : null}
+            <label className={styles.field}>
+              Description
+              <textarea
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                rows={3}
+                placeholder={
+                  listingType === "art"
+                    ? "Tell people what this adds to a bungalow."
+                    : "Explain what this miniapp helps people do."
+                }
+              />
+            </label>
 
             {assetType === "decoration" ? (
               <>
                 <label className={styles.field}>
-                  Decoration image URL
+                  Art format
+                  <select
+                    value={artFormat}
+                    onChange={(event) => {
+                      setArtFormat(event.target.value as ArtFormat);
+                      clearFieldError("previewUrl");
+                      clearFieldError("url");
+                    }}
+                  >
+                    <option value="image">Image</option>
+                    <option value="glb">GLB 3D asset</option>
+                  </select>
+                  <small>
+                    Start with flat art now, or list a GLB file for future 3D
+                    bungalow installs.
+                  </small>
+                </label>
+                <label className={styles.field}>
+                  {artFormat === "glb" ? "Preview image URL" : "Art image URL"}
                   <input
                     ref={previewUrlInputRef}
                     value={previewUrl}
@@ -723,24 +734,38 @@ export default function BodegaSubmitModal({
                     </span>
                   ) : null}
                   <small>
-                    This single image URL now powers both the listing preview and
-                    the installed decoration.
+                    {artFormat === "glb"
+                      ? "Use a thumbnail or poster image so the listing previews cleanly."
+                      : "This image is both the listing preview and the installed art."}
                   </small>
                 </label>
-                <div className={styles.lockedField}>
-                  <span>Accepted format</span>
-                  <strong>Image only</strong>
-                  <small>
-                    This form only supports image-based decorations right now.
-                    GLB and USDZ decoration uploads are not available yet.
-                  </small>
-                </div>
+                {artFormat === "glb" ? (
+                  <label className={styles.field}>
+                    GLB file URL
+                    <input
+                      ref={urlInputRef}
+                      value={url}
+                      onChange={(event) => {
+                        setUrl(event.target.value);
+                        clearFieldError("url");
+                      }}
+                      placeholder="https://.../asset.glb"
+                      aria-invalid={Boolean(fieldErrors.url)}
+                    />
+                    {fieldErrors.url ? (
+                      <span className={styles.fieldErrorText}>{fieldErrors.url}</span>
+                    ) : null}
+                    <small>
+                      Export from Blender as `.glb`, host the file, and paste the public URL here.
+                    </small>
+                  </label>
+                ) : null}
               </>
             ) : null}
 
-            {assetType === "game" || assetType === "miniapp" ? (
+            {assetType === "miniapp" ? (
               <label className={styles.field}>
-                URL
+                Miniapp URL
                 <input
                   ref={urlInputRef}
                   value={url}
@@ -754,57 +779,10 @@ export default function BodegaSubmitModal({
                 {fieldErrors.url ? (
                   <span className={styles.fieldErrorText}>{fieldErrors.url}</span>
                 ) : null}
+                <small>
+                  Links, tools, embeds, and tiny games all publish as miniapps.
+                </small>
               </label>
-            ) : null}
-
-            {assetType === "link" ? (
-              <label className={styles.field}>
-                URL
-                <input
-                  ref={urlInputRef}
-                  value={url}
-                  onChange={(event) => {
-                    setUrl(event.target.value);
-                    clearFieldError("url");
-                  }}
-                  placeholder="https://..."
-                  aria-invalid={Boolean(fieldErrors.url)}
-                />
-                {fieldErrors.url ? (
-                  <span className={styles.fieldErrorText}>{fieldErrors.url}</span>
-                ) : null}
-              </label>
-            ) : null}
-
-            {assetType === "image" ? (
-              <>
-                <label className={styles.field}>
-                  Image URL
-                  <input
-                    ref={imageUrlInputRef}
-                    value={imageUrl}
-                    onChange={(event) => {
-                      setImageUrl(event.target.value);
-                      clearFieldError("imageUrl");
-                    }}
-                    placeholder="https://..."
-                    aria-invalid={Boolean(fieldErrors.imageUrl)}
-                  />
-                  {fieldErrors.imageUrl ? (
-                    <span className={styles.fieldErrorText}>
-                      {fieldErrors.imageUrl}
-                    </span>
-                  ) : null}
-                </label>
-                <label className={styles.field}>
-                  Caption
-                  <input
-                    value={caption}
-                    onChange={(event) => setCaption(event.target.value)}
-                    placeholder="Optional caption"
-                  />
-                </label>
-              </>
             ) : null}
 
             <label className={styles.field}>

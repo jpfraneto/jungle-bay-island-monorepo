@@ -7,6 +7,8 @@ export type BodegaAssetType =
   | "link"
   | "image";
 
+export type BodegaAssetGroup = "art" | "miniapp";
+
 export interface BodegaCatalogItem {
   id: number;
   creator_wallet: string;
@@ -98,6 +100,11 @@ export const BODEGA_ASSET_DESCRIPTIONS: Record<BodegaAssetType, string> = {
   image: "Visual artifacts, posters, and gallery-style drops.",
 };
 
+export const BODEGA_ASSET_GROUP_LABELS: Record<BodegaAssetGroup, string> = {
+  art: "Art",
+  miniapp: "Miniapps",
+};
+
 export function normalizeDirectoryBungalows(input: unknown): DirectoryBungalow[] {
   if (!Array.isArray(input)) return [];
 
@@ -184,11 +191,19 @@ export function normalizeBodegaInstallRecords(input: unknown): BodegaInstallReco
 }
 
 export function getBodegaAssetIcon(assetType: BodegaAssetType): string {
-  if (assetType === "decoration") return "🪴";
-  if (assetType === "game") return "🎮";
-  if (assetType === "miniapp") return "🛠️";
-  if (assetType === "link") return "🔗";
-  return "🖼️";
+  return getBodegaAssetGroup(assetType) === "art" ? "🖼️" : "🛠️";
+}
+
+export function getBodegaAssetGroup(assetType: BodegaAssetType): BodegaAssetGroup {
+  if (assetType === "decoration" || assetType === "image") {
+    return "art";
+  }
+
+  return "miniapp";
+}
+
+export function getBodegaAssetGroupLabel(assetType: BodegaAssetType): string {
+  return BODEGA_ASSET_GROUP_LABELS[getBodegaAssetGroup(assetType)];
 }
 
 export function getBodegaPreviewUrl(item: BodegaCatalogItem): string | null {
@@ -207,6 +222,10 @@ export function getBodegaPreviewUrl(item: BodegaCatalogItem): string | null {
 
 export function getBodegaSummaryText(item: BodegaCatalogItem): string {
   if (item.asset_type === "decoration") {
+    const format = asString(item.content.format).toLowerCase();
+    if (format === "glb") {
+      return item.description || "3D art ready for bungalow placement.";
+    }
     return item.description || "Decor for the room.";
   }
   if (item.asset_type === "game" || item.asset_type === "miniapp") {

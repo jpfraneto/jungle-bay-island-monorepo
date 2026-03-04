@@ -429,26 +429,6 @@ async function resolveIdentity(input: {
   };
 }
 
-async function getPendingClaimNoncesTx(
-  tx: typeof db,
-  claimantWallet: string,
-  periodId: number,
-  minNonce = 0,
-): Promise<number[]> {
-  const rows = await tx<Array<{ claim_nonce: number }>>`
-    SELECT claim_nonce
-    FROM ${db(CONFIG.SCHEMA)}.claim_daily_allocations
-    WHERE claimant_wallet = ${claimantWallet}
-      AND period_id = ${periodId}
-      AND claim_nonce IS NOT NULL
-      AND claimed_at IS NULL
-      AND claim_nonce >= ${minNonce}
-    ORDER BY claim_nonce ASC
-  `;
-
-  return rows.map((row) => row.claim_nonce);
-}
-
 async function getCurrentAllocation(input: {
   identity: ResolvedIdentity;
   chain: "base" | "ethereum" | "solana";
@@ -812,6 +792,7 @@ claimsRoute.post("/claims/:chain/:ca/sign", async (c) => {
     wallet?: unknown;
     payout_wallet?: unknown;
     nonce_strategy?: unknown;
+    batch_index?: unknown;
   }>();
 
   const contextWallet = c.get("walletAddress") ?? null;
@@ -844,6 +825,15 @@ claimsRoute.post("/claims/:chain/:ca/sign", async (c) => {
       : null;
   const nonceStrategy =
     body.nonce_strategy === "single" ? "single" : "batch";
+  const parsedBatchIndex =
+    typeof body.batch_index === "number" &&
+    Number.isInteger(body.batch_index)
+      ? body.batch_index
+      : typeof body.batch_index === "string" &&
+        /^\d+$/.test(body.batch_index)
+        ? Number.parseInt(body.batch_index, 10)
+        : 0;
+  const batchIndex = Math.max(0, parsedBatchIndex);
 
   const payoutWallet = requestedPayoutWallet ?? pickDefaultPayoutWallet(identity, requesterWallet);
   if (!payoutWallet) {
@@ -1030,30 +1020,11 @@ claimsRoute.post("/claims/:chain/:ca/sign", async (c) => {
       remainingAfter = capJbm > distributedAfter ? capJbm - distributedAfter : 0n;
     }
 
-    const pendingNonces = await getPendingClaimNoncesTx(
-      trx,
-      payoutWallet,
-      periodId,
-      onchainNonce,
-    );
-    const canReuseStoredNonce = (
-      nonceStrategy === "batch" &&
-      lockedAllocation.claimant_wallet === payoutWallet &&
-      lockedAllocation.claim_nonce !== null &&
-      lockedAllocation.claim_nonce >= onchainNonce
-    );
-    const pendingIndex = canReuseStoredNonce
-      ? pendingNonces.findIndex((value) => value === lockedAllocation.claim_nonce)
-      : -1;
-    const expectedStoredNonce = pendingIndex >= 0
-      ? onchainNonce + pendingIndex
-      : null;
-    const nextReservedNonce = onchainNonce + pendingNonces.length;
+    // Nonces are derived directly from the current onchain nonce plus the caller-provided
+    // batch index so stale DB reservations cannot poison future signatures.
     const nonce = nonceStrategy === "single"
       ? onchainNonce
-      : canReuseStoredNonce && expectedStoredNonce !== null
-        ? expectedStoredNonce
-        : nextReservedNonce;
+      : onchainNonce + batchIndex;
     const amountInWei = hasReservedAmount
       ? parseNumericBigInt(lockedAllocation.amount_wei)
       : parseUnits(grantedJbm.toString(), 18);

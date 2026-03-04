@@ -120,7 +120,7 @@ export default function RewardsInboxButton() {
 
       const signedRewards: SignedReward[] = [];
 
-      for (const item of claimableItems) {
+      for (const [batchIndex, item] of claimableItems.entries()) {
         const signResponse = await fetch(
           `/api/claims/${item.chain}/${item.token_address}/sign`,
           {
@@ -130,6 +130,7 @@ export default function RewardsInboxButton() {
               wallet: address,
               payout_wallet: address,
               nonce_strategy: "batch",
+              batch_index: batchIndex,
             }),
           },
         );

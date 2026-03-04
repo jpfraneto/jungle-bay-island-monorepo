@@ -1,83 +1,21 @@
-.list {
-  display: grid;
-  gap: 8px;
-  max-height: min(420px, 46vh);
-  overflow: auto;
-  padding-right: 2px;
-}
-
-.option {
+.wrapper {
   width: 100%;
-  text-align: left;
-  display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  border-radius: 12px;
-  border: 1px solid rgba(121, 181, 138, 0.12);
-  background: rgba(7, 17, 12, 0.74);
+}
+
+.select {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid rgba(121, 181, 138, 0.18);
+  background: rgba(6, 14, 10, 0.84);
   color: var(--text-primary);
-  padding: 9px 10px;
-  cursor: pointer;
-}
-
-.optionActive {
-  border-color: rgba(109, 202, 137, 0.34);
-  background: rgba(23, 54, 33, 0.82);
-}
-
-.optionImage {
-  width: 42px;
-  height: 42px;
-  border-radius: 999px;
-  object-fit: cover;
-  border: 1px solid rgba(121, 181, 138, 0.16);
-}
-
-.optionMeta {
-  min-width: 0;
-  display: grid;
-  gap: 4px;
-}
-
-.optionMeta strong {
-  font-size: 13px;
-  line-height: 1.25;
-}
-
-.optionMeta small {
-  color: var(--text-muted);
-  font-size: 11px;
-  line-height: 1.35;
-}
-
-.optionState {
-  border-radius: 999px;
-  border: 1px solid rgba(109, 202, 137, 0.34);
-  background: rgba(46, 161, 103, 0.14);
-  color: #d9f7df;
-  padding: 4px 8px;
-  font-size: 10px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font: inherit;
+  padding: 10px 12px;
+  min-height: 40px;
 }
 
 @media (max-width: 560px) {
-  .list {
-    max-height: min(360px, 42vh);
-  }
-
-  .option {
-    grid-template-columns: 36px minmax(0, 1fr);
-  }
-
-  .optionImage {
-    width: 36px;
-    height: 36px;
-  }
-
-  .optionState {
-    grid-column: 2;
-    justify-self: start;
+  .select {
+    min-height: 38px;
+    padding: 9px 10px;
   }
 }

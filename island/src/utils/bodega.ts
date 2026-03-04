@@ -207,7 +207,7 @@ export function getBodegaPreviewUrl(item: BodegaCatalogItem): string | null {
 
 export function getBodegaSummaryText(item: BodegaCatalogItem): string {
   if (item.asset_type === "decoration") {
-    return asString(item.content.external_url) || item.description || "Decor for the room.";
+    return item.description || "Decor for the room.";
   }
   if (item.asset_type === "game" || item.asset_type === "miniapp") {
     return asString(item.content.url) || item.description || "Portable utility for a bungalow.";

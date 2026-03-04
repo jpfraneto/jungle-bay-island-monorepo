@@ -1,8 +1,10 @@
 .card {
   display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  align-items: start;
   gap: 12px;
   border: 1px solid var(--border-subtle);
-  border-radius: 18px;
+  border-radius: 16px;
   padding: 12px;
   background:
     radial-gradient(240px 140px at 12% 0%, rgba(241, 196, 15, 0.12), transparent 62%),
@@ -24,9 +26,11 @@
 }
 
 .media {
-  border-radius: 14px;
+  width: 72px;
+  min-width: 72px;
+  border-radius: 12px;
   overflow: hidden;
-  min-height: 152px;
+  min-height: 72px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   background: rgba(8, 18, 12, 0.84);
 }
@@ -34,27 +38,27 @@
 .preview {
   display: block;
   width: 100%;
-  height: 182px;
+  height: 72px;
   object-fit: cover;
 }
 
 .placeholder {
-  height: 182px;
+  height: 72px;
   display: grid;
   place-items: center;
   align-content: center;
-  gap: 8px;
+  gap: 4px;
   color: #d7ecdd;
   background:
     linear-gradient(140deg, rgba(29, 59, 39, 0.95), rgba(12, 26, 18, 0.94));
 }
 
 .assetIcon {
-  font-size: 36px;
+  font-size: 26px;
 }
 
 .placeholder small {
-  font-size: 11px;
+  font-size: 9px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-secondary);
@@ -62,7 +66,8 @@
 
 .content {
   display: grid;
-  gap: 8px;
+  gap: 6px;
+  min-width: 0;
 }
 
 .topRow {
@@ -78,8 +83,8 @@
   display: inline-flex;
   align-items: center;
   border-radius: 999px;
-  padding: 4px 8px;
-  font-size: 10px;
+  padding: 3px 7px;
+  font-size: 9px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -97,21 +102,22 @@
 
 .title {
   margin: 0;
-  font-size: 19px;
+  font-size: 16px;
   line-height: 1.2;
+  overflow-wrap: anywhere;
 }
 
 .creator {
   margin: 0;
-  font-size: 13px;
+  font-size: 12px;
   color: #94d5a8;
 }
 
 .summary {
   margin: 0;
-  min-height: 38px;
-  font-size: 13px;
-  line-height: 1.45;
+  min-height: 0;
+  font-size: 12px;
+  line-height: 1.4;
   color: var(--text-secondary);
   overflow-wrap: anywhere;
 }
@@ -145,23 +151,25 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-top: 2px;
+  flex-wrap: wrap;
 }
 
 .price {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 12px;
   color: #ffe89a;
 }
 
 .actionButton {
   border: 0;
-  border-radius: 10px;
-  padding: 10px 12px;
+  border-radius: 999px;
+  padding: 8px 12px;
   background: linear-gradient(135deg, #2e8b57 0%, #1d6f42 100%);
   color: #f4fff7;
   cursor: pointer;
   font-weight: 600;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .actionButton:disabled {
@@ -174,17 +182,77 @@
   background: rgba(70, 53, 10, 0.48);
 }
 
+.compactCard .summary {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.featureCard {
+  grid-template-columns: 1fr;
+  gap: 12px;
+  border-radius: 18px;
+}
+
+.featureCard .media {
+  width: 100%;
+  min-width: 0;
+  min-height: 152px;
+  border-radius: 14px;
+}
+
+.featureCard .preview,
+.featureCard .placeholder {
+  height: 182px;
+}
+
+.featureCard .assetIcon {
+  font-size: 36px;
+}
+
+.featureCard .placeholder {
+  gap: 8px;
+}
+
+.featureCard .placeholder small {
+  font-size: 11px;
+}
+
+.featureCard .content {
+  gap: 8px;
+}
+
+.featureCard .title {
+  font-size: 19px;
+}
+
+.featureCard .creator,
+.featureCard .summary,
+.featureCard .price {
+  font-size: 13px;
+}
+
+.featureCard .summary {
+  min-height: 38px;
+  display: block;
+}
+
 @media (max-width: 640px) {
-  .preview,
-  .placeholder {
+  .title {
+    font-size: 15px;
+  }
+
+  .featureCard .preview,
+  .featureCard .placeholder {
     height: 152px;
   }
 
-  .title {
+  .featureCard .title {
     font-size: 17px;
   }
 
-  .footer {
+  .featureCard .footer {
     flex-direction: column;
     align-items: stretch;
   }

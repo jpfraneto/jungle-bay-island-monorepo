@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { useNavigate } from "react-router-dom";
-import MiningZones from "../components/MiningZones";
 import { formatAddress, formatNumber, formatTimeAgo } from "../utils/formatters";
 import styles from "../styles/profile-page.module.css";
 
@@ -119,11 +118,7 @@ export default function ProfilePage() {
   const [isLinksLoading, setIsLinksLoading] = useState(false);
   const [linksError, setLinksError] = useState<string | null>(null);
   const [isLinkPanelOpen, setIsLinkPanelOpen] = useState(false);
-  const [linkMode, setLinkMode] = useState<"connected" | "manual">("connected");
   const [selectedLinkedWallet, setSelectedLinkedWallet] = useState("");
-  const [manualLinkedWallet, setManualLinkedWallet] = useState("");
-  const [manualSignature, setManualSignature] = useState("");
-  const [linkTimestamp, setLinkTimestamp] = useState(() => Date.now());
   const [linkStatus, setLinkStatus] = useState<string | null>(null);
   const [linkError, setLinkError] = useState<string | null>(null);
   const [isLinking, setIsLinking] = useState(false);
@@ -142,15 +137,6 @@ export default function ProfilePage() {
       ),
     [walletAddress, wallets],
   );
-
-  const activeLinkTarget =
-    linkMode === "manual"
-      ? manualLinkedWallet.trim()
-      : selectedLinkedWallet.trim();
-  const linkMessage =
-    walletAddress && activeLinkTarget
-      ? buildLinkMessage(walletAddress, activeLinkTarget, linkTimestamp)
-      : "";
 
   const fetchLinkedWallets = useCallback(async () => {
     if (!walletAddress) {
@@ -256,11 +242,23 @@ export default function ProfilePage() {
   }, [authenticated, fetchLinkedWallets, walletAddress]);
 
   useEffect(() => {
-    if (!isLinkPanelOpen || linkMode !== "connected") return;
-    if (!selectedLinkedWallet && connectedSecondaryWallets[0]) {
+    if (!isLinkPanelOpen) return;
+
+    if (connectedSecondaryWallets.length === 0) {
+      if (selectedLinkedWallet) {
+        setSelectedLinkedWallet("");
+      }
+      return;
+    }
+
+    const isCurrentSelectionAvailable = connectedSecondaryWallets.some(
+      (wallet) => wallet.address.toLowerCase() === selectedLinkedWallet.toLowerCase(),
+    );
+
+    if (!isCurrentSelectionAvailable) {
       setSelectedLinkedWallet(connectedSecondaryWallets[0].address);
     }
-  }, [connectedSecondaryWallets, isLinkPanelOpen, linkMode, selectedLinkedWallet]);
+  }, [connectedSecondaryWallets, isLinkPanelOpen, selectedLinkedWallet]);
 
   if (!authenticated) {
     return (
@@ -295,13 +293,10 @@ export default function ProfilePage() {
       return;
     }
 
-    const linkedWallet =
-      linkMode === "manual"
-        ? manualLinkedWallet.trim()
-        : selectedLinkedWallet.trim();
+    const linkedWallet = selectedLinkedWallet.trim();
 
     if (!linkedWallet) {
-      setLinkError("Choose or enter a wallet to link.");
+      setLinkError("Connect the wallet you want to link first, then select it here.");
       return;
     }
 
@@ -311,35 +306,27 @@ export default function ProfilePage() {
 
     try {
       const timestamp = Date.now();
-      setLinkTimestamp(timestamp);
       const message = buildLinkMessage(walletAddress, linkedWallet, timestamp);
-      let signature = manualSignature.trim();
 
-      if (linkMode === "connected") {
-        const candidate = connectedSecondaryWallets.find(
-          (wallet) => wallet.address.toLowerCase() === linkedWallet.toLowerCase(),
+      const candidate = connectedSecondaryWallets.find(
+        (wallet) => wallet.address.toLowerCase() === linkedWallet.toLowerCase(),
+      );
+
+      if (!candidate) {
+        throw new Error(
+          "Connect the wallet you want to link first, then try again.",
         );
+      }
 
-        if (!candidate) {
-          throw new Error(
-            "Connect the wallet you want to link first, then try again.",
-          );
-        }
+      const provider =
+        (await candidate.getEthereumProvider()) as EthereumRequestProvider;
+      const signed = await provider.request({
+        method: "personal_sign",
+        params: [message, linkedWallet],
+      });
 
-        const provider =
-          (await candidate.getEthereumProvider()) as EthereumRequestProvider;
-        const signed = await provider.request({
-          method: "personal_sign",
-          params: [message, linkedWallet],
-        });
-
-        if (typeof signed !== "string" || signed.trim().length === 0) {
-          throw new Error("Wallet signature was not returned.");
-        }
-
-        signature = signed;
-      } else if (!signature) {
-        throw new Error("Paste the signature produced by the wallet you are linking.");
+      if (typeof signed !== "string" || signed.trim().length === 0) {
+        throw new Error("Wallet signature was not returned.");
       }
 
       const headers: Record<string, string> = {
@@ -355,7 +342,7 @@ export default function ProfilePage() {
         headers,
         body: JSON.stringify({
           linked_wallet: linkedWallet,
-          signature,
+          signature: signed,
           message,
         }),
       });
@@ -375,8 +362,6 @@ export default function ProfilePage() {
         throw new Error(apiError ?? `Request failed (${response.status})`);
       }
 
-      setManualLinkedWallet("");
-      setManualSignature("");
       setSelectedLinkedWallet("");
       setIsLinkPanelOpen(false);
       setLinkStatus("Linked wallet added to your island identity.");
@@ -491,10 +476,9 @@ export default function ProfilePage() {
                 setIsLinkPanelOpen((current) => !current);
                 setLinkStatus(null);
                 setLinkError(null);
-                setLinkTimestamp(Date.now());
               }}
             >
-              {isLinkPanelOpen ? "Close" : "+ Link another wallet"}
+              {isLinkPanelOpen ? "Close" : "Link wallet"}
             </button>
           </div>
 
@@ -503,102 +487,38 @@ export default function ProfilePage() {
 
           {isLinkPanelOpen ? (
             <div className={styles.linkComposer}>
-              <div className={styles.modeRow}>
-                <button
-                  type="button"
-                  className={`${styles.modeButton} ${
-                    linkMode === "connected" ? styles.modeButtonActive : ""
-                  }`}
-                  onClick={() => {
-                    setLinkMode("connected");
-                    setLinkError(null);
-                    setLinkTimestamp(Date.now());
-                  }}
-                >
-                  Connected wallet
-                </button>
-                <button
-                  type="button"
-                  className={`${styles.modeButton} ${
-                    linkMode === "manual" ? styles.modeButtonActive : ""
-                  }`}
-                  onClick={() => {
-                    setLinkMode("manual");
-                    setLinkError(null);
-                    setLinkTimestamp(Date.now());
-                  }}
-                >
-                  Manual proof
-                </button>
+              <div className={styles.composerGrid}>
+                <label className={styles.field}>
+                  Wallet to link
+                  <select
+                    value={selectedLinkedWallet}
+                    onChange={(event) => {
+                      setSelectedLinkedWallet(event.target.value);
+                      setLinkError(null);
+                    }}
+                  >
+                    <option value="">Choose a connected wallet</option>
+                    {connectedSecondaryWallets.map((wallet) => (
+                      <option key={wallet.address} value={wallet.address}>
+                        {wallet.address}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className={styles.inlineActions}>
+                  <button
+                    type="button"
+                    className={styles.secondaryButton}
+                    onClick={() => connectWallet({ walletChainType: "ethereum-only" })}
+                  >
+                    Connect another wallet
+                  </button>
+                </div>
               </div>
 
-              {linkMode === "connected" ? (
-                <div className={styles.composerGrid}>
-                  <label className={styles.field}>
-                    Wallet to link
-                    <select
-                      value={selectedLinkedWallet}
-                      onChange={(event) => {
-                        setSelectedLinkedWallet(event.target.value);
-                        setLinkTimestamp(Date.now());
-                      }}
-                    >
-                      <option value="">Choose a connected wallet</option>
-                      {connectedSecondaryWallets.map((wallet) => (
-                        <option key={wallet.address} value={wallet.address}>
-                          {wallet.address}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <div className={styles.inlineActions}>
-                    <button
-                      type="button"
-                      className={styles.secondaryButton}
-                      onClick={() => connectWallet({ walletChainType: "ethereum-only" })}
-                    >
-                      Connect another wallet
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className={styles.composerGrid}>
-                  <label className={styles.field}>
-                    Linked wallet address
-                    <input
-                      value={manualLinkedWallet}
-                      onChange={(event) => {
-                        setManualLinkedWallet(event.target.value);
-                        setLinkTimestamp(Date.now());
-                      }}
-                      placeholder="0x... or Solana address"
-                    />
-                  </label>
-                  <label className={styles.field}>
-                    Signature
-                    <textarea
-                      value={manualSignature}
-                      onChange={(event) => setManualSignature(event.target.value)}
-                      rows={3}
-                      placeholder="Paste the signature produced by the linked wallet"
-                    />
-                  </label>
-                </div>
-              )}
-
-              <label className={styles.field}>
-                Verification message
-                <textarea
-                  value={linkMessage}
-                  readOnly
-                  rows={3}
-                />
-                <small>
-                  {linkMode === "connected"
-                    ? "This will be signed by the linked wallet with no transaction."
-                    : "Sign this message in the wallet you are linking, then paste the signature above."}
-                </small>
-              </label>
+              <p className={styles.helperCopy}>
+                The wallet you select will sign one message. No transaction is sent.
+              </p>
 
               {linkError ? <p className={styles.inlineError}>{linkError}</p> : null}
 
@@ -607,7 +527,7 @@ export default function ProfilePage() {
                   type="button"
                   className={styles.primaryButton}
                   onClick={handleLinkWallet}
-                  disabled={isLinking}
+                  disabled={isLinking || connectedSecondaryWallets.length === 0}
                 >
                   {isLinking ? "Linking..." : "Link wallet"}
                 </button>
@@ -663,8 +583,6 @@ export default function ProfilePage() {
             </div>
           </div>
         </section>
-
-        <MiningZones heat={islandHeat} />
 
         <div className={styles.actions}>
           <button

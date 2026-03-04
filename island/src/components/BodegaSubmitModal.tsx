@@ -43,7 +43,6 @@ type DraftFieldKey =
   | "title"
   | "price"
   | "previewUrl"
-  | "externalUrl"
   | "url"
   | "imageUrl";
 
@@ -131,7 +130,6 @@ function getFirstInvalidField(
   const orderedFields: DraftFieldKey[] = [
     "title",
     "previewUrl",
-    "externalUrl",
     "url",
     "imageUrl",
     "price",
@@ -148,7 +146,6 @@ function buildContentPayload(input: {
   title: string;
   description: string;
   previewUrl: string;
-  externalUrl: string;
   url: string;
   caption: string;
   imageUrl: string;
@@ -156,7 +153,7 @@ function buildContentPayload(input: {
   if (input.assetType === "decoration") {
     return {
       preview_url: input.previewUrl,
-      external_url: input.externalUrl,
+      external_url: input.previewUrl,
       format: "image",
     };
   }
@@ -190,7 +187,6 @@ function validateDraft(input: {
   title: string;
   price: string;
   previewUrl: string;
-  externalUrl: string;
   url: string;
   imageUrl: string;
 }): {
@@ -211,10 +207,6 @@ function validateDraft(input: {
     if (!isHttpUrl(input.previewUrl)) {
       fieldErrors.previewUrl =
         "Decoration preview image must be a valid http(s) URL.";
-    }
-    if (!isHttpUrl(input.externalUrl)) {
-      fieldErrors.externalUrl =
-        "Decoration external URL must be a valid http(s) URL.";
     }
   }
 
@@ -263,7 +255,6 @@ export default function BodegaSubmitModal({
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("50000");
   const [previewUrl, setPreviewUrl] = useState("");
-  const [externalUrl, setExternalUrl] = useState("");
   const [url, setUrl] = useState("");
   const [caption, setCaption] = useState("");
   const [imageUrl, setImageUrl] = useState("");
@@ -283,7 +274,6 @@ export default function BodegaSubmitModal({
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const priceInputRef = useRef<HTMLInputElement | null>(null);
   const previewUrlInputRef = useRef<HTMLInputElement | null>(null);
-  const externalUrlInputRef = useRef<HTMLInputElement | null>(null);
   const urlInputRef = useRef<HTMLInputElement | null>(null);
   const imageUrlInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -296,7 +286,6 @@ export default function BodegaSubmitModal({
     setDescription("");
     setPrice("50000");
     setPreviewUrl("");
-    setExternalUrl("");
     setUrl("");
     setCaption("");
     setImageUrl("");
@@ -324,6 +313,21 @@ export default function BodegaSubmitModal({
   }, [bungalowOptions, defaultOriginBungalow, isWalletScoped, open]);
 
   useEffect(() => {
+    if (!open || typeof document === "undefined") return;
+
+    const previousRootOverflow = document.documentElement.style.overflow;
+    const previousBodyOverflow = document.body.style.overflow;
+
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.documentElement.style.overflow = previousRootOverflow;
+      document.body.style.overflow = previousBodyOverflow;
+    };
+  }, [open]);
+
+  useEffect(() => {
     writePendingSubmissionPayment(pendingPayment);
   }, [pendingPayment]);
 
@@ -345,7 +349,6 @@ export default function BodegaSubmitModal({
     if (field === "title") return titleInputRef.current;
     if (field === "price") return priceInputRef.current;
     if (field === "previewUrl") return previewUrlInputRef.current;
-    if (field === "externalUrl") return externalUrlInputRef.current;
     if (field === "url") return urlInputRef.current;
     if (field === "imageUrl") return imageUrlInputRef.current;
     return null;
@@ -386,7 +389,6 @@ export default function BodegaSubmitModal({
       title,
       description,
       previewUrl,
-      externalUrl,
       url,
       caption,
       imageUrl,
@@ -418,7 +420,6 @@ export default function BodegaSubmitModal({
     caption,
     creatorWallet,
     description,
-    externalUrl,
     imageUrl,
     previewUrl,
     price,
@@ -434,7 +435,6 @@ export default function BodegaSubmitModal({
         description: description.trim(),
         price: price.trim(),
         previewUrl: previewUrl.trim(),
-        externalUrl: externalUrl.trim(),
         url: url.trim(),
         imageUrl: imageUrl.trim(),
         caption: caption.trim(),
@@ -444,7 +444,6 @@ export default function BodegaSubmitModal({
       assetType,
       caption,
       description,
-      externalUrl,
       imageUrl,
       originKey,
       previewUrl,
@@ -469,7 +468,6 @@ export default function BodegaSubmitModal({
       title,
       price,
       previewUrl,
-      externalUrl,
       url,
       imageUrl,
     });
@@ -495,7 +493,6 @@ export default function BodegaSubmitModal({
       title,
       price,
       previewUrl,
-      externalUrl,
       url,
       imageUrl,
     });
@@ -642,6 +639,7 @@ export default function BodegaSubmitModal({
               item={submittedItem}
               originBungalow={selectedOrigin}
               actionLabel="Just Submitted"
+              compact={false}
             />
             <div className={styles.successActions}>
               <button
@@ -708,7 +706,7 @@ export default function BodegaSubmitModal({
             {assetType === "decoration" ? (
               <>
                 <label className={styles.field}>
-                  Preview image URL
+                  Decoration image URL
                   <input
                     ref={previewUrlInputRef}
                     value={previewUrl}
@@ -724,24 +722,10 @@ export default function BodegaSubmitModal({
                       {fieldErrors.previewUrl}
                     </span>
                   ) : null}
-                </label>
-                <label className={styles.field}>
-                  External URL
-                  <input
-                    ref={externalUrlInputRef}
-                    value={externalUrl}
-                    onChange={(event) => {
-                      setExternalUrl(event.target.value);
-                      clearFieldError("externalUrl");
-                    }}
-                    placeholder="https://..."
-                    aria-invalid={Boolean(fieldErrors.externalUrl)}
-                  />
-                  {fieldErrors.externalUrl ? (
-                    <span className={styles.fieldErrorText}>
-                      {fieldErrors.externalUrl}
-                    </span>
-                  ) : null}
+                  <small>
+                    This single image URL now powers both the listing preview and
+                    the installed decoration.
+                  </small>
                 </label>
                 <div className={styles.lockedField}>
                   <span>Accepted format</span>
@@ -892,6 +876,7 @@ export default function BodegaSubmitModal({
               item={draftItem}
               originBungalow={selectedOrigin}
               actionLabel="Preview"
+              compact={false}
             />
             <div className={styles.feeCard}>
               <strong>

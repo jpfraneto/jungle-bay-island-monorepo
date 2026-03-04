@@ -95,11 +95,37 @@ function walletFromClaims(payload: JWTPayload): string | null {
 
 async function verifyPrivyToken(token: string): Promise<{ walletAddress: string; payload: JWTPayload }> {
   const verificationKey = await getVerificationKey()
-  const { payload } = await jwtVerify(token, verificationKey, {
+  const verificationOptions = {
     algorithms: ['ES256'],
     audience: CONFIG.PRIVY_APP_ID,
-    issuer: 'privy.io',
-  })
+  }
+  const issuerCandidates = [
+    'privy.io',
+    `privy.io/${CONFIG.PRIVY_APP_ID}`,
+    'https://auth.privy.io',
+    `https://auth.privy.io/${CONFIG.PRIVY_APP_ID}`,
+    `https://auth.privy.io/api/v1/apps/${CONFIG.PRIVY_APP_ID}`,
+  ]
+
+  let payload: JWTPayload | null = null
+
+  for (const issuer of issuerCandidates) {
+    try {
+      const verified = await jwtVerify(token, verificationKey, {
+        ...verificationOptions,
+        issuer,
+      })
+      payload = verified.payload
+      break
+    } catch {
+      // Fall through so older and newer issuer formats can both work.
+    }
+  }
+
+  if (!payload) {
+    const verified = await jwtVerify(token, verificationKey, verificationOptions)
+    payload = verified.payload
+  }
 
   const walletAddress = walletFromClaims(payload)
   if (!walletAddress) {

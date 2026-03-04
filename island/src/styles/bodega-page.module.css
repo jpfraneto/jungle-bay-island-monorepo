@@ -72,29 +72,36 @@
 
 .filterBar {
   display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
+  justify-content: flex-start;
 }
 
-.filterPill {
+.filterField {
+  display: grid;
+  gap: 6px;
+  min-width: min(280px, 100%);
+}
+
+.filterField span {
+  color: var(--text-muted);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.filterField select {
+  width: min(320px, 100%);
+  border-radius: 12px;
   border: 1px solid rgba(121, 181, 138, 0.14);
-  border-radius: 999px;
-  padding: 9px 13px;
-  background: rgba(11, 25, 17, 0.75);
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-
-.filterPillActive {
-  background: rgba(46, 161, 103, 0.18);
-  border-color: rgba(109, 202, 137, 0.34);
-  color: #d9f7df;
+  padding: 10px 12px;
+  background: rgba(11, 25, 17, 0.78);
+  color: var(--text-primary);
+  font: inherit;
 }
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 14px;
+  grid-template-columns: 1fr;
+  gap: 10px;
 }
 
 .statusCard {
@@ -117,13 +124,13 @@
 
 .loadingGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 14px;
+  grid-template-columns: 1fr;
+  gap: 10px;
 }
 
 .skeletonCard {
-  min-height: 360px;
-  border-radius: 18px;
+  min-height: 96px;
+  border-radius: 16px;
   border: 1px solid rgba(121, 181, 138, 0.08);
   background: linear-gradient(
     90deg,
@@ -184,16 +191,17 @@
     padding: 14px;
   }
 
-  .filterBar {
-    gap: 8px;
-  }
-
-  .filterPill,
   .submitButton,
   .retryButton {
     width: 100%;
     justify-content: center;
     text-align: center;
+  }
+
+  .filterField,
+  .filterField select {
+    width: 100%;
+    min-width: 0;
   }
 
   .heroActions {

@@ -135,19 +135,30 @@ export default function ClaimPanel({
         throw new Error("Invalid claim payload from backend");
       }
 
+      const claimArgs = [
+        signData.escrow,
+        signData.payout_wallet,
+        BigInt(amountWei),
+        signData.bungalowId,
+        BigInt(signData.periodId),
+        BigInt(signData.deadline),
+        signData.signature,
+      ] as const;
+
+      setStatus("Checking claim...");
+      await publicClient.simulateContract({
+        address: CLAIM_CONTRACT_ADDRESS,
+        abi: claimEscrowAbi,
+        functionName: "claim",
+        args: claimArgs,
+        account: address,
+      });
+
       const hash = await walletClient.writeContract({
         address: CLAIM_CONTRACT_ADDRESS,
         abi: claimEscrowAbi,
         functionName: "claim",
-        args: [
-          signData.escrow,
-          signData.payout_wallet,
-          BigInt(amountWei),
-          signData.bungalowId,
-          BigInt(signData.periodId),
-          BigInt(signData.deadline),
-          signData.signature,
-        ],
+        args: claimArgs,
         account: address,
       });
 

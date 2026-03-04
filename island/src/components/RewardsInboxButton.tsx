@@ -171,7 +171,7 @@ export default function RewardsInboxButton() {
             headers,
             body: JSON.stringify({
               wallet: address,
-              payout_wallet: address,
+              payout_wallet: reward.payload.payoutWallet,
             }),
           },
         );
@@ -192,19 +192,21 @@ export default function RewardsInboxButton() {
         setStatus("Your wallet rejected one-click batch. Claiming one by one...");
 
         for (const reward of signedRewards) {
+          const claimArgs = [
+            reward.payload.escrow,
+            reward.payload.payoutWallet,
+            reward.payload.amountWei,
+            reward.payload.bungalowId,
+            reward.payload.periodId,
+            reward.payload.deadline,
+            reward.payload.signature,
+          ] as const;
+
           const hash = await walletClient.writeContract({
             address: CLAIM_CONTRACT_ADDRESS,
             abi: claimEscrowAbi,
             functionName: "claim",
-            args: [
-              reward.payload.escrow,
-              reward.payload.payoutWallet,
-              reward.payload.amountWei,
-              reward.payload.bungalowId,
-              reward.payload.periodId,
-              reward.payload.deadline,
-              reward.payload.signature,
-            ],
+            args: claimArgs,
             account: address,
           });
 
@@ -216,6 +218,29 @@ export default function RewardsInboxButton() {
           await confirmReward(reward);
         }
       };
+
+      if (!publicClient) {
+        throw new Error("Missing Base public client");
+      }
+
+      setStatus("Checking claims...");
+      for (const reward of signedRewards) {
+        await publicClient.simulateContract({
+          address: CLAIM_CONTRACT_ADDRESS,
+          abi: claimEscrowAbi,
+          functionName: "claim",
+          args: [
+            reward.payload.escrow,
+            reward.payload.payoutWallet,
+            reward.payload.amountWei,
+            reward.payload.bungalowId,
+            reward.payload.periodId,
+            reward.payload.deadline,
+            reward.payload.signature,
+          ],
+          account: address,
+        });
+      }
 
       let bundleId: string;
       try {

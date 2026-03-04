@@ -18,6 +18,40 @@ export default function ChangelogPage() {
 
       <article className={styles.entry}>
         <div className={styles.entryHeader}>
+          <span className={styles.date}>March 4, 2026</span>
+          <h2 className={styles.heading}>Mobile Bodega Cleanup And Safer Wallet Flows</h2>
+        </div>
+        <p>
+          The Bodega and profile flows were tightened up for smaller screens,
+          cleaner wallet management, and less avoidable claim failure.
+        </p>
+        <ul className={styles.list}>
+          <li>
+            Bodega submit and install modals now keep scroll contained on the
+            overlay instead of fighting the page behind them on mobile.
+          </li>
+          <li>
+            Bodega listing filters now use a compact select control, and the
+            listing rows were flattened so both the catalog and bungalow shelves
+            use less vertical space.
+          </li>
+          <li>
+            Decoration submission now uses one image URL instead of separate
+            preview and external URL fields.
+          </li>
+          <li>
+            Profile wallet linking now only uses connected-wallet signing, while
+            Mining Zones moved out of the profile into its own drawer-linked page.
+          </li>
+          <li>
+            Reward claims now run a contract preflight check before opening the
+            wallet, so obviously failing claim attempts are blocked earlier.
+          </li>
+        </ul>
+      </article>
+
+      <article className={styles.entry}>
+        <div className={styles.entryHeader}>
           <span className={styles.date}>March 3, 2026</span>
           <h2 className={styles.heading}>Bodega Submission Fees Are Now Server-Recorded</h2>
         </div>

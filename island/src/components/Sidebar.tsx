@@ -67,6 +67,17 @@ export default function Sidebar({
             <span>📝</span>
             <span>Changelog</span>
           </button>
+          <button
+            type="button"
+            className={styles.itemButton}
+            onClick={() => {
+              navigate("/mining-zones");
+              onClose();
+            }}
+          >
+            <span>⛏️</span>
+            <span>Mining Zones</span>
+          </button>
         </section>
 
         <section className={styles.section}>

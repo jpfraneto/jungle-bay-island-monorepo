@@ -298,25 +298,20 @@ export default function BodegaPage() {
       </div>
 
       <div className={styles.filterBar}>
-        <button
-          type="button"
-          className={`${styles.filterPill} ${filter === "all" ? styles.filterPillActive : ""}`}
-          onClick={() => setFilter("all")}
-        >
-          All
-        </button>
-        {(Object.keys(BODEGA_ASSET_LABELS) as BodegaAssetType[]).map((assetType) => (
-          <button
-            key={assetType}
-            type="button"
-            className={`${styles.filterPill} ${
-              filter === assetType ? styles.filterPillActive : ""
-            }`}
-            onClick={() => setFilter(assetType)}
+        <label className={styles.filterField}>
+          <span>Filter</span>
+          <select
+            value={filter}
+            onChange={(event) => setFilter(event.target.value as AssetFilter)}
           >
-            {BODEGA_ASSET_LABELS[assetType]}
-          </button>
-        ))}
+            <option value="all">All listings</option>
+            {(Object.keys(BODEGA_ASSET_LABELS) as BodegaAssetType[]).map((assetType) => (
+              <option key={assetType} value={assetType}>
+                {BODEGA_ASSET_LABELS[assetType]}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       {error && items.length === 0 ? (

@@ -6,12 +6,17 @@
   place-items: center;
   padding: 16px;
   background: rgba(2, 8, 4, 0.76);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .modal {
   width: min(640px, 100%);
+  max-height: min(92dvh, 760px);
   display: grid;
   gap: 14px;
+  overflow: auto;
   border-radius: 16px;
   border: 1px solid var(--border-subtle);
   padding: 16px;
@@ -183,6 +188,16 @@
 }
 
 @media (max-width: 640px) {
+  .overlay {
+    place-items: start center;
+    padding: 12px 12px calc(18px + env(safe-area-inset-bottom));
+  }
+
+  .modal {
+    max-height: none;
+    overflow: visible;
+  }
+
   .header h3 {
     font-size: 28px;
   }

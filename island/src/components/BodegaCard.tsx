@@ -19,6 +19,7 @@ interface BodegaCardProps {
   actionDisabled?: boolean;
   domId?: string;
   highlighted?: boolean;
+  compact?: boolean;
 }
 
 export default function BodegaCard({
@@ -29,6 +30,7 @@ export default function BodegaCard({
   actionDisabled = false,
   domId,
   highlighted = false,
+  compact = true,
 }: BodegaCardProps) {
   const previewUrl = getBodegaPreviewUrl(item);
   const summary = getBodegaSummaryText(item);
@@ -41,7 +43,9 @@ export default function BodegaCard({
   return (
     <article
       id={domId}
-      className={`${styles.card} ${highlighted ? styles.highlighted : ""}`}
+      className={`${styles.card} ${
+        compact ? styles.compactCard : styles.featureCard
+      } ${highlighted ? styles.highlighted : ""}`}
     >
       <div className={styles.media}>
         {previewUrl ? (

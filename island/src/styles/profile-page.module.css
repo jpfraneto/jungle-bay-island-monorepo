@@ -201,6 +201,13 @@
   line-height: 1.45;
 }
 
+.helperCopy {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
 .inlineActions {
   display: flex;
   align-items: flex-end;

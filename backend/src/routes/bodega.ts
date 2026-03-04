@@ -193,12 +193,12 @@ function normalizeBodegaContent(
 
   if (assetType === 'decoration') {
     const previewUrl = asString(content.preview_url)
-    const externalUrl = asString(content.external_url)
+    const externalUrl = asString(content.external_url) || previewUrl
     const format = asString(content.format).toLowerCase()
     if (!previewUrl || !isHttpUrl(previewUrl)) {
       throw new ApiError(400, 'invalid_content', 'decoration content.preview_url must be a valid http(s) URL')
     }
-    if (!externalUrl || !isHttpUrl(externalUrl)) {
+    if (!isHttpUrl(externalUrl)) {
       throw new ApiError(400, 'invalid_content', 'decoration content.external_url must be a valid http(s) URL')
     }
     if (!VALID_DECORATION_FORMATS.has(format)) {

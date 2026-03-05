@@ -1,0 +1,61 @@
+.page {
+  display: grid;
+  gap: 16px;
+}
+
+.introCard {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 20px;
+  border-radius: 24px;
+  border: 1px solid rgba(232, 214, 167, 0.12);
+  background:
+    radial-gradient(circle at top left, rgba(248, 191, 87, 0.16), transparent 44%),
+    linear-gradient(180deg, rgba(21, 34, 28, 0.96), rgba(10, 18, 15, 0.96));
+}
+
+.kicker {
+  margin: 0 0 6px;
+  font-size: 0.82rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #f8bf57;
+}
+
+.title {
+  margin: 0 0 8px;
+  font-size: 1.6rem;
+  color: #f6f0df;
+}
+
+.summary {
+  margin: 0;
+  max-width: 60ch;
+  color: rgba(246, 240, 223, 0.74);
+  line-height: 1.5;
+}
+
+.actionButton {
+  min-height: 48px;
+  border: 0;
+  border-radius: 14px;
+  padding: 0 18px;
+  background: linear-gradient(135deg, #ffd37a, #f8bf57);
+  color: #241b08;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+@media (max-width: 760px) {
+  .introCard {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .actionButton {
+    width: 100%;
+  }
+}

@@ -186,7 +186,6 @@ export default function BodegaInstallModal({
   const [resumeAfterLink, setResumeAfterLink] = useState(false);
   const [successBungalow, setSuccessBungalow] =
     useState<DirectoryBungalow | null>(null);
-  const [successInstallTx, setSuccessInstallTx] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open || !item) return;
@@ -219,7 +218,6 @@ export default function BodegaInstallModal({
     setShowWalletGate(false);
     setResumeAfterLink(false);
     setSuccessBungalow(null);
-    setSuccessInstallTx(null);
   }, [
     bungalowOptions,
     isWalletScoped,
@@ -369,7 +367,6 @@ export default function BodegaInstallModal({
       setPendingPayment(null);
       setStatus("Installed! Check your bungalow.");
       setSuccessBungalow(selectedBungalow);
-      setSuccessInstallTx(install.tx_hash || null);
       onInstalled?.(install, selectedBungalow);
     } catch (err) {
       const message =
@@ -463,9 +460,6 @@ export default function BodegaInstallModal({
               onClick={() => {
                 const params = new URLSearchParams();
                 params.set("chain", successBungalow.chain);
-                if (successInstallTx) {
-                  params.set("install_tx", successInstallTx);
-                }
                 navigate(
                   `/bungalow/${successBungalow.token_address}?${params.toString()}`,
                 );
@@ -484,9 +478,11 @@ export default function BodegaInstallModal({
           </section>
         ) : isWalletScoped && bungalowOptions.length === 0 ? (
           <section className={styles.emptyState}>
-            <strong>You don't own any bungalows yet.</strong>
+            <strong>No bungalow is linked to this wallet yet.</strong>
             <span>
-              Claim one on the island map, then come back to install this asset.
+              New bungalows now open through community qualification on the
+              island page. Open one there, then come back to install this
+              listing.
             </span>
             <button
               type="button"
@@ -496,7 +492,7 @@ export default function BodegaInstallModal({
                 onClose();
               }}
             >
-              Find one to claim
+              Open island
             </button>
           </section>
         ) : bungalowOptions.length === 0 ? (

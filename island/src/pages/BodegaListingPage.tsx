@@ -75,7 +75,7 @@ export default function BodegaListingPage() {
 
   const selectionNote = publicDirectoryError
     ? `Bungalow list is unavailable right now: ${publicDirectoryError}`
-    : "Choose any bungalow on the island.";
+    : "Choose any community bungalow on the island.";
 
   const loadListing = useCallback(async () => {
     if (!normalizedTxHash) {

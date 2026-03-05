@@ -662,8 +662,9 @@ export default function BodegaSubmitModal({
             <p>
               Publish one reusable listing. A one-time{" "}
               {formatJbmAmount(BODEGA_SUBMISSION_FEE)} publishing fee is charged
-              when you submit, then you earn 30% every time another bungalow
-              pays to install it.
+              when you submit, the listing goes live immediately, and you earn
+              30% every time another bungalow pays to install it. Publishing
+              currently requires at least 25 island heat.
             </p>
           </div>
           <button
@@ -935,8 +936,9 @@ export default function BodegaSubmitModal({
                 <span>Originating bungalow (optional)</span>
                 <strong>You don't own any bungalows yet.</strong>
                 <small>
-                  You can still submit without a source bungalow, or claim one
-                  first.
+                  You can still submit without a source bungalow. Bungalows are
+                  community property now, and new ones open through heat/support
+                  qualification on the island page.
                 </small>
                 <button
                   type="button"
@@ -946,7 +948,7 @@ export default function BodegaSubmitModal({
                     onClose();
                   }}
                 >
-                  Find one to claim
+                  Open island
                 </button>
               </div>
             ) : (

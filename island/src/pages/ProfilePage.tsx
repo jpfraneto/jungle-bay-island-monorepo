@@ -267,32 +267,35 @@ export default function ProfilePage() {
     let cancelled = false;
 
     void (async () => {
+      let nextStatus: string | null = null;
+      let nextError: string | null = null;
+
       try {
         const { didLinkWallet } = await waitForLinkedWalletSync(
           walletCountBeforeLink,
         );
         if (cancelled) return;
 
-        setWalletLinkStatus(
+        nextStatus =
           didLinkWallet
             ? "Wallet linked successfully."
-            : "No new wallet was linked.",
-        );
-        setWalletActionError(null);
+            : "No new wallet was linked.";
+        nextError = null;
       } catch (error) {
         if (cancelled) return;
-        setWalletActionError(
+        nextError =
           error instanceof Error
             ? error.message
-            : "Failed to sync linked wallets",
-        );
-        setWalletLinkStatus(null);
-      } finally {
-        if (cancelled) return;
-        setIsLinkingWallet(false);
-        setPendingWalletLink(false);
-        setWalletLinkModalOpened(false);
+            : "Failed to sync linked wallets";
+        nextStatus = null;
       }
+
+      if (cancelled) return;
+      setWalletLinkStatus(nextStatus);
+      setWalletActionError(nextError);
+      setIsLinkingWallet(false);
+      setPendingWalletLink(false);
+      setWalletLinkModalOpened(false);
     })();
 
     return () => {

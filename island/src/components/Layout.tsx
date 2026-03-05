@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import TopNav from "./TopNav";
@@ -12,23 +12,30 @@ export interface LayoutOutletContext {
 }
 
 export default function Layout() {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarState, setSidebarState] = useState({
+    open: false,
+    pathname: "",
+  });
   const location = useLocation();
   const { bungalows, isLoading, error } = useHomeTeam();
 
   const isIslandRoute = location.pathname === "/";
   const showSidebar = true;
-
-  useEffect(() => {
-    setSidebarOpen(false);
-  }, [location.pathname]);
+  const sidebarOpen =
+    sidebarState.open && sidebarState.pathname === location.pathname;
 
   return (
     <div className={styles.layout}>
       <TopNav
         isIslandActive={isIslandRoute}
         showSidebarToggle={showSidebar}
-        onToggleSidebar={() => setSidebarOpen((current) => !current)}
+        onToggleSidebar={() =>
+          setSidebarState((current) => ({
+            open:
+              current.pathname === location.pathname ? !current.open : true,
+            pathname: location.pathname,
+          }))
+        }
       />
 
       <div className={styles.body}>
@@ -37,7 +44,12 @@ export default function Layout() {
             bungalows={bungalows}
             isLoading={isLoading}
             isOpen={sidebarOpen}
-            onClose={() => setSidebarOpen(false)}
+            onClose={() =>
+              setSidebarState({
+                open: false,
+                pathname: location.pathname,
+              })
+            }
           />
         ) : null}
 

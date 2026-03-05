@@ -9,6 +9,7 @@ import {
 import {
   createBulletinPost,
   findTokenDeploymentsByAddress,
+  getAggregatedUserByWallets,
   getBulletinPosts,
   getBungalow,
   getBungalowOwnerRecord,
@@ -17,11 +18,16 @@ import {
   getTokenHolders,
   getTokenRegistry,
   getViewerProfile,
+  getWalletTokenBalanceRaw,
   getWalletTokenHeat,
   updateBungalowCuration,
 } from "../db/queries";
 import { optionalWalletContext, requireWalletAuth } from "../middleware/auth";
 import { clearCache, getCached, setCached } from "../services/cache";
+import {
+  COMMUNITY_POLICY,
+  getConstructionQualification,
+} from "../services/communityPolicy";
 import {
   getCanonicalProjectContext,
   getCanonicalProjectContextByIdentifier,
@@ -42,6 +48,8 @@ import type { AppEnv } from "../types";
 const bungalowRoute = new Hono<AppEnv>();
 
 bungalowRoute.use("/bungalow/*", optionalWalletContext);
+
+let communityConstructionTablesPromise: Promise<void> | null = null;
 
 function calculateTopHeatStats(values: number[]): {
   sample_size: number;
@@ -72,6 +80,204 @@ function calculateTopHeatStats(values: number[]): {
     sample_size: sampleSize,
     top_50_average: Number(mean.toFixed(4)),
     top_50_stddev: Number(stddev.toFixed(4)),
+  };
+}
+
+async function ensureCommunityConstructionTables(): Promise<void> {
+  if (!communityConstructionTablesPromise) {
+    communityConstructionTablesPromise = (async () => {
+      await db`
+        CREATE TABLE IF NOT EXISTS ${db(CONFIG.SCHEMA)}.bungalow_construction_supports (
+          id BIGSERIAL PRIMARY KEY,
+          chain TEXT NOT NULL,
+          token_address TEXT NOT NULL,
+          identity_key TEXT NOT NULL,
+          supporter_wallet TEXT NOT NULL,
+          island_heat NUMERIC NOT NULL DEFAULT 0,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          UNIQUE (chain, token_address, identity_key)
+        )
+      `;
+
+      await db`
+        CREATE INDEX IF NOT EXISTS idx_bungalow_construction_supports_token
+        ON ${db(CONFIG.SCHEMA)}.bungalow_construction_supports (chain, token_address, created_at DESC)
+      `;
+
+      await db`
+        CREATE TABLE IF NOT EXISTS ${db(CONFIG.SCHEMA)}.bungalow_construction_events (
+          id BIGSERIAL PRIMARY KEY,
+          chain TEXT NOT NULL,
+          token_address TEXT NOT NULL,
+          identity_key TEXT NOT NULL,
+          requested_by_wallet TEXT NOT NULL,
+          qualification_path TEXT NOT NULL CHECK (
+            qualification_path IN ('single_hot_wallet', 'community_support', 'jbac_shortcut')
+          ),
+          tx_hash TEXT UNIQUE NOT NULL,
+          jbm_amount NUMERIC NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `;
+
+      await db`
+        CREATE INDEX IF NOT EXISTS idx_bungalow_construction_events_token
+        ON ${db(CONFIG.SCHEMA)}.bungalow_construction_events (chain, token_address, created_at DESC)
+      `;
+    })();
+  }
+
+  await communityConstructionTablesPromise;
+}
+
+function validateTxHash(input: unknown): string {
+  const txHash = typeof input === "string" ? input.trim() : "";
+  if (!/^0x[0-9a-fA-F]{64}$/.test(txHash)) {
+    throw new ApiError(400, "invalid_tx_hash", "tx_hash must be a valid transaction hash");
+  }
+  return txHash.toLowerCase();
+}
+
+function parseWholeJbmAmount(input: unknown, fieldName: string): bigint {
+  if (typeof input === "bigint") {
+    if (input <= 0n) {
+      throw new ApiError(400, "invalid_numeric", `${fieldName} must be a positive JBM amount`);
+    }
+    return input;
+  }
+
+  if (typeof input === "number") {
+    if (!Number.isFinite(input) || !Number.isInteger(input) || input <= 0) {
+      throw new ApiError(400, "invalid_numeric", `${fieldName} must be a whole-number JBM amount`);
+    }
+    return BigInt(input);
+  }
+
+  const raw = typeof input === "string" ? input.trim() : "";
+  if (!/^\d+$/.test(raw)) {
+    throw new ApiError(400, "invalid_numeric", `${fieldName} must be a whole-number JBM amount`);
+  }
+
+  return BigInt(raw);
+}
+
+async function getIslandHeatSnapshot(wallet: string): Promise<{
+  identityKey: string;
+  islandHeat: number;
+  wallets: string[];
+  evmWallets: string[];
+  jbacBalance: bigint;
+}> {
+  const identity = await getIdentityClusterByWallet(wallet);
+  const scopedWallets = identity?.wallets.length
+    ? identity.wallets.map((entry) => entry.wallet)
+    : [wallet];
+  const evmWallets = identity?.evm_wallets ?? [];
+  const aggregated = await getAggregatedUserByWallets(scopedWallets);
+  const islandHeat = aggregated?.island_heat ?? 0;
+  const jbacBalance = await getWalletTokenBalanceRaw(
+    COMMUNITY_POLICY.jbac_shortcut_token_address,
+    evmWallets,
+  );
+
+  return {
+    identityKey: identity?.identity_key ?? `wallet:${wallet}`,
+    islandHeat,
+    wallets: scopedWallets,
+    evmWallets,
+    jbacBalance,
+  };
+}
+
+async function getConstructionSupportSnapshot(
+  chain: SupportedChain,
+  tokenAddress: string,
+  identityKey?: string | null,
+): Promise<{
+  supporter_count: number;
+  has_supported: boolean;
+}> {
+  await ensureCommunityConstructionTables();
+
+  const [countRows, existingRows] = await Promise.all([
+    db<Array<{ count: string }>>`
+      SELECT COUNT(*)::text AS count
+      FROM ${db(CONFIG.SCHEMA)}.bungalow_construction_supports
+      WHERE chain = ${chain}
+        AND token_address = ${tokenAddress}
+    `,
+    identityKey
+      ? db<Array<{ id: number }>>`
+          SELECT id
+          FROM ${db(CONFIG.SCHEMA)}.bungalow_construction_supports
+          WHERE chain = ${chain}
+            AND token_address = ${tokenAddress}
+            AND identity_key = ${identityKey}
+          LIMIT 1
+        `
+      : Promise.resolve([] as Array<{ id: number }>),
+  ]);
+
+  return {
+    supporter_count: Number(countRows[0]?.count ?? 0),
+    has_supported: existingRows.length > 0,
+  };
+}
+
+function buildCommunityQualificationResponse(input: {
+  tokenAddress: string;
+  chain: SupportedChain;
+  exists: boolean;
+  supportCount: number;
+  islandHeat?: number;
+  hasSupported?: boolean;
+  jbacBalance?: bigint;
+}) {
+  const qualificationPath =
+    input.islandHeat === undefined || input.jbacBalance === undefined
+      ? null
+      : getConstructionQualification({
+          islandHeat: input.islandHeat,
+          supportCount: input.supportCount,
+          jbacBalance: input.jbacBalance,
+        });
+
+  return {
+    token_address: input.tokenAddress,
+    chain: input.chain,
+    exists: input.exists,
+    construction_fee_jbm:
+      COMMUNITY_POLICY.bungalow_construction_fee_jbm.toString(),
+    thresholds: {
+      submit_heat_min: COMMUNITY_POLICY.bungalow_submit_min_heat,
+      support_heat_min: COMMUNITY_POLICY.bungalow_support_min_heat,
+      single_builder_heat_min:
+        COMMUNITY_POLICY.bungalow_single_builder_min_heat,
+      required_supporters: COMMUNITY_POLICY.bungalow_required_supporters,
+      jbac_shortcut_min_balance:
+        COMMUNITY_POLICY.jbac_shortcut_min_balance.toString(),
+      steward_heat_min: COMMUNITY_POLICY.bungalow_steward_min_heat,
+    },
+    support: {
+      supporter_count: input.supportCount,
+      required_supporters: COMMUNITY_POLICY.bungalow_required_supporters,
+      has_supported: Boolean(input.hasSupported),
+      community_support_ready:
+        input.supportCount >= COMMUNITY_POLICY.bungalow_required_supporters,
+    },
+    viewer: input.islandHeat === undefined
+      ? null
+      : {
+          island_heat: Number(input.islandHeat.toFixed(2)),
+          jbac_balance: (input.jbacBalance ?? 0n).toString(),
+          has_supported: Boolean(input.hasSupported),
+          can_submit_to_bungalow:
+            input.islandHeat >= COMMUNITY_POLICY.bungalow_submit_min_heat,
+          can_support:
+            input.islandHeat >= COMMUNITY_POLICY.bungalow_support_min_heat,
+          qualifies_to_construct_now: qualificationPath !== null,
+          qualification_path: qualificationPath,
+        },
   };
 }
 
@@ -465,6 +671,326 @@ bungalowRoute.get("/bungalow/resolve/:chain/:ca", async (c) => {
   });
 });
 
+bungalowRoute.get("/bungalow/:chain/:ca/qualification", async (c) => {
+  const chain = toSupportedChain(c.req.param("chain"));
+  if (!chain) {
+    throw new ApiError(400, "invalid_chain", "Invalid chain");
+  }
+
+  const tokenAddress = normalizeAddress(c.req.param("ca"), chain);
+  if (!tokenAddress) {
+    throw new ApiError(400, "invalid_token", "Invalid token address");
+  }
+
+  const projectContext = await getCanonicalProjectContext(chain, tokenAddress);
+  const supportDeployment = projectContext.primaryDeployment;
+  const viewerWallet = c.get("walletAddress") ?? null;
+  const [bungalow, tokenRegistry, fallbackMetadata, supportSnapshot, viewerSnapshot] =
+    await Promise.all([
+      getBungalow(supportDeployment.token_address, supportDeployment.chain),
+      getTokenRegistry(supportDeployment.token_address, supportDeployment.chain),
+      resolveTokenMetadata(
+        supportDeployment.token_address,
+        supportDeployment.chain,
+      ).catch(() => null),
+      getConstructionSupportSnapshot(
+        supportDeployment.chain,
+        supportDeployment.token_address,
+        null,
+      ),
+      viewerWallet ? getIslandHeatSnapshot(viewerWallet) : Promise.resolve(null),
+    ]);
+
+  const exists = Boolean(
+    bungalow?.is_claimed || bungalow?.verified_admin || bungalow?.current_owner,
+  );
+  const viewerSupport = viewerSnapshot
+    ? await getConstructionSupportSnapshot(
+        supportDeployment.chain,
+        supportDeployment.token_address,
+        viewerSnapshot.identityKey,
+      )
+    : null;
+
+  return c.json({
+    ...buildCommunityQualificationResponse({
+      tokenAddress: supportDeployment.token_address,
+      chain: supportDeployment.chain,
+      exists,
+      supportCount: supportSnapshot.supporter_count,
+      islandHeat: viewerSnapshot?.islandHeat,
+      hasSupported: viewerSupport?.has_supported,
+      jbacBalance: viewerSnapshot?.jbacBalance,
+    }),
+    token: {
+      name:
+        bungalow?.name ??
+        tokenRegistry?.name ??
+        fallbackMetadata?.name ??
+        null,
+      symbol:
+        bungalow?.symbol ??
+        tokenRegistry?.symbol ??
+        fallbackMetadata?.symbol ??
+        null,
+      image_url:
+        bungalow?.image_url ??
+        fallbackMetadata?.image_url ??
+        null,
+    },
+    canonical_path: canonicalPathFor({
+      slug: projectContext.project?.slug ?? null,
+      tokenAddress: supportDeployment.token_address,
+    }),
+  });
+});
+
+bungalowRoute.post("/bungalow/:chain/:ca/support", requireWalletAuth, async (c) => {
+  await ensureCommunityConstructionTables();
+
+  const chain = toSupportedChain(c.req.param("chain"));
+  if (!chain) {
+    throw new ApiError(400, "invalid_chain", "Invalid chain");
+  }
+
+  const tokenAddress = normalizeAddress(c.req.param("ca"), chain);
+  const wallet = c.get("walletAddress");
+  if (!tokenAddress || !wallet) {
+    throw new ApiError(400, "invalid_token", "Invalid token address");
+  }
+
+  const projectContext = await getCanonicalProjectContext(chain, tokenAddress);
+  const supportDeployment = projectContext.primaryDeployment;
+  const bungalow = await getBungalow(
+    supportDeployment.token_address,
+    supportDeployment.chain,
+  );
+  const existingSupportSnapshot = await getConstructionSupportSnapshot(
+    supportDeployment.chain,
+    supportDeployment.token_address,
+    null,
+  );
+  const exists = Boolean(
+    bungalow?.is_claimed || bungalow?.verified_admin || bungalow?.current_owner,
+  );
+  if (exists) {
+    return c.json({
+      ...buildCommunityQualificationResponse({
+        tokenAddress: supportDeployment.token_address,
+        chain: supportDeployment.chain,
+        exists: true,
+        supportCount: existingSupportSnapshot.supporter_count,
+      }),
+      idempotent: true,
+    });
+  }
+
+  const viewerSnapshot = await getIslandHeatSnapshot(wallet);
+  if (viewerSnapshot.islandHeat < COMMUNITY_POLICY.bungalow_support_min_heat) {
+    throw new ApiError(
+      403,
+      "insufficient_heat",
+      `You need at least ${COMMUNITY_POLICY.bungalow_support_min_heat} island heat to back a new bungalow. Current heat: ${viewerSnapshot.islandHeat.toFixed(1)}`,
+    );
+  }
+
+  await db`
+    INSERT INTO ${db(CONFIG.SCHEMA)}.bungalow_construction_supports (
+      chain,
+      token_address,
+      identity_key,
+      supporter_wallet,
+      island_heat
+    )
+    VALUES (
+      ${supportDeployment.chain},
+      ${supportDeployment.token_address},
+      ${viewerSnapshot.identityKey},
+      ${wallet},
+      ${viewerSnapshot.islandHeat}
+    )
+    ON CONFLICT (chain, token_address, identity_key)
+    DO UPDATE SET
+      supporter_wallet = EXCLUDED.supporter_wallet,
+      island_heat = EXCLUDED.island_heat
+  `;
+
+  const supportSnapshot = await getConstructionSupportSnapshot(
+    supportDeployment.chain,
+    supportDeployment.token_address,
+    viewerSnapshot.identityKey,
+  );
+
+  return c.json({
+    ...buildCommunityQualificationResponse({
+      tokenAddress: supportDeployment.token_address,
+      chain: supportDeployment.chain,
+      exists: false,
+      supportCount: supportSnapshot.supporter_count,
+      islandHeat: viewerSnapshot.islandHeat,
+      hasSupported: supportSnapshot.has_supported,
+      jbacBalance: viewerSnapshot.jbacBalance,
+    }),
+    supported: true,
+  });
+});
+
+bungalowRoute.post("/bungalow/:chain/:ca/construct", requireWalletAuth, async (c) => {
+  await ensureCommunityConstructionTables();
+
+  const chain = toSupportedChain(c.req.param("chain"));
+  if (!chain) {
+    throw new ApiError(400, "invalid_chain", "Invalid chain");
+  }
+
+  const tokenAddress = normalizeAddress(c.req.param("ca"), chain);
+  const wallet = c.get("walletAddress");
+  if (!tokenAddress || !wallet) {
+    throw new ApiError(400, "invalid_token", "Invalid token address");
+  }
+
+  const projectContext = await getCanonicalProjectContext(chain, tokenAddress);
+  const storageDeployment = projectContext.primaryDeployment;
+  const existingBungalow = await getBungalow(
+    storageDeployment.token_address,
+    storageDeployment.chain,
+  );
+  const exists = Boolean(
+    existingBungalow?.is_claimed ||
+      existingBungalow?.verified_admin ||
+      existingBungalow?.current_owner,
+  );
+  if (exists) {
+    throw new ApiError(409, "already_exists", "This bungalow is already on the island");
+  }
+
+  const body = await c.req.json<{ tx_hash?: unknown; jbm_amount?: unknown }>();
+  const txHash = validateTxHash(body.tx_hash);
+  const jbmAmount = parseWholeJbmAmount(body.jbm_amount, "jbm_amount");
+  if (jbmAmount !== COMMUNITY_POLICY.bungalow_construction_fee_jbm) {
+    throw new ApiError(
+      400,
+      "invalid_construction_fee",
+      `jbm_amount must equal ${COMMUNITY_POLICY.bungalow_construction_fee_jbm.toString()} for bungalow construction`,
+    );
+  }
+
+  const duplicateRows = await db<Array<{ id: number }>>`
+    SELECT id
+    FROM ${db(CONFIG.SCHEMA)}.bungalow_construction_events
+    WHERE tx_hash = ${txHash}
+    LIMIT 1
+  `;
+  if (duplicateRows.length > 0) {
+    return c.json({
+      ok: true,
+      idempotent: true,
+      bungalow: {
+        chain: storageDeployment.chain,
+        token_address: storageDeployment.token_address,
+        canonical_path: canonicalPathFor({
+          slug: projectContext.project?.slug ?? null,
+          tokenAddress: storageDeployment.token_address,
+        }),
+      },
+    });
+  }
+
+  const viewerSnapshot = await getIslandHeatSnapshot(wallet);
+  const supportSnapshot = await getConstructionSupportSnapshot(
+    storageDeployment.chain,
+    storageDeployment.token_address,
+    viewerSnapshot.identityKey,
+  );
+  const qualificationPath = getConstructionQualification({
+    islandHeat: viewerSnapshot.islandHeat,
+    supportCount: supportSnapshot.supporter_count,
+    jbacBalance: viewerSnapshot.jbacBalance,
+  });
+  if (!qualificationPath) {
+    throw new ApiError(
+      403,
+      "not_qualified",
+      "This contract has not met the current community construction thresholds yet",
+    );
+  }
+
+  const [registry, fallbackMetadata] = await Promise.all([
+    getTokenRegistry(storageDeployment.token_address, storageDeployment.chain),
+    resolveTokenMetadata(
+      storageDeployment.token_address,
+      storageDeployment.chain,
+    ).catch(() => null),
+  ]);
+
+  await db`
+    INSERT INTO ${db(CONFIG.SCHEMA)}.bungalows (
+      token_address,
+      chain,
+      name,
+      symbol,
+      verified_admin,
+      is_claimed,
+      updated_at
+    )
+    VALUES (
+      ${storageDeployment.token_address},
+      ${storageDeployment.chain},
+      ${registry?.name ?? fallbackMetadata?.name ?? null},
+      ${registry?.symbol ?? fallbackMetadata?.symbol ?? null},
+      ${wallet},
+      TRUE,
+      NOW()
+    )
+    ON CONFLICT (token_address)
+    DO UPDATE SET
+      chain = EXCLUDED.chain,
+      name = COALESCE(EXCLUDED.name, ${db(CONFIG.SCHEMA)}.bungalows.name),
+      symbol = COALESCE(EXCLUDED.symbol, ${db(CONFIG.SCHEMA)}.bungalows.symbol),
+      verified_admin = COALESCE(${db(CONFIG.SCHEMA)}.bungalows.verified_admin, EXCLUDED.verified_admin),
+      is_claimed = TRUE,
+      updated_at = NOW()
+  `;
+
+  await db`
+    INSERT INTO ${db(CONFIG.SCHEMA)}.bungalow_construction_events (
+      chain,
+      token_address,
+      identity_key,
+      requested_by_wallet,
+      qualification_path,
+      tx_hash,
+      jbm_amount
+    )
+    VALUES (
+      ${storageDeployment.chain},
+      ${storageDeployment.token_address},
+      ${viewerSnapshot.identityKey},
+      ${wallet},
+      ${qualificationPath},
+      ${txHash},
+      ${jbmAmount.toString()}
+    )
+  `;
+
+  for (const deployment of projectContext.deployments) {
+    clearCache(`bungalow:${deployment.chain}:${deployment.token_address}`);
+  }
+
+  return c.json({
+    ok: true,
+    qualification_path: qualificationPath,
+    bungalow: {
+      chain: storageDeployment.chain,
+      token_address: storageDeployment.token_address,
+      canonical_path: canonicalPathFor({
+        slug: projectContext.project?.slug ?? null,
+        tokenAddress: storageDeployment.token_address,
+      }),
+    },
+  });
+});
+
 bungalowRoute.get("/address/:wallet/bungalows", async (c) => {
   const walletRaw = c.req.param("wallet");
   const wallet =
@@ -817,9 +1343,20 @@ bungalowRoute.put("/bungalow/:chain/:ca/curate", requireWalletAuth, async (c) =>
   const owner = ownerRecord.current_owner?.toLowerCase() ?? null;
   const admin = ownerRecord.verified_admin?.toLowerCase() ?? null;
   const caller = wallet.toLowerCase();
+  const viewerSnapshot = await getIslandHeatSnapshot(wallet);
+  const isCommunitySteward =
+    viewerSnapshot.islandHeat >= COMMUNITY_POLICY.bungalow_steward_min_heat;
 
-  if ((owner || admin) && owner !== caller && admin !== caller) {
-    throw new ApiError(403, "not_bungalow_owner", "Only the bungalow owner can curate this page");
+  if (
+    !isCommunitySteward &&
+    owner !== caller &&
+    admin !== caller
+  ) {
+    throw new ApiError(
+      403,
+      "not_bungalow_steward",
+      "Only approved community stewards can curate this page",
+    );
   }
 
   const body = await c.req.json<Record<string, unknown>>();

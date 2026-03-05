@@ -11,6 +11,7 @@ import {
   createBonusHeatEvent,
   createCatalogItem,
   getBodegaInstallsByBungalow,
+  getAggregatedUserByWallets,
   getCatalogItem,
   getCatalogItemBySubmissionTxHash,
   getCatalogItems,
@@ -20,8 +21,9 @@ import {
   getUnclaimedCreatorCredits,
   incrementInstallCount,
 } from '../db/queries'
-import { optionalWalletContext, requirePrivyAuth } from '../middleware/auth'
+import { requirePrivyAuth } from '../middleware/auth'
 import { getCanonicalProjectContext } from '../services/canonicalProjects'
+import { COMMUNITY_POLICY } from '../services/communityPolicy'
 import { ApiError } from '../services/errors'
 import type { AppEnv } from '../types'
 
@@ -30,9 +32,25 @@ const bodegaRoute = new Hono<AppEnv>()
 const REWARD_RESET_HOUR_UTC = 12
 const REWARD_RESET_OFFSET_SECONDS = REWARD_RESET_HOUR_UTC * 3600
 const BODEGA_SUBMISSION_FEE = 69_000n
-const VALID_ASSET_TYPES = new Set(['decoration', 'miniapp', 'game', 'link', 'image'])
+const ITEM_PRICES: Record<'link' | 'frame' | 'image' | 'portal', bigint> = {
+  link: 69_000n,
+  frame: 50_000n,
+  image: 250_000n,
+  portal: 1_000_000n,
+}
+const VALID_ASSET_TYPES = new Set([
+  'decoration',
+  'miniapp',
+  'game',
+  'link',
+  'image',
+  'frame',
+  'portal',
+])
 const VALID_ASSET_GROUPS = new Set(['art', 'miniapp'])
 const VALID_DECORATION_FORMATS = new Set(['image', 'glb', 'usdz'])
+
+let bodegaCatalogShapePromise: Promise<void> | null = null
 
 interface BodegaSubmitBody {
   creator_wallet?: unknown
@@ -55,6 +73,77 @@ interface BodegaInstallBody {
   installed_to_chain?: unknown
   tx_hash?: unknown
   jbm_amount?: unknown
+}
+
+interface BodegaQuickAddBody {
+  placed_by?: unknown
+  item_type?: unknown
+  content?: unknown
+  installed_to_token_address?: unknown
+  installed_to_chain?: unknown
+  tx_hash?: unknown
+  jbm_amount?: unknown
+}
+
+async function ensureBodegaCatalogShape(): Promise<void> {
+  if (!bodegaCatalogShapePromise) {
+    bodegaCatalogShapePromise = (async () => {
+      await db`
+        CREATE TABLE IF NOT EXISTS ${db(CONFIG.SCHEMA)}.bodega_catalog (
+          id SERIAL PRIMARY KEY,
+          creator_wallet TEXT NOT NULL,
+          creator_handle TEXT,
+          origin_bungalow_token_address TEXT,
+          origin_bungalow_chain TEXT,
+          asset_type TEXT NOT NULL CHECK (
+            asset_type IN (
+              'decoration',
+              'miniapp',
+              'game',
+              'link',
+              'image',
+              'frame',
+              'portal'
+            )
+          ),
+          title TEXT NOT NULL,
+          description TEXT,
+          content JSONB NOT NULL,
+          preview_url TEXT,
+          price_in_jbm NUMERIC NOT NULL,
+          install_count INTEGER NOT NULL DEFAULT 0,
+          active BOOLEAN NOT NULL DEFAULT TRUE,
+          submission_tx_hash TEXT,
+          submission_fee_jbm NUMERIC,
+          moderated_reason TEXT,
+          moderated_by TEXT,
+          moderated_at TIMESTAMPTZ,
+          created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+      `
+
+      await db.unsafe(
+        `ALTER TABLE "${CONFIG.SCHEMA}".bodega_catalog DROP CONSTRAINT IF EXISTS bodega_catalog_asset_type_check`,
+      )
+      await db.unsafe(
+        `ALTER TABLE "${CONFIG.SCHEMA}".bodega_catalog
+         ADD CONSTRAINT bodega_catalog_asset_type_check
+         CHECK (asset_type IN ('decoration', 'miniapp', 'game', 'link', 'image', 'frame', 'portal'))`,
+      )
+
+      for (const definition of [
+        'moderated_reason TEXT',
+        'moderated_by TEXT',
+        'moderated_at TIMESTAMPTZ',
+      ]) {
+        await db.unsafe(
+          `ALTER TABLE "${CONFIG.SCHEMA}".bodega_catalog ADD COLUMN IF NOT EXISTS ${definition}`,
+        )
+      }
+    })()
+  }
+
+  await bodegaCatalogShapePromise
 }
 
 /**
@@ -267,6 +356,28 @@ function normalizeBodegaContent(
     }
   }
 
+  if (assetType === 'frame') {
+    const text = asString(content.text).slice(0, 280)
+    if (!text) {
+      throw new ApiError(400, 'invalid_content', 'frame content.text is required')
+    }
+    return { text }
+  }
+
+  if (assetType === 'portal') {
+    const targetChain = asString(content.target_chain)
+    const targetCa = asString(content.target_ca)
+    const targetName = asString(content.target_name)
+    if (!targetChain || !targetCa) {
+      throw new ApiError(400, 'invalid_content', 'portal content.target_chain and content.target_ca are required')
+    }
+    return {
+      target_chain: targetChain,
+      target_ca: targetCa,
+      target_name: targetName,
+    }
+  }
+
   const imageUrl = asString(content.image_url)
   const caption = asString(content.caption)
   if (!imageUrl || !isHttpUrl(imageUrl)) {
@@ -290,6 +401,55 @@ async function getCreatorHandle(wallet: string): Promise<string | null> {
   `
 
   return rows[0]?.username ?? null
+}
+
+async function getIslandHeatForWallet(wallet: string): Promise<{
+  islandHeat: number
+  wallets: string[]
+}> {
+  const identity = await getIdentityClusterByWallet(wallet)
+  const scopedWallets = identity?.wallets.length
+    ? identity.wallets.map((entry) => entry.wallet)
+    : [wallet]
+  const aggregated = await getAggregatedUserByWallets(scopedWallets)
+
+  return {
+    islandHeat: aggregated?.island_heat ?? 0,
+    wallets: scopedWallets,
+  }
+}
+
+async function requireMinimumSubmissionHeat(wallet: string): Promise<number> {
+  const { islandHeat } = await getIslandHeatForWallet(wallet)
+  if (islandHeat < COMMUNITY_POLICY.bungalow_submit_min_heat) {
+    throw new ApiError(
+      403,
+      'insufficient_heat',
+      `You need at least ${COMMUNITY_POLICY.bungalow_submit_min_heat} island heat to publish live listings. Current heat: ${islandHeat.toFixed(1)}`,
+    )
+  }
+
+  return islandHeat
+}
+
+function getQuickAddTitle(
+  assetType: 'link' | 'frame' | 'image' | 'portal',
+  content: Record<string, unknown>,
+): string {
+  if (assetType === 'link') {
+    return asString(content.title) || 'Community link'
+  }
+
+  if (assetType === 'frame') {
+    const text = asString(content.text)
+    return text ? text.slice(0, 48) : 'Community note'
+  }
+
+  if (assetType === 'image') {
+    return asString(content.caption) || 'Wall image'
+  }
+
+  return asString(content.target_name) || 'Portal'
 }
 
 /**
@@ -424,6 +584,8 @@ async function upsertCreatorClaimAllocation(input: {
 // ── Submit ───────────────────────────────────────────────────
 
 bodegaRoute.post('/submit', requirePrivyAuth, async (c) => {
+  await ensureBodegaCatalogShape()
+
   const claims = c.get('privyClaims') as Record<string, unknown> | undefined
   const privyUserId = getPrivyUserIdFromClaims(claims)
 
@@ -442,9 +604,11 @@ bodegaRoute.post('/submit', requirePrivyAuth, async (c) => {
     throw new ApiError(401, 'wallet_not_owned', 'wallet_not_owned')
   }
 
+  await requireMinimumSubmissionHeat(creatorWallet)
+
   const assetType = asString(body.asset_type).toLowerCase()
   if (!VALID_ASSET_TYPES.has(assetType)) {
-    throw new ApiError(400, 'invalid_asset_type', 'asset_type must be one of: decoration, miniapp, game, link, image')
+    throw new ApiError(400, 'invalid_asset_type', 'asset_type must be one of: decoration, miniapp, game, link, image, frame, portal')
   }
 
   const title = asString(body.title)
@@ -497,7 +661,14 @@ bodegaRoute.post('/submit', requirePrivyAuth, async (c) => {
     creator_handle: creatorHandle,
     origin_bungalow_token_address: origin.token_address,
     origin_bungalow_chain: origin.chain,
-    asset_type: assetType as 'decoration' | 'miniapp' | 'game' | 'link' | 'image',
+    asset_type: assetType as
+      | 'decoration'
+      | 'miniapp'
+      | 'game'
+      | 'link'
+      | 'image'
+      | 'frame'
+      | 'portal',
     title,
     description: asString(body.description) || null,
     content: normalizedContent,
@@ -521,15 +692,161 @@ bodegaRoute.post('/submit', requirePrivyAuth, async (c) => {
   return c.json({ item }, 201)
 })
 
+bodegaRoute.post('/quick-add', requirePrivyAuth, async (c) => {
+  await ensureBodegaCatalogShape()
+
+  const claims = c.get('privyClaims') as Record<string, unknown> | undefined
+  const privyUserId = getPrivyUserIdFromClaims(claims)
+
+  const body = await c.req.json<BodegaQuickAddBody>()
+  const placedBy = normalizeWallet(body.placed_by) ?? c.get('walletAddress') ?? null
+  if (!placedBy) {
+    throw new ApiError(400, 'invalid_wallet', 'placed_by is required')
+  }
+
+  const ownsWallet = await userOwnsWallet(privyUserId, placedBy)
+  if (!ownsWallet) {
+    throw new ApiError(401, 'wallet_not_owned', 'wallet_not_owned')
+  }
+
+  await requireMinimumSubmissionHeat(placedBy)
+
+  const itemType = asString(body.item_type).toLowerCase() as keyof typeof ITEM_PRICES
+  if (!(itemType in ITEM_PRICES)) {
+    throw new ApiError(
+      400,
+      'invalid_item_type',
+      'item_type must be one of: link, image, frame, portal',
+    )
+  }
+
+  const installedToChain = toSupportedChain(asString(body.installed_to_chain))
+  if (!installedToChain) {
+    throw new ApiError(400, 'invalid_chain', 'installed_to_chain must be base, ethereum, or solana')
+  }
+
+  const installedToTokenAddress = normalizeAddress(
+    asString(body.installed_to_token_address),
+    installedToChain,
+  )
+  if (!installedToTokenAddress) {
+    throw new ApiError(400, 'invalid_token', 'installed_to_token_address is invalid for the selected chain')
+  }
+
+  const normalizedContent = normalizeBodegaContent(itemType, body.content)
+  const txHash = validateTxHash(body.tx_hash)
+  const jbmAmount = parseWholeJbmAmount(body.jbm_amount, 'jbm_amount')
+  const expectedAmount = ITEM_PRICES[itemType]
+  if (jbmAmount !== expectedAmount) {
+    throw new ApiError(
+      400,
+      'invalid_jbm_amount',
+      `jbm_amount must equal ${expectedAmount.toString()} for quick adds`,
+    )
+  }
+
+  const existingInstalls = await db<
+    Array<{
+      id: number
+      catalog_item_id: number
+      installed_to_token_address: string
+      installed_to_chain: string
+      installed_by_wallet: string
+      tx_hash: string
+      jbm_amount: string
+      creator_credit_jbm: string
+      credit_claimed: boolean
+      created_at: string
+    }>
+  >`
+    SELECT
+      id,
+      catalog_item_id,
+      installed_to_token_address,
+      installed_to_chain,
+      installed_by_wallet,
+      tx_hash,
+      jbm_amount::text AS jbm_amount,
+      creator_credit_jbm::text AS creator_credit_jbm,
+      credit_claimed,
+      created_at::text AS created_at
+    FROM ${db(CONFIG.SCHEMA)}.bodega_installs
+    WHERE tx_hash = ${txHash}
+    LIMIT 1
+  `
+  if (existingInstalls.length > 0) {
+    const install = existingInstalls[0]
+    const item = await getCatalogItem(install.catalog_item_id)
+    return c.json({ item, install, idempotent: true }, 200)
+  }
+
+  const storageDeployment = await getClosestBungalowDeployment(
+    installedToChain,
+    installedToTokenAddress,
+  )
+  const creatorHandle = await getCreatorHandle(placedBy)
+  const item = await createCatalogItem({
+    creator_wallet: placedBy,
+    creator_handle: creatorHandle,
+    origin_bungalow_token_address: storageDeployment.token_address,
+    origin_bungalow_chain: storageDeployment.chain,
+    asset_type: itemType,
+    title: getQuickAddTitle(itemType, normalizedContent),
+    description: null,
+    content: normalizedContent,
+    preview_url: itemType === 'image' ? asString(normalizedContent.image_url) : null,
+    price_in_jbm: expectedAmount.toString(),
+    submission_tx_hash: txHash,
+    submission_fee_jbm: null,
+  })
+
+  const install = await createBodegaInstall({
+    catalog_item_id: item.id,
+    installed_to_token_address: storageDeployment.token_address,
+    installed_to_chain: storageDeployment.chain,
+    installed_by_wallet: placedBy,
+    tx_hash: txHash,
+    jbm_amount: expectedAmount.toString(),
+  })
+
+  await incrementInstallCount(item.id)
+
+  await createBonusHeatEvent({
+    wallet: placedBy,
+    token_address: storageDeployment.token_address,
+    chain: storageDeployment.chain,
+    event_type: 'bodega_submission',
+    bonus_points: 5,
+  })
+  await createBonusHeatEvent({
+    wallet: placedBy,
+    token_address: storageDeployment.token_address,
+    chain: storageDeployment.chain,
+    event_type: 'bodega_install',
+    bonus_points: 3,
+  })
+
+  await upsertCreatorClaimAllocation({
+    creatorWallet: item.creator_wallet,
+    amountJbm: install.creator_credit_jbm,
+    chain: storageDeployment.chain,
+    tokenAddress: storageDeployment.token_address,
+  })
+
+  return c.json({ item, install }, 201)
+})
+
 // ── Catalog ─────────────────────────────────────────────────
 
 bodegaRoute.get('/catalog', async (c) => {
+  await ensureBodegaCatalogShape()
+
   const rawAssetType = asString(c.req.query('asset_type'))
   const assetType = rawAssetType ? rawAssetType.toLowerCase() : ''
   const rawAssetGroup = asString(c.req.query('asset_group'))
   const assetGroup = rawAssetGroup ? rawAssetGroup.toLowerCase() : ''
   if (assetType && !VALID_ASSET_TYPES.has(assetType)) {
-    throw new ApiError(400, 'invalid_asset_type', 'asset_type must be one of: decoration, miniapp, game, link, image')
+    throw new ApiError(400, 'invalid_asset_type', 'asset_type must be one of: decoration, miniapp, game, link, image, frame, portal')
   }
   if (assetGroup && !VALID_ASSET_GROUPS.has(assetGroup)) {
     throw new ApiError(400, 'invalid_asset_group', 'asset_group must be one of: art, miniapp')
@@ -555,12 +872,19 @@ bodegaRoute.get('/catalog', async (c) => {
   const items = await getCatalogItems(
     {
       asset_types: assetGroup === 'art'
-        ? ['decoration', 'image']
+        ? ['decoration', 'image', 'frame']
         : assetGroup === 'miniapp'
-          ? ['miniapp', 'game', 'link']
+          ? ['miniapp', 'game', 'link', 'portal']
           : undefined,
       asset_type: assetType
-        ? (assetType as 'decoration' | 'miniapp' | 'game' | 'link' | 'image')
+        ? (assetType as
+            | 'decoration'
+            | 'miniapp'
+            | 'game'
+            | 'link'
+            | 'image'
+            | 'frame'
+            | 'portal')
         : undefined,
       creator_wallet: creatorWallet ?? undefined,
       active: true,
@@ -578,6 +902,8 @@ bodegaRoute.get('/catalog', async (c) => {
 })
 
 bodegaRoute.get('/catalog/creator/:wallet', async (c) => {
+  await ensureBodegaCatalogShape()
+
   const wallet = normalizeWallet(c.req.param('wallet'))
   if (!wallet) {
     throw new ApiError(400, 'invalid_wallet', 'Invalid wallet address')
@@ -588,6 +914,8 @@ bodegaRoute.get('/catalog/creator/:wallet', async (c) => {
 })
 
 bodegaRoute.get('/catalog/:id', async (c) => {
+  await ensureBodegaCatalogShape()
+
   const id = Number.parseInt(c.req.param('id'), 10)
   if (!Number.isFinite(id) || id <= 0) {
     throw new ApiError(400, 'invalid_catalog_item', 'Catalog item id must be a positive integer')
@@ -602,6 +930,8 @@ bodegaRoute.get('/catalog/:id', async (c) => {
 })
 
 bodegaRoute.get('/catalog/tx/:tx_hash', async (c) => {
+  await ensureBodegaCatalogShape()
+
   const txHash = validateTxHash(c.req.param('tx_hash'))
   const item = await getCatalogItemBySubmissionTxHash(txHash)
   if (!item) {
@@ -614,6 +944,8 @@ bodegaRoute.get('/catalog/tx/:tx_hash', async (c) => {
 // ── Install ────────────────────────────────────────────────
 
 bodegaRoute.post('/install', requirePrivyAuth, async (c) => {
+  await ensureBodegaCatalogShape()
+
   const claims = c.get('privyClaims') as Record<string, unknown> | undefined
   const privyUserId = getPrivyUserIdFromClaims(claims)
 

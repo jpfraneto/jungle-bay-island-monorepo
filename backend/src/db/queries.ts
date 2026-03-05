@@ -347,6 +347,28 @@ export async function getWalletTokenHeats(
   }))
 }
 
+export async function getWalletTokenBalanceRaw(
+  tokenAddress: string,
+  wallets: string[],
+): Promise<bigint> {
+  const uniqueWallets = [...new Set(wallets.map((wallet) => wallet.toLowerCase()))]
+  if (uniqueWallets.length === 0) return 0n
+
+  const rows = await db<Array<{ balance_raw: string | null }>>`
+    SELECT COALESCE(SUM(balance_raw::numeric), 0)::text AS balance_raw
+    FROM ${db(CONFIG.SCHEMA)}.token_holder_heat
+    WHERE token_address = ${tokenAddress}
+      AND wallet IN ${db(uniqueWallets)}
+  `
+
+  const rawValue = rows[0]?.balance_raw ?? '0'
+  try {
+    return BigInt(rawValue)
+  } catch {
+    return 0n
+  }
+}
+
 export async function getDailyAllowanceUsed(wallet: string, date: string): Promise<number> {
   const rows = await db<{ scans_used: number }[]>`
     SELECT scans_used
@@ -1790,9 +1812,10 @@ export async function updateBungalowCuration(
 export async function getBungalowOwnerRecord(tokenAddress: string, chain: string): Promise<{
   current_owner: string | null
   verified_admin: string | null
+  is_claimed: boolean
 } | null> {
-  const rows = await db<Array<{ current_owner: string | null; verified_admin: string | null }>>`
-    SELECT current_owner, verified_admin
+  const rows = await db<Array<{ current_owner: string | null; verified_admin: string | null; is_claimed: boolean }>>`
+    SELECT current_owner, verified_admin, COALESCE(is_claimed, FALSE) AS is_claimed
     FROM ${db(CONFIG.SCHEMA)}.bungalows
     WHERE token_address = ${tokenAddress} AND chain = ${chain}
     LIMIT 1
@@ -2425,7 +2448,7 @@ export async function getCatalogItems(
       bc.created_at::text AS created_at
     FROM "${CONFIG.SCHEMA}".bodega_catalog bc
     WHERE ${where.clause}
-    ORDER BY bc.created_at DESC, bc.id DESC
+    ORDER BY bc.install_count DESC, bc.created_at DESC, bc.id DESC
     LIMIT $${limitParam}
     OFFSET $${offsetParam}`,
     [...where.params, safeLimit, safeOffset],
@@ -2482,6 +2505,44 @@ export async function deactivateCatalogItem(
   `
 
   return rows[0] ?? null
+}
+
+export async function adminDeactivateCatalogItem(input: {
+  id: number
+  reason: string
+  moderated_by: string
+}): Promise<boolean> {
+  const rows = await db<Array<{ id: number }>>`
+    UPDATE ${db(CONFIG.SCHEMA)}.bodega_catalog
+    SET
+      active = FALSE,
+      moderated_reason = ${input.reason},
+      moderated_by = ${input.moderated_by},
+      moderated_at = NOW()
+    WHERE id = ${input.id}
+    RETURNING id
+  `
+
+  return rows.length > 0
+}
+
+export async function adminDeactivateBungalowItem(input: {
+  id: number
+  reason: string
+  moderated_by: string
+}): Promise<boolean> {
+  const rows = await db<Array<{ id: number }>>`
+    UPDATE ${db(CONFIG.SCHEMA)}.bungalow_items
+    SET
+      active = FALSE,
+      moderated_reason = ${input.reason},
+      moderated_by = ${input.moderated_by},
+      moderated_at = NOW()
+    WHERE id = ${input.id}
+    RETURNING id
+  `
+
+  return rows.length > 0
 }
 
 /**
@@ -2578,7 +2639,7 @@ export async function getBodegaInstallsByBungalow(
           ELSE LOWER(bi.installed_to_token_address) = LOWER(${token_address})
         END
       )
-    ORDER BY bi.created_at DESC, bi.id DESC
+    ORDER BY bc.install_count DESC, bi.created_at DESC, bi.id DESC
   `
 
   return rows.map((row) => ({

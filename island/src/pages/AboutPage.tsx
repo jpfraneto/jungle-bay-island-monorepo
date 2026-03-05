@@ -44,8 +44,9 @@ export default function AboutPage() {
           </li>
           <li>
             <strong>Passive recognition</strong> &mdash; support is tracked in
-            the background. Heat accumulates quietly and unlocks access without
-            turning into a public contest.
+            the background. Heat accumulates quietly and unlocks publishing,
+            construction, and stewardship access without turning into a public
+            contest.
           </li>
           <li>
             <strong>Adjacency over hierarchy</strong> &mdash; growth comes from
@@ -102,8 +103,10 @@ export default function AboutPage() {
         <h2 className={styles.heading}>How It Works</h2>
         <ol className={styles.steps}>
           <li>
-            <strong>A project gets territory</strong> &mdash; the bungalow is
-            the home of the project itself, not just a contract page.
+            <strong>A project qualifies for territory</strong> &mdash; a new
+            bungalow can open through one high-heat builder, five mid-heat
+            supporters backing the same CA, or the JBAC shortcut. A
+            construction fee in JBM finalizes the opening.
           </li>
           <li>
             <strong>Assets live inside the bungalow</strong> &mdash; one
@@ -130,11 +133,28 @@ export default function AboutPage() {
           </li>
           <li>
             <strong>The Bodega closes the loop</strong> &mdash; builders can
-            publish an asset once through two clear lanes (<strong>Art</strong>{" "}
-            and <strong>Miniapps</strong>), let any bungalow install it, and
-            earn JBM when the Island reuses that work.
+            publish an asset once through the full Bodega flow, or use{" "}
+            <strong>Quick Add</strong> from inside a bungalow as the shortcut
+            lane. Both create the same live inventory, and installs now matter
+            more than pure recency.
           </li>
         </ol>
+      </article>
+
+      <article className={styles.card}>
+        <h2 className={styles.heading}>Community Property</h2>
+        <p>
+          A bungalow is no longer framed as a user-owned destination. It is a
+          community place for the project itself. People can help open it, add
+          to it, and build on it through heat-gated access, but the public
+          experience should feel universal rather than owner-gated.
+        </p>
+        <p>
+          If curation authority exists, it now leans toward stewardship and
+          emergency moderation instead of private control. Low-quality items are
+          expected to lose visibility as stronger items get installed more
+          often; obvious abuse still needs an internal kill switch.
+        </p>
       </article>
 
       <article className={styles.card}>
@@ -239,11 +259,12 @@ export default function AboutPage() {
         <h2 className={styles.heading}>Phase 1</h2>
         <p>
           Phase 1 is about making the Island feel real. The goal is not growth
-          hacking or feature completeness. The goal is to establish ground: seed
-          the first twelve home-team bungalows, make heat legible, and prove
-          that a quieter on-chain place can still feel alive. The new
-          project-asset-deployment structure is part of that same work: the
-          Island now models projects the way they actually exist.
+          hacking or feature completeness. The goal is to establish ground:
+          start with seeded bungalows, make heat legible, then let new projects
+          earn their way onto the island through the community qualification
+          paths. The new project-asset-deployment structure is part of that
+          same work: the Island now models projects the way they actually
+          exist.
         </p>
       </article>
     </section>

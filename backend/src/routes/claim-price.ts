@@ -27,7 +27,7 @@ claimPriceRoute.get('/claim-price/:chain/:ca', async (c) => {
 
   // Check if already claimed
   const owner = await getBungalowOwnerRecord(tokenAddress, chain)
-  if (owner?.current_owner) {
+  if (owner?.is_claimed || owner?.current_owner || owner?.verified_admin) {
     throw new ApiError(409, 'already_claimed', 'This bungalow has already been claimed')
   }
 

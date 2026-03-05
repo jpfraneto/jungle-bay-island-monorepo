@@ -1,11 +1,16 @@
 import { Hono } from "hono";
 import { CONFIG, db, normalizeAddress, toSupportedChain } from "../config";
-import { userOwnsWallet } from "../db/queries";
+import {
+  getAggregatedUserByWallets,
+  getIdentityClusterByWallet,
+  userOwnsWallet,
+} from "../db/queries";
 import { requirePrivyAuth } from "../middleware/auth";
 import {
   getCanonicalProjectContext,
   type CanonicalDeploymentRef,
 } from "../services/canonicalProjects";
+import { COMMUNITY_POLICY } from "../services/communityPolicy";
 import { ApiError } from "../services/errors";
 import type { AppEnv } from "../types";
 
@@ -22,12 +27,22 @@ interface BungalowItemRow {
   id: number;
   token_address: string;
   chain: string;
-  item_type: "link" | "frame" | "image" | "portal";
+  item_type:
+    | "link"
+    | "frame"
+    | "image"
+    | "portal"
+    | "decoration"
+    | "miniapp"
+    | "game";
   content: unknown;
   placed_by: string;
   placed_by_heat_degrees: string | null;
   tx_hash: string;
   jbm_amount: string;
+  source?: "legacy" | "bodega";
+  catalog_item_id?: number | null;
+  install_count?: number;
   created_at: string;
 }
 
@@ -52,9 +67,24 @@ async function ensureBungalowItemsTable(): Promise<void> {
           placed_by TEXT NOT NULL,
           tx_hash TEXT UNIQUE NOT NULL,
           jbm_amount NUMERIC NOT NULL,
+          active BOOLEAN NOT NULL DEFAULT TRUE,
+          moderated_reason TEXT,
+          moderated_by TEXT,
+          moderated_at TIMESTAMPTZ,
           created_at TIMESTAMPTZ DEFAULT NOW()
         )
       `;
+
+      for (const definition of [
+        "active BOOLEAN NOT NULL DEFAULT TRUE",
+        "moderated_reason TEXT",
+        "moderated_by TEXT",
+        "moderated_at TIMESTAMPTZ",
+      ]) {
+        await db.unsafe(
+          `ALTER TABLE "${CONFIG.SCHEMA}".bungalow_items ADD COLUMN IF NOT EXISTS ${definition}`,
+        );
+      }
 
       await db`
         CREATE INDEX IF NOT EXISTS idx_bungalow_items_token
@@ -179,6 +209,15 @@ function normalizeItemContent(
   };
 }
 
+async function getIslandHeatForWallet(wallet: string): Promise<number> {
+  const identity = await getIdentityClusterByWallet(wallet);
+  const scopedWallets = identity?.wallets.length
+    ? identity.wallets.map((entry) => entry.wallet)
+    : [wallet];
+  const aggregated = await getAggregatedUserByWallets(scopedWallets);
+  return aggregated?.island_heat ?? 0;
+}
+
 itemsRoute.get("/address/:wallet/items", async (c) => {
   await ensureBungalowItemsTable();
 
@@ -195,48 +234,97 @@ itemsRoute.get("/address/:wallet/items", async (c) => {
     ? Math.min(Math.max(limitRaw, 1), 200)
     : 100;
   const offset = Number.isFinite(offsetRaw) ? Math.max(offsetRaw, 0) : 0;
+  const fetchLimit = Math.min(limit + offset, 400);
 
-  const rows = await db<AddressContributionRow[]>`
-    SELECT
-      bi.id,
-      bi.token_address,
-      bi.chain,
-      bi.item_type,
-      bi.content,
-      bi.placed_by,
-      thh.heat_degrees::text AS placed_by_heat_degrees,
-      bi.tx_hash,
-      bi.jbm_amount::text AS jbm_amount,
-      bi.created_at::text AS created_at,
-      COALESCE(b.name, tr.name) AS bungalow_name,
-      COALESCE(b.symbol, tr.symbol) AS bungalow_symbol,
-      b.image_url AS bungalow_image_url
-    FROM ${db(CONFIG.SCHEMA)}.bungalow_items bi
-    LEFT JOIN ${db(CONFIG.SCHEMA)}.token_holder_heat thh
-      ON thh.token_address = bi.token_address
-      AND thh.wallet = bi.placed_by
-    LEFT JOIN ${db(CONFIG.SCHEMA)}.bungalows b
-      ON b.token_address = bi.token_address
-      AND b.chain = bi.chain
-    LEFT JOIN ${db(CONFIG.SCHEMA)}.token_registry tr
-      ON tr.token_address = bi.token_address
-      AND tr.chain = bi.chain
-    WHERE bi.placed_by = ${wallet}
-    ORDER BY bi.created_at DESC, bi.id DESC
-    LIMIT ${limit}
-    OFFSET ${offset}
-  `;
+  const [legacyRows, bodegaRows, legacyTotalRows, bodegaTotalRows] = await Promise.all([
+    db<AddressContributionRow[]>`
+      SELECT
+        bi.id,
+        bi.token_address,
+        bi.chain,
+        bi.item_type,
+        bi.content,
+        bi.placed_by,
+        thh.heat_degrees::text AS placed_by_heat_degrees,
+        bi.tx_hash,
+        bi.jbm_amount::text AS jbm_amount,
+        bi.created_at::text AS created_at,
+        COALESCE(b.name, tr.name) AS bungalow_name,
+        COALESCE(b.symbol, tr.symbol) AS bungalow_symbol,
+        b.image_url AS bungalow_image_url
+      FROM ${db(CONFIG.SCHEMA)}.bungalow_items bi
+      LEFT JOIN ${db(CONFIG.SCHEMA)}.token_holder_heat thh
+        ON thh.token_address = bi.token_address
+        AND thh.wallet = bi.placed_by
+      LEFT JOIN ${db(CONFIG.SCHEMA)}.bungalows b
+        ON b.token_address = bi.token_address
+        AND b.chain = bi.chain
+      LEFT JOIN ${db(CONFIG.SCHEMA)}.token_registry tr
+        ON tr.token_address = bi.token_address
+        AND tr.chain = bi.chain
+      WHERE bi.placed_by = ${wallet}
+        AND COALESCE(bi.active, TRUE) = TRUE
+      ORDER BY bi.created_at DESC, bi.id DESC
+      LIMIT ${fetchLimit}
+    `,
+    db<AddressContributionRow[]>`
+      SELECT
+        (bi.id * -1) AS id,
+        bi.installed_to_token_address AS token_address,
+        bi.installed_to_chain AS chain,
+        bc.asset_type AS item_type,
+        bc.content,
+        bi.installed_by_wallet AS placed_by,
+        thh.heat_degrees::text AS placed_by_heat_degrees,
+        bi.tx_hash,
+        bi.jbm_amount::text AS jbm_amount,
+        bi.created_at::text AS created_at,
+        COALESCE(b.name, tr.name) AS bungalow_name,
+        COALESCE(b.symbol, tr.symbol) AS bungalow_symbol,
+        b.image_url AS bungalow_image_url
+      FROM ${db(CONFIG.SCHEMA)}.bodega_installs bi
+      INNER JOIN ${db(CONFIG.SCHEMA)}.bodega_catalog bc
+        ON bc.id = bi.catalog_item_id
+      LEFT JOIN ${db(CONFIG.SCHEMA)}.token_holder_heat thh
+        ON thh.token_address = bi.installed_to_token_address
+        AND thh.wallet = bi.installed_by_wallet
+      LEFT JOIN ${db(CONFIG.SCHEMA)}.bungalows b
+        ON b.token_address = bi.installed_to_token_address
+        AND b.chain = bi.installed_to_chain
+      LEFT JOIN ${db(CONFIG.SCHEMA)}.token_registry tr
+        ON tr.token_address = bi.installed_to_token_address
+        AND tr.chain = bi.installed_to_chain
+      WHERE bi.installed_by_wallet = ${wallet}
+        AND bc.active = TRUE
+      ORDER BY bc.install_count DESC, bi.created_at DESC, bi.id DESC
+      LIMIT ${fetchLimit}
+    `,
+    db<{ count: string }[]>`
+      SELECT COUNT(*)::text AS count
+      FROM ${db(CONFIG.SCHEMA)}.bungalow_items bi
+      WHERE bi.placed_by = ${wallet}
+        AND COALESCE(bi.active, TRUE) = TRUE
+    `,
+    db<{ count: string }[]>`
+      SELECT COUNT(*)::text AS count
+      FROM ${db(CONFIG.SCHEMA)}.bodega_installs bi
+      INNER JOIN ${db(CONFIG.SCHEMA)}.bodega_catalog bc
+        ON bc.id = bi.catalog_item_id
+      WHERE bi.installed_by_wallet = ${wallet}
+        AND bc.active = TRUE
+    `,
+  ]);
 
-  const totalRows = await db<{ count: string }[]>`
-    SELECT COUNT(*)::text AS count
-    FROM ${db(CONFIG.SCHEMA)}.bungalow_items bi
-    WHERE bi.placed_by = ${wallet}
-  `;
+  const rows = [...bodegaRows, ...legacyRows]
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(offset, offset + limit);
 
   return c.json({
     wallet,
     items: rows,
-    total: Number(totalRows[0]?.count ?? 0),
+    total:
+      Number(legacyTotalRows[0]?.count ?? 0) +
+      Number(bodegaTotalRows[0]?.count ?? 0),
   });
 });
 
@@ -254,28 +342,70 @@ itemsRoute.get("/bungalow/:chain/:ca/items", async (c) => {
   }
 
   const projectContext = await getCanonicalProjectContext(chain, tokenAddress);
-  const filter = buildDeploymentWhereClause("bi", projectContext.deployments);
+  const legacyFilter = buildDeploymentWhereClause("bi", projectContext.deployments);
+  const installFilter = buildDeploymentWhereClause("bi", projectContext.deployments);
 
-  const rows = await db.unsafe<BungalowItemRow[]>(
-    `SELECT
-      bi.id,
-      bi.token_address,
-      bi.chain,
-      bi.item_type,
-      bi.content,
-      bi.placed_by,
-      thh.heat_degrees::text AS placed_by_heat_degrees,
-      bi.tx_hash,
-      bi.jbm_amount::text AS jbm_amount,
-      bi.created_at::text AS created_at
-    FROM "${CONFIG.SCHEMA}".bungalow_items bi
-    LEFT JOIN "${CONFIG.SCHEMA}".token_holder_heat thh
-      ON thh.token_address = bi.token_address
-      AND thh.wallet = bi.placed_by
-    WHERE ${filter.clause}
-    ORDER BY bi.created_at DESC, bi.id DESC`,
-    filter.params,
-  );
+  const [legacyRows, bodegaRows] = await Promise.all([
+    db.unsafe<BungalowItemRow[]>(
+      `SELECT
+        bi.id,
+        bi.token_address,
+        bi.chain,
+        bi.item_type,
+        bi.content,
+        bi.placed_by,
+        thh.heat_degrees::text AS placed_by_heat_degrees,
+        bi.tx_hash,
+        bi.jbm_amount::text AS jbm_amount,
+        0::integer AS install_count,
+        NULL::integer AS catalog_item_id,
+        'legacy'::text AS source,
+        bi.created_at::text AS created_at
+      FROM "${CONFIG.SCHEMA}".bungalow_items bi
+      LEFT JOIN "${CONFIG.SCHEMA}".token_holder_heat thh
+        ON thh.token_address = bi.token_address
+        AND thh.wallet = bi.placed_by
+      WHERE ${legacyFilter.clause}
+        AND COALESCE(bi.active, TRUE) = TRUE`,
+      legacyFilter.params,
+    ),
+    db.unsafe<BungalowItemRow[]>(
+      `SELECT
+        (bi.id * -1) AS id,
+        bi.installed_to_token_address AS token_address,
+        bi.installed_to_chain AS chain,
+        bc.asset_type AS item_type,
+        bc.content,
+        bi.installed_by_wallet AS placed_by,
+        thh.heat_degrees::text AS placed_by_heat_degrees,
+        bi.tx_hash,
+        bi.jbm_amount::text AS jbm_amount,
+        bc.install_count,
+        bc.id AS catalog_item_id,
+        'bodega'::text AS source,
+        bi.created_at::text AS created_at
+      FROM "${CONFIG.SCHEMA}".bodega_installs bi
+      INNER JOIN "${CONFIG.SCHEMA}".bodega_catalog bc
+        ON bc.id = bi.catalog_item_id
+      LEFT JOIN "${CONFIG.SCHEMA}".token_holder_heat thh
+        ON thh.token_address = bi.installed_to_token_address
+        AND thh.wallet = bi.installed_by_wallet
+      WHERE ${installFilter.clause}
+        AND bc.active = TRUE`,
+      installFilter.params,
+    ),
+  ]);
+
+  const rows = [...bodegaRows, ...legacyRows].sort((a, b) => {
+    const installDelta = (b.install_count ?? 0) - (a.install_count ?? 0);
+    if (installDelta !== 0) return installDelta;
+
+    const createdAtDelta =
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    if (createdAtDelta !== 0) return createdAtDelta;
+
+    return Math.abs(b.id) - Math.abs(a.id);
+  });
 
   return c.json({ items: rows });
 });
@@ -334,6 +464,15 @@ itemsRoute.post("/bungalow/:chain/:ca/items", requirePrivyAuth, async (c) => {
   const ownsWallet = await userOwnsWallet(privyUserId, placedBy);
   if (!ownsWallet) {
     throw new ApiError(401, "wallet_not_owned", "wallet_not_owned");
+  }
+
+  const islandHeat = await getIslandHeatForWallet(placedBy);
+  if (islandHeat < COMMUNITY_POLICY.bungalow_submit_min_heat) {
+    throw new ApiError(
+      403,
+      "insufficient_heat",
+      `You need at least ${COMMUNITY_POLICY.bungalow_submit_min_heat} island heat to publish into a bungalow. Current heat: ${islandHeat.toFixed(1)}`,
+    );
   }
 
   const txHash = typeof body.tx_hash === "string" ? body.tx_hash.trim() : "";

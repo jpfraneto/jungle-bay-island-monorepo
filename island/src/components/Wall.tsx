@@ -12,9 +12,9 @@ export default function Wall({ items, isLoading, onAdd }: WallProps) {
   return (
     <section className={styles.wallSection}>
       <div className={styles.header}>
-        <h2>The Wall</h2>
+        <h2>Community Wall</h2>
         <button type="button" className={styles.addButton} onClick={onAdd}>
-          + Add to Bungalow
+          + Quick Add
         </button>
       </div>
 
@@ -23,7 +23,7 @@ export default function Wall({ items, isLoading, onAdd }: WallProps) {
 
         {!isLoading && items.length === 0 ? (
           <div className={styles.empty}>
-            This bungalow&apos;s wall is empty. Be the first to add something.
+            This bungalow&apos;s wall is empty. Quick-add the first live item and it will also appear in the Bodega.
           </div>
         ) : null}
 

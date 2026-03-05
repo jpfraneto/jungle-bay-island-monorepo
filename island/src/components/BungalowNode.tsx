@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import type { HomeTeamBungalow } from "../hooks/useHomeTeam";
 import ChainIcon from "./ChainIcon";
@@ -21,16 +21,15 @@ export default function BungalowNode({ bungalow, x, y, index }: BungalowNodeProp
   const fallbackImage = getFallbackTokenImage(
     `${bungalow.chain}:${bungalow.token_address}`,
   );
-  const [imageSrc, setImageSrc] = useState(
-    getTokenImageUrl(bungalow.image_url, bungalow.token_address, bungalow.symbol),
+  const imageSrc = getTokenImageUrl(
+    bungalow.image_url,
+    bungalow.token_address,
+    bungalow.symbol,
   );
   const rawTicker = bungalow.symbol?.trim() || "?";
   const ticker = rawTicker.length > 12 ? `${rawTicker.slice(0, 12)}…` : rawTicker;
   const bungalowPath = `/bungalow/${bungalow.canonical_slug ?? bungalow.token_address}`;
-
-  useEffect(() => {
-    setImageSrc(getTokenImageUrl(bungalow.image_url, bungalow.token_address, bungalow.symbol));
-  }, [bungalow.image_url, bungalow.token_address, bungalow.symbol]);
+  const imageKey = `${bungalow.chain}:${bungalow.token_address}:${bungalow.image_url ?? ""}:${bungalow.symbol ?? ""}`;
 
   const style = {
     left: `${x}%`,
@@ -52,14 +51,15 @@ export default function BungalowNode({ bungalow, x, y, index }: BungalowNodeProp
     >
       <span className={styles.glow} />
       <img
+        key={imageKey}
         className={styles.avatar}
         src={imageSrc}
         alt={bungalow.symbol ?? bungalow.name ?? "token"}
         loading="lazy"
-        onError={() => {
-          if (imageSrc !== fallbackImage) {
-            setImageSrc(fallbackImage);
-          }
+        onError={(event) => {
+          if (event.currentTarget.dataset.fallbackApplied === "true") return;
+          event.currentTarget.dataset.fallbackApplied = "true";
+          event.currentTarget.src = fallbackImage;
         }}
       />
       <span className={styles.label}>

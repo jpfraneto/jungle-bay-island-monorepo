@@ -23,8 +23,8 @@ const homeTeamRoute = new Hono<AppEnv>();
 homeTeamRoute.get("/home-team", async (c) => {
   const rows = await db<HomeTeamBungalowRow[]>`
     SELECT
-      tr.token_address,
-      tr.chain,
+      b.token_address,
+      b.chain,
       CASE
         WHEN b.name IS NULL OR btrim(b.name) = '' OR lower(btrim(b.name)) IN ('unknown', '?', 'token', 'null')
           THEN tr.name
@@ -35,18 +35,20 @@ homeTeamRoute.get("/home-team", async (c) => {
           THEN tr.symbol
         ELSE b.symbol
       END AS symbol,
-      tr.holder_count,
+      COALESCE(tr.holder_count, b.holder_count, 0) AS holder_count,
       b.image_url,
       b.is_claimed,
       b.current_owner,
       b.description,
       b.market_cap::text AS market_cap,
       b.price_usd::text AS price_usd
-    FROM ${db(CONFIG.SCHEMA)}.token_registry tr
-    LEFT JOIN ${db(CONFIG.SCHEMA)}.bungalows b
+    FROM ${db(CONFIG.SCHEMA)}.bungalows b
+    LEFT JOIN ${db(CONFIG.SCHEMA)}.token_registry tr
       ON tr.token_address = b.token_address AND tr.chain = b.chain
-    WHERE tr.is_home_team = TRUE
-    ORDER BY tr.name ASC
+    WHERE COALESCE(b.is_claimed, FALSE) = TRUE
+       OR b.verified_admin IS NOT NULL
+       OR b.current_owner IS NOT NULL
+    ORDER BY COALESCE(tr.holder_count, b.holder_count, 0) DESC, COALESCE(b.name, tr.name, b.symbol, tr.symbol, b.token_address) ASC
   `;
 
   const rawBungalows = rows.map((row) => {
@@ -120,7 +122,11 @@ homeTeamRoute.get("/home-team", async (c) => {
   const resolvedBungalows = await Promise.all(bungalows);
 
   const sortedBungalows = resolvedBungalows
-    .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
+    .sort((a, b) => {
+      const holderDelta = (b.holder_count ?? 0) - (a.holder_count ?? 0);
+      if (holderDelta !== 0) return holderDelta;
+      return (a.name ?? "").localeCompare(b.name ?? "");
+    });
 
   return c.json({ bungalows: sortedBungalows });
 });

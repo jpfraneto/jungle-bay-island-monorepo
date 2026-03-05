@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import AddItemModal from "../components/AddItemModal";
-import BodegaCard from "../components/BodegaCard";
-import ChainIcon, { getChainLabel } from "../components/ChainIcon";
+import ChainIcon from "../components/ChainIcon";
 import Wall from "../components/Wall";
 import {
   useBungalow,
@@ -11,24 +10,13 @@ import {
   type BungalowDeployment,
   type BungalowDetails,
 } from "../hooks/useBungalow";
-import { useBungalowDirectory } from "../hooks/useBungalowDirectory";
 import { useBungalowItems } from "../hooks/useBungalowItems";
 import { useBungalowResolver } from "../hooks/useBungalowResolver";
+import { getChainLabel } from "../utils/chains";
 import NotFoundPage from "./NotFoundPage";
 import { formatNumber } from "../utils/formatters";
-import {
-  getBungalowLookupKey,
-  normalizeBodegaInstallRecords,
-  type BodegaInstallRecord,
-  type DirectoryBungalow,
-} from "../utils/bodega";
 import { getFallbackTokenImage, getTokenImageUrl } from "../utils/tokenImage";
 import styles from "../styles/bungalow-page.module.css";
-
-interface BodegaInstallsResponse {
-  installs?: unknown[];
-  error?: unknown;
-}
 
 function tokenStandardLabel(chain: string, isNft: boolean): string {
   if (chain === "base" || chain === "ethereum") {
@@ -191,10 +179,6 @@ export default function BungalowPage() {
   const preferredResolveChain = (searchParams.get("chain") ?? "")
     .trim()
     .toLowerCase();
-  const highlightedInstallTx = useMemo(() => {
-    const value = (searchParams.get("install_tx") ?? "").trim().toLowerCase();
-    return /^0x[0-9a-f]{64}$/.test(value) ? value : null;
-  }, [searchParams]);
   const hasDirectRoute = Boolean(routeChain && routeCa);
   const {
     target: resolvedTarget,
@@ -219,106 +203,8 @@ export default function BungalowPage() {
     isLoading: itemsLoading,
     refetch,
   } = useBungalowItems(chain, ca);
-  const { bungalows: directoryBungalows } = useBungalowDirectory({
-    limit: 200,
-    fetchAll: true,
-  });
 
   const [isAddOpen, setIsAddOpen] = useState(false);
-  const [bodegaInstalls, setBodegaInstalls] = useState<BodegaInstallRecord[]>(
-    [],
-  );
-  const [isBodegaInstallsLoading, setIsBodegaInstallsLoading] = useState(false);
-  const [bodegaInstallsError, setBodegaInstallsError] = useState<string | null>(
-    null,
-  );
-  const originLookup = useMemo(() => {
-    const lookup = new Map<string, DirectoryBungalow>();
-    for (const bungalowOption of directoryBungalows) {
-      const key = getBungalowLookupKey(
-        bungalowOption.chain,
-        bungalowOption.token_address,
-      );
-      if (key) {
-        lookup.set(key, bungalowOption);
-      }
-    }
-    return lookup;
-  }, [directoryBungalows]);
-
-  const installLookupChain = bungalow?.active_deployment?.chain ?? chain;
-  const installLookupToken = bungalow?.active_deployment?.token_address ?? ca;
-
-  useEffect(() => {
-    if (!installLookupChain || !installLookupToken) {
-      setBodegaInstalls([]);
-      setIsBodegaInstallsLoading(false);
-      setBodegaInstallsError(null);
-      return;
-    }
-
-    const controller = new AbortController();
-    setIsBodegaInstallsLoading(true);
-    setBodegaInstallsError(null);
-
-    void (async () => {
-      try {
-        const response = await fetch(
-          `/api/bodega/installs/${encodeURIComponent(installLookupChain)}/${encodeURIComponent(installLookupToken)}`,
-          {
-            signal: controller.signal,
-          },
-        );
-
-        const data = (await response
-          .json()
-          .catch(() => null)) as BodegaInstallsResponse | null;
-
-        const apiError =
-          typeof data?.error === "string" && data.error.trim().length > 0
-            ? data.error
-            : null;
-
-        if (!response.ok) {
-          throw new Error(apiError ?? `Request failed (${response.status})`);
-        }
-
-        setBodegaInstalls(normalizeBodegaInstallRecords(data?.installs));
-      } catch (err) {
-        if (controller.signal.aborted) return;
-        setBodegaInstalls([]);
-        setBodegaInstallsError(
-          err instanceof Error
-            ? err.message
-            : "Failed to load installed Bodega items",
-        );
-      } finally {
-        if (!controller.signal.aborted) {
-          setIsBodegaInstallsLoading(false);
-        }
-      }
-    })();
-
-    return () => {
-      controller.abort();
-    };
-  }, [installLookupChain, installLookupToken]);
-
-  useEffect(() => {
-    if (!highlightedInstallTx || bodegaInstalls.length === 0) return;
-
-    const frame = window.requestAnimationFrame(() => {
-      const element = document.getElementById(
-        `bodega-install-${highlightedInstallTx}`,
-      );
-      element?.scrollIntoView({
-        behavior: "smooth",
-        block: "center",
-      });
-    });
-
-    return () => window.cancelAnimationFrame(frame);
-  }, [bodegaInstalls, highlightedInstallTx]);
 
   const handleOpenAddModal = () => {
     if (!authenticated) {
@@ -410,7 +296,7 @@ export default function BungalowPage() {
       ),
     ),
   ];
-  const currentBodegaTarget: DirectoryBungalow = {
+  const currentBodegaTarget = {
     chain: activeChain,
     token_address: activeDeployment.token_address,
     name: displayName,
@@ -459,6 +345,11 @@ export default function BungalowPage() {
                 {bungalow.description ? (
                   <p className={styles.description}>{bungalow.description}</p>
                 ) : null}
+                <p className={styles.identityNote}>
+                  Community bungalow. Quick Add publishes straight to the Bodega
+                  and installs here immediately. Better-selling items float up;
+                  emergency moderation is admin-only.
+                </p>
               </div>
             </div>
 
@@ -490,7 +381,8 @@ export default function BungalowPage() {
               <div className={styles.marketCopy}>
                 <p>Island Bodega</p>
                 <strong>
-                  Bring creator-made tools and decor into this bungalow.
+                  Browse the full market here, or use Quick Add below to publish
+                  straight from inside this bungalow.
                 </strong>
               </div>
               <button
@@ -513,59 +405,6 @@ export default function BungalowPage() {
               isLoading={itemsLoading}
               onAdd={handleOpenAddModal}
             />
-
-            <section className={styles.bodegaShelf}>
-              <div className={styles.sectionHeading}>
-                <div>
-                  <p>Installed from the Bodega</p>
-                  <strong>
-                    Marketplace items already living in this bungalow.
-                  </strong>
-                </div>
-              </div>
-
-              {isBodegaInstallsLoading ? (
-                <div className={styles.shelfStatus}>
-                  Loading installed Bodega items...
-                </div>
-              ) : bodegaInstallsError ? (
-                <div className={styles.shelfStatus}>
-                  Failed to load Bodega installs: {bodegaInstallsError}
-                </div>
-              ) : bodegaInstalls.filter((install) => install.catalog_item)
-                  .length === 0 ? (
-                <div className={styles.shelfStatus}>
-                  No Bodega items are installed here yet.
-                </div>
-              ) : (
-                <div className={styles.installedGrid}>
-                  {bodegaInstalls.map((install) => {
-                    if (!install.catalog_item) return null;
-                    const normalizedInstallTx = install.tx_hash.toLowerCase();
-
-                    const originKey = getBungalowLookupKey(
-                      install.catalog_item.origin_bungalow_chain,
-                      install.catalog_item.origin_bungalow_token_address,
-                    );
-
-                    return (
-                      <BodegaCard
-                        key={install.id}
-                        domId={`bodega-install-${normalizedInstallTx}`}
-                        item={install.catalog_item}
-                        highlighted={highlightedInstallTx === normalizedInstallTx}
-                        originBungalow={
-                          originKey
-                            ? (originLookup.get(originKey) ?? null)
-                            : null
-                        }
-                        actionLabel="From Bodega"
-                      />
-                    );
-                  })}
-                </div>
-              )}
-            </section>
           </div>
         </section>
 

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import WalletSelector from "./WalletSelector";
-import type { BungalowItem } from "../hooks/useBungalowItems";
 import { useJBMTransfer } from "../hooks/useJBMTransfer";
 import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
 import { useSiweWalletLink } from "../hooks/useSiweWalletLink";
@@ -19,7 +18,7 @@ interface AddItemModalProps {
   open: boolean;
   symbol: string;
   onClose: () => void;
-  onCreated: (item: BungalowItem) => void;
+  onCreated: () => void;
 }
 
 interface BungalowDirectoryItem {
@@ -253,28 +252,30 @@ export default function AddItemModal({
         headers.Authorization = `Bearer ${token}`;
       }
 
-      const response = await fetch(`/api/bungalow/${chain}/${ca}/items`, {
+      const response = await fetch(`/api/bodega/quick-add`, {
         method: "POST",
         headers,
         body: JSON.stringify({
           item_type: itemType,
           content,
           placed_by: payer,
+          installed_to_chain: chain,
+          installed_to_token_address: ca,
           tx_hash: txHash,
           jbm_amount: String(price),
         }),
       });
 
       const data = (await response.json()) as {
-        item?: BungalowItem;
+        install?: unknown;
         error?: string;
       };
-      if (!response.ok || !data.item) {
+      if (!response.ok) {
         throw new Error(data.error ?? `Request failed (${response.status})`);
       }
 
       setPendingPayment(null);
-      onCreated(data.item);
+      onCreated();
       onClose();
     } catch (err) {
       const baseMessage =
@@ -311,7 +312,13 @@ export default function AddItemModal({
     <div className={styles.overlay}>
       <div className={styles.modal}>
         <header className={styles.header}>
-          <h3>Add to Bungalow</h3>
+          <div>
+            <h3>Quick Add</h3>
+            <p>
+              Publish straight from inside this bungalow. The item goes live in
+              the Bodega immediately and installs here in the same move.
+            </p>
+          </div>
           <button
             type="button"
             className={styles.closeButton}
@@ -437,7 +444,7 @@ export default function AddItemModal({
                   pendingPayment.itemType === itemType &&
                   pendingPayment.amount === price
                 ? "Retry Save"
-                : "Confirm & Pay"}
+                : "Publish & Install"}
           </button>
         </footer>
       </div>

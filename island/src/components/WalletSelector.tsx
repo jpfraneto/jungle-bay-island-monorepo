@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
 import { useUserWalletLinks } from "../hooks/useUserWalletLinks";
@@ -34,8 +34,6 @@ export default function WalletSelector({
     error: loadError,
   } = useUserWalletLinks(authenticated);
 
-  const [selectedWallet, setSelectedWallet] = useState<string>("");
-
   const linkedWallets = useMemo(
     () => linkedWalletRows.map((wallet) => wallet.address),
     [linkedWalletRows],
@@ -54,17 +52,6 @@ export default function WalletSelector({
   const activeWalletNotLinked =
     Boolean(activeWalletAddress) && !activeWalletLinked;
   const showSelector = activeWalletLinked && options.length > 1;
-
-  useEffect(() => {
-    if (!walletAddress) return;
-
-    if (selectedWallet.toLowerCase() === walletAddress.toLowerCase()) {
-      return;
-    }
-
-    setSelectedWallet(walletAddress);
-    onSelect(walletAddress);
-  }, [onSelect, selectedWallet, walletAddress]);
 
   if (!authenticated) {
     return (
@@ -114,10 +101,9 @@ export default function WalletSelector({
       {showSelector ? (
         <select
           className={styles.selector}
-          value={selectedWallet}
+          value={activeWalletAddress}
           onChange={(event) => {
             const nextAddress = event.target.value;
-            setSelectedWallet(nextAddress);
             try {
               setActiveWallet(nextAddress);
             } catch {

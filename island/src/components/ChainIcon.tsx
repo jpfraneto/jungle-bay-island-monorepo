@@ -4,12 +4,6 @@ interface ChainIconProps {
   size?: number;
 }
 
-export function getChainLabel(chain: string): string {
-  if (chain === "base") return "Base";
-  if (chain === "ethereum") return "Ethereum";
-  return "Solana";
-}
-
 export default function ChainIcon({ chain, className, size = 12 }: ChainIconProps) {
   const box = {
     width: `${size}px`,

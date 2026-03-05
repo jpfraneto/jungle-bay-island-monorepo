@@ -78,14 +78,20 @@ scanRoute.post('/scan/:chain/:ca', optionalWalletContext, scanBurstLimit, async 
   // Check if this is a free retry (previous scan failed, requester already paid/owns)
   if (registry?.scan_status === 'failed') {
     // Check if requester is the bungalow owner (i.e. they already paid)
-    const bungalow = await db<{ current_owner: string }[]>`
-      SELECT current_owner FROM ${db(CONFIG.SCHEMA)}.bungalows
+    const bungalow = await db<{ current_owner: string | null; verified_admin: string | null }[]>`
+      SELECT current_owner, verified_admin FROM ${db(CONFIG.SCHEMA)}.bungalows
       WHERE token_address = ${tokenAddress} AND is_claimed = true
       LIMIT 1
     `
-    if (bungalow.length > 0 && bungalow[0].current_owner?.toLowerCase() === requester.toLowerCase()) {
+    if (
+      bungalow.length > 0 &&
+      (
+        bungalow[0].current_owner?.toLowerCase() === requester.toLowerCase() ||
+        bungalow[0].verified_admin?.toLowerCase() === requester.toLowerCase()
+      )
+    ) {
       isFreeRetry = true
-      logInfo('SCAN RETRY', `free retry for wallet=${requester} token=${tokenAddress} (previous scan failed, owner match)`)
+      logInfo('SCAN RETRY', `free retry for wallet=${requester} token=${tokenAddress} (previous scan failed, steward match)`)
     }
 
     // Also allow free retry if the same payment proof was already used for this token

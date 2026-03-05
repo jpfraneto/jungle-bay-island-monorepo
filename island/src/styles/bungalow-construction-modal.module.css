@@ -1,0 +1,245 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(8, 12, 10, 0.78);
+  backdrop-filter: blur(14px);
+}
+
+.modal {
+  width: min(760px, 100%);
+  max-height: min(88vh, 900px);
+  overflow: auto;
+  border-radius: 28px;
+  border: 1px solid rgba(232, 214, 167, 0.16);
+  background:
+    radial-gradient(circle at top left, rgba(255, 204, 96, 0.12), transparent 40%),
+    linear-gradient(180deg, rgba(22, 35, 29, 0.98), rgba(11, 18, 15, 0.98));
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.42);
+  color: #f6f0df;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 24px 24px 18px;
+}
+
+.header h3 {
+  margin: 4px 0 8px;
+  font-size: 1.6rem;
+}
+
+.kicker {
+  margin: 0;
+  font-size: 0.82rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #f8bf57;
+}
+
+.summary {
+  margin: 0;
+  max-width: 54ch;
+  color: rgba(246, 240, 223, 0.76);
+  line-height: 1.5;
+}
+
+.closeButton {
+  border: 0;
+  background: transparent;
+  color: rgba(246, 240, 223, 0.9);
+  font-size: 2rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.formRow {
+  display: grid;
+  grid-template-columns: 160px 1fr auto;
+  gap: 12px;
+  padding: 0 24px 18px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.92rem;
+  color: rgba(246, 240, 223, 0.86);
+}
+
+.addressField {
+  min-width: 0;
+}
+
+.field input,
+.field select {
+  min-height: 48px;
+  border-radius: 14px;
+  border: 1px solid rgba(232, 214, 167, 0.16);
+  background: rgba(246, 240, 223, 0.05);
+  color: inherit;
+  padding: 0 14px;
+  font: inherit;
+}
+
+.panel {
+  margin: 0 24px 24px;
+  padding: 18px;
+  border-radius: 22px;
+  border: 1px solid rgba(232, 214, 167, 0.14);
+  background: rgba(246, 240, 223, 0.04);
+}
+
+.tokenRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.tokenRow strong,
+.tokenRow span {
+  display: block;
+}
+
+.tokenRow span {
+  margin-top: 4px;
+  color: rgba(246, 240, 223, 0.68);
+  word-break: break-all;
+}
+
+.pathPill {
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(248, 191, 87, 0.14);
+  color: #ffd37a;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.metricGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.metricCard {
+  padding: 12px;
+  border-radius: 16px;
+  background: rgba(10, 18, 14, 0.5);
+  border: 1px solid rgba(232, 214, 167, 0.1);
+}
+
+.metricCard span {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.82rem;
+  color: rgba(246, 240, 223, 0.68);
+}
+
+.metricCard strong {
+  font-size: 1rem;
+}
+
+.rules {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.rules p {
+  margin: 0;
+  color: rgba(246, 240, 223, 0.8);
+}
+
+.notice,
+.status,
+.error {
+  margin: 0 24px 18px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  font-size: 0.92rem;
+}
+
+.notice {
+  background: rgba(248, 191, 87, 0.12);
+  color: #ffd37a;
+}
+
+.inlineLink {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.status {
+  background: rgba(109, 229, 168, 0.12);
+  color: #9ef4c9;
+}
+
+.error {
+  background: rgba(255, 120, 109, 0.12);
+  color: #ffb3aa;
+}
+
+.primaryButton,
+.secondaryButton {
+  min-height: 48px;
+  border-radius: 14px;
+  border: 0;
+  padding: 0 16px;
+  font: inherit;
+  cursor: pointer;
+  transition: transform 140ms ease, opacity 140ms ease;
+}
+
+.primaryButton {
+  background: linear-gradient(135deg, #ffd37a, #f8bf57);
+  color: #251b08;
+  font-weight: 700;
+}
+
+.secondaryButton {
+  margin-top: 10px;
+  background: rgba(246, 240, 223, 0.08);
+  color: #f6f0df;
+}
+
+.primaryButton:hover,
+.secondaryButton:hover {
+  transform: translateY(-1px);
+}
+
+.primaryButton:disabled,
+.secondaryButton:disabled {
+  opacity: 0.6;
+  cursor: default;
+  transform: none;
+}
+
+@media (max-width: 760px) {
+  .formRow {
+    grid-template-columns: 1fr;
+  }
+
+  .metricGrid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .tokenRow {
+    flex-direction: column;
+  }
+}

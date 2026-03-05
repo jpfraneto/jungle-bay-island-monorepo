@@ -5,7 +5,9 @@ export type BodegaAssetType =
   | "game"
   | "miniapp"
   | "link"
-  | "image";
+  | "image"
+  | "frame"
+  | "portal";
 
 export type BodegaAssetGroup = "art" | "miniapp";
 
@@ -84,6 +86,8 @@ export const BODEGA_ASSET_LABELS: Record<BodegaAssetType, string> = {
   miniapp: "Miniapps",
   link: "Links",
   image: "Images",
+  frame: "Frames",
+  portal: "Portals",
 };
 
 export const BODEGA_ASSET_SINGULAR_LABELS: Record<BodegaAssetType, string> = {
@@ -92,6 +96,8 @@ export const BODEGA_ASSET_SINGULAR_LABELS: Record<BodegaAssetType, string> = {
   miniapp: "Miniapp",
   link: "Link",
   image: "Image",
+  frame: "Frame",
+  portal: "Portal",
 };
 
 export const BODEGA_ASSET_DESCRIPTIONS: Record<BodegaAssetType, string> = {
@@ -100,6 +106,8 @@ export const BODEGA_ASSET_DESCRIPTIONS: Record<BodegaAssetType, string> = {
   miniapp: "Useful tools and lightweight apps that live inside a bungalow.",
   link: "Fast utility links, resources, and off-island exits.",
   image: "Visual artifacts, posters, and gallery-style drops.",
+  frame: "Short notes and callouts that pin directly to the wall.",
+  portal: "Doorways that jump from one bungalow to another.",
 };
 
 export const BODEGA_ASSET_GROUP_LABELS: Record<BodegaAssetGroup, string> = {
@@ -199,7 +207,11 @@ export function getBodegaAssetIcon(assetType: BodegaAssetType): string {
 }
 
 export function getBodegaAssetGroup(assetType: BodegaAssetType): BodegaAssetGroup {
-  if (assetType === "decoration" || assetType === "image") {
+  if (
+    assetType === "decoration" ||
+    assetType === "image" ||
+    assetType === "frame"
+  ) {
     return "art";
   }
 
@@ -237,6 +249,12 @@ export function getBodegaSummaryText(item: BodegaCatalogItem): string {
   }
   if (item.asset_type === "link") {
     return asString(item.content.url) || item.description || "Shared off-island link.";
+  }
+  if (item.asset_type === "frame") {
+    return asString(item.content.text) || item.description || "Pinned community note.";
+  }
+  if (item.asset_type === "portal") {
+    return asString(item.content.target_name) || item.description || "Portal into another bungalow.";
   }
   return asString(item.content.caption) || item.description || "An image ready for the wall.";
 }

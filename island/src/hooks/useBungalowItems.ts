@@ -1,16 +1,24 @@
 import { useCallback, useEffect, useState } from "react";
-import type { WallItemType } from "../utils/constants";
-
 export interface BungalowItem {
   id: number;
   token_address: string;
   chain: string;
-  item_type: WallItemType;
+  item_type:
+    | "link"
+    | "frame"
+    | "image"
+    | "portal"
+    | "decoration"
+    | "miniapp"
+    | "game";
   content: Record<string, unknown>;
   placed_by: string;
   placed_by_heat_degrees: number | null;
   tx_hash: string;
   jbm_amount: string;
+  source?: "legacy" | "bodega";
+  catalog_item_id?: number | null;
+  install_count?: number;
   created_at: string;
 }
 
@@ -46,6 +54,10 @@ function normalizeItems(input: unknown): BungalowItem[] {
       ...item,
       content: normalizeContent(item.content),
       placed_by_heat_degrees: Number.isFinite(parsedHeat) ? parsedHeat : null,
+      install_count: Number(
+        (item as unknown as { install_count?: string | number | null }).install_count ??
+          0,
+      ),
     };
   });
 }

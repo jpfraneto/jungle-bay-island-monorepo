@@ -150,6 +150,10 @@ export interface BungalowItemRow {
   placed_by: string
   tx_hash: string
   jbm_amount: string
+  active?: boolean
+  moderated_reason?: string | null
+  moderated_by?: string | null
+  moderated_at?: string | null
   created_at: string
 }
 
@@ -159,7 +163,7 @@ export interface BodegaCatalogRow {
   creator_handle: string | null
   origin_bungalow_token_address: string | null
   origin_bungalow_chain: 'base' | 'ethereum' | 'solana' | null
-  asset_type: 'decoration' | 'miniapp' | 'game' | 'link' | 'image'
+  asset_type: 'decoration' | 'miniapp' | 'game' | 'link' | 'image' | 'frame' | 'portal'
   title: string
   description: string | null
   /**
@@ -168,6 +172,8 @@ export interface BodegaCatalogRow {
    * game: { url, name, description }
    * link: { url, title }
    * image: { image_url, caption }
+   * frame: { text }
+   * portal: { target_chain, target_ca, target_name }
    */
   content: unknown
   preview_url: string | null
@@ -176,6 +182,9 @@ export interface BodegaCatalogRow {
   active: boolean
   submission_tx_hash: string | null
   submission_fee_jbm: string | null
+  moderated_reason?: string | null
+  moderated_by?: string | null
+  moderated_at?: string | null
   created_at: string
 }
 

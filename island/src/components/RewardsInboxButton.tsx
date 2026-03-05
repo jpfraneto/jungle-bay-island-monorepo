@@ -214,8 +214,14 @@ export default function RewardsInboxButton() {
   const linkedWallets = linkedWalletRows.map((wallet) =>
     wallet.address.toLowerCase(),
   );
-  const claimableItems = claims?.items.filter((item) => item.can_claim) ?? [];
-  const claimedItems = claims?.items.filter((item) => item.claimed_today) ?? [];
+  const claimableItems = useMemo(
+    () => claims?.items.filter((item) => item.can_claim) ?? [],
+    [claims?.items],
+  );
+  const claimedItems = useMemo(
+    () => claims?.items.filter((item) => item.claimed_today) ?? [],
+    [claims?.items],
+  );
   const claimedTodayTotal = useMemo(() => {
     if (claims?.claimed_today_total_jbm) {
       return parseAmount(claims.claimed_today_total_jbm);

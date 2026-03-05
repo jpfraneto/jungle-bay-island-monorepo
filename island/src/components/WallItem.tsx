@@ -24,16 +24,26 @@ function formatHeat(value: number | null | undefined): string {
 
 export default function WallItem({ item }: WallItemProps) {
   const navigate = useNavigate();
-  const title = asString(item.content.title);
+  const title = asString(item.content.title || item.content.name);
   const url = asString(item.content.url);
   const text = asString(item.content.text);
-  const imageUrl = asString(item.content.image_url || item.content.url);
-  const caption = asString(item.content.caption);
+  const imageUrl = asString(
+    item.content.image_url || item.content.preview_url || item.content.url,
+  );
+  const caption = asString(item.content.caption || item.content.description);
   const portalChain = asString(item.content.target_chain || item.content.chain);
   const portalCa = asString(item.content.target_ca || item.content.ca);
   const portalName = asString(
     item.content.target_name || item.content.name || item.content.symbol,
   );
+  const installCount = Number(item.install_count ?? 0);
+  const isBodega = item.source === "bodega";
+  const isImageLike =
+    item.item_type === "image" || item.item_type === "decoration";
+  const isUrlLike =
+    item.item_type === "link" ||
+    item.item_type === "miniapp" ||
+    item.item_type === "game";
   const collageClass = [
     styles.collageA,
     styles.collageB,
@@ -44,14 +54,26 @@ export default function WallItem({ item }: WallItemProps) {
 
   return (
     <article className={`${styles.card} ${collageClass}`}>
-      {item.item_type === "link" ? (
+      {isUrlLike ? (
         <a
           href={url}
           target="_blank"
           rel="noreferrer"
           className={styles.bodyLink}
         >
-          <div className={styles.mainText}>🔗 {title || "Untitled link"}</div>
+          <div className={styles.mainText}>
+            {item.item_type === "game"
+              ? "🎮"
+              : item.item_type === "miniapp"
+                ? "🛠️"
+                : "🔗"}{" "}
+            {title ||
+              (item.item_type === "miniapp"
+                ? "Untitled miniapp"
+                : item.item_type === "game"
+                  ? "Untitled game"
+                  : "Untitled link")}
+          </div>
           <div className={styles.subText}>{url}</div>
         </a>
       ) : null}
@@ -63,9 +85,11 @@ export default function WallItem({ item }: WallItemProps) {
         </div>
       ) : null}
 
-      {item.item_type === "image" ? (
+      {isImageLike ? (
         <div className={styles.bodyText}>
-          <div className={styles.mainText}>🖼️ Image</div>
+          <div className={styles.mainText}>
+            🖼️ {item.item_type === "decoration" ? "Decoration" : "Image"}
+          </div>
           {imageUrl ? (
             <img
               className={styles.image}
@@ -107,6 +131,14 @@ export default function WallItem({ item }: WallItemProps) {
           <span>{formatHeat(item.placed_by_heat_degrees)}</span>
           <span className={styles.separator}>-</span>
           <span>{formatJbmCount(item.jbm_amount)} jungle bay memes</span>
+          {isBodega ? (
+            <>
+              <span className={styles.separator}>-</span>
+              <span>
+                {installCount} install{installCount === 1 ? "" : "s"}
+              </span>
+            </>
+          ) : null}
         </div>
         <span className={styles.timestamp}>
           {formatTimeAgo(item.created_at)}

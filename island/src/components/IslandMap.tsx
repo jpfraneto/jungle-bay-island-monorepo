@@ -100,9 +100,9 @@ export default function IslandMap({ bungalows, isLoading, error }: IslandMapProp
           </div>
         </div>
       ) : null}
-      {error ? <div className={styles.status}>Failed to load home team: {error}</div> : null}
+      {error ? <div className={styles.status}>Failed to load community bungalows: {error}</div> : null}
       {!isLoading && nodes.length === 0 ? (
-        <div className={styles.status}>No bungalows available yet. Check back soon.</div>
+        <div className={styles.status}>No community bungalows are open yet. Check back soon.</div>
       ) : null}
 
       <div

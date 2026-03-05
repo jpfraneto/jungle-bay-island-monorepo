@@ -19,6 +19,48 @@ export default function ChangelogPage() {
       <article className={styles.entry}>
         <div className={styles.entryHeader}>
           <span className={styles.date}>March 5, 2026</span>
+          <h2 className={styles.heading}>Community Bungalows, Quick Add, and Install-Weighted Walls</h2>
+        </div>
+        <p>
+          The island now treats bungalows as community property with
+          qualification-based opening, while Bodega and inside-bungalow adding
+          are now one shared inventory system with different UX friction.
+        </p>
+        <ul className={styles.list}>
+          <li>
+            New bungalow opening now follows explicit thresholds: one high-heat
+            builder, five mid-heat supporters backing the same CA, or the 10+
+            JBAC shortcut, plus a construction fee in JBM.
+          </li>
+          <li>
+            <strong>Quick Add</strong> inside a bungalow now publishes live to
+            the Bodega immediately and installs the item in the same move
+            instead of writing to a separate wall-only system.
+          </li>
+          <li>
+            Bodega publishing now enforces a minimum island heat threshold and
+            listings are ordered toward installs/sales first instead of pure
+            recency.
+          </li>
+          <li>
+            Bungalow walls now merge live Bodega installs and legacy wall items
+            into one ranked community feed so better-selling items naturally
+            rise and weaker ones sink.
+          </li>
+          <li>
+            Home-team presentation is now driven by the community bungalow set
+            on the island rather than a fixed whitelist flag.
+          </li>
+          <li>
+            Emergency moderation paths were added for Bodega listings and legacy
+            bungalow items without making owner removal the default model.
+          </li>
+        </ul>
+      </article>
+
+      <article className={styles.entry}>
+        <div className={styles.entryHeader}>
+          <span className={styles.date}>March 5, 2026</span>
           <h2 className={styles.heading}>Bodega Install Flow Now Opens Exact Highlighted Bungalow Items</h2>
         </div>
         <p>

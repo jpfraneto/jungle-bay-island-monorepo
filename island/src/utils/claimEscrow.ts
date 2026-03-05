@@ -1,15 +1,15 @@
 export const claimEscrowAbi = [
   {
-    name: "claim",
+    name: "claimPeriodTotal",
     type: "function",
     stateMutability: "nonpayable",
     inputs: [
       { name: "escrow", type: "address" },
       { name: "recipient", type: "address" },
       { name: "amount", type: "uint256" },
-      { name: "bungalowId", type: "bytes32" },
       { name: "periodId", type: "uint256" },
       { name: "deadline", type: "uint256" },
+      { name: "breakdownHash", type: "bytes32" },
       { name: "signature", type: "bytes" },
     ],
     outputs: [],
@@ -22,10 +22,10 @@ export interface ClaimSignaturePayload {
   escrow?: string;
   amount_jbm?: string;
   amount_wei?: string;
-  bungalowId?: string;
   periodId?: string;
   nonce?: number;
   deadline?: string;
+  breakdown_hash?: string;
   signerAddress?: string;
   payout_wallet?: string;
   error?: string;

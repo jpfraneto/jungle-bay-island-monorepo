@@ -114,7 +114,6 @@ export default function ClaimPanel({
         headers,
         body: JSON.stringify({
           wallet: address,
-          nonce_strategy: "single",
         }),
       });
 
@@ -127,8 +126,8 @@ export default function ClaimPanel({
         !amountWei ||
         !signData.escrow ||
         !signData.payout_wallet ||
-        !signData.bungalowId ||
         !signData.periodId ||
+        !signData.breakdown_hash ||
         !signData.deadline
       ) {
         throw new Error(
@@ -152,7 +151,7 @@ export default function ClaimPanel({
       if (
         !isHexAddress(signData.escrow) ||
         !isHexAddress(signData.payout_wallet) ||
-        !isHexBytes32(signData.bungalowId)
+        !isHexBytes32(signData.breakdown_hash)
       ) {
         throw new Error("Invalid claim payload from backend");
       }
@@ -161,9 +160,9 @@ export default function ClaimPanel({
         signData.escrow,
         signData.payout_wallet,
         BigInt(amountWei),
-        signData.bungalowId,
         BigInt(signData.periodId),
         BigInt(signData.deadline),
+        signData.breakdown_hash,
         signData.signature,
       ] as const;
 
@@ -171,7 +170,7 @@ export default function ClaimPanel({
       await publicClient.simulateContract({
         address: claimContract,
         abi: claimEscrowAbi,
-        functionName: "claim",
+        functionName: "claimPeriodTotal",
         args: claimArgs,
         account: address,
       });
@@ -179,7 +178,7 @@ export default function ClaimPanel({
       const hash = await walletClient.writeContract({
         address: claimContract,
         abi: claimEscrowAbi,
-        functionName: "claim",
+        functionName: "claimPeriodTotal",
         args: claimArgs,
         account: address,
       });

@@ -18,6 +18,36 @@ export default function ChangelogPage() {
 
       <article className={styles.entry}>
         <div className={styles.entryHeader}>
+          <span className={styles.date}>March 5, 2026</span>
+          <h2 className={styles.heading}>Claims Migrated To One-Tx Period Totals (V8)</h2>
+        </div>
+        <p>
+          Daily rewards now sign and settle as one period-total claim instead of
+          one signature per bungalow.
+        </p>
+        <ul className={styles.list}>
+          <li>
+            Backend claim signing now targets the new contract at{" "}
+            <code>0x784c6438e72b2a2f3977af8d0ba30b30f78f7a10</code> using
+            <code> claimPeriodTotal</code>.
+          </li>
+          <li>
+            The rewards inbox now submits one claim transaction per day for the
+            wallet’s full eligible total.
+          </li>
+          <li>
+            Claim confirmation now checks period-level onchain status and
+            finalizes all allocations for that identity in the same period.
+          </li>
+          <li>
+            This removes nonce drift and per-bungalow signature mismatch cases
+            that were triggering <code>invalid signature</code> claim reverts.
+          </li>
+        </ul>
+      </article>
+
+      <article className={styles.entry}>
+        <div className={styles.entryHeader}>
           <span className={styles.date}>March 4, 2026</span>
           <h2 className={styles.heading}>Bodega Is Now Two-Lane: Art + Miniapps</h2>
         </div>

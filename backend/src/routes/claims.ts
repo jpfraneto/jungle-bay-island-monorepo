@@ -192,11 +192,74 @@ function parseNumericBigInt(value: string | null | undefined): bigint {
 }
 
 function extractRevertReason(error: unknown): string | null {
-  if (!(error instanceof Error)) return null;
-  const match = error.message.match(
-    /reverted with the following reason:\s*([\s\S]*?)(?:\n\s*Contract Call:|$)/i,
-  );
-  if (match?.[1]) return match[1].trim();
+  const queue: unknown[] = [error];
+  const visited = new Set<unknown>();
+
+  const extractFromText = (text: string): string | null => {
+    const reasonMatch = text.match(
+      /reverted with the following reason:\s*([\s\S]*?)(?:\n\s*Contract Call:|$)/i,
+    );
+    if (reasonMatch?.[1]) return reasonMatch[1].trim();
+
+    const customErrorMatch = text.match(/reverted with custom error\s+'([^']+)'/i);
+    if (customErrorMatch?.[1]) return customErrorMatch[1].trim();
+
+    const executionMatch = text.match(/execution reverted(?::\s*([^\n]+))?/i);
+    if (executionMatch?.[1]) return executionMatch[1].trim();
+
+    const compact = text.split("\nContract Call:")[0]?.trim();
+    if (compact && compact.length > 0) return compact;
+
+    return null;
+  };
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (current === undefined || current === null || visited.has(current)) continue;
+    visited.add(current);
+
+    if (current instanceof Error) {
+      const parsed = extractFromText(current.message);
+      if (parsed) return parsed;
+    }
+
+    if (typeof current === "string") {
+      const parsed = extractFromText(current);
+      if (parsed) return parsed;
+      continue;
+    }
+
+    if (typeof current === "object") {
+      const candidate = current as Record<string, unknown>;
+
+      const shortMessage = candidate.shortMessage;
+      if (typeof shortMessage === "string") {
+        const parsed = extractFromText(shortMessage);
+        if (parsed) return parsed;
+      }
+
+      const details = candidate.details;
+      if (typeof details === "string") {
+        const parsed = extractFromText(details);
+        if (parsed) return parsed;
+      }
+
+      const metaMessages = candidate.metaMessages;
+      if (Array.isArray(metaMessages)) {
+        for (const item of metaMessages) {
+          if (typeof item === "string") {
+            const parsed = extractFromText(item);
+            if (parsed) return parsed;
+          }
+        }
+      }
+
+      if (candidate.cause !== undefined) {
+        queue.push(candidate.cause);
+      }
+    }
+  }
+
   return null;
 }
 

@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
+import WalletSelector from "./WalletSelector";
 import type { BungalowItem } from "../hooks/useBungalowItems";
 import { useJBMTransfer } from "../hooks/useJBMTransfer";
+import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
+import { useSiweWalletLink } from "../hooks/useSiweWalletLink";
+import { useUserWalletLinks } from "../hooks/useUserWalletLinks";
 import {
   ITEM_LABELS,
   ITEM_PRICES,
@@ -53,7 +57,18 @@ export default function AddItemModal({
   onClose,
   onCreated,
 }: AddItemModalProps) {
-  const { authenticated, login } = usePrivy();
+  const { authenticated, getAccessToken, login } = usePrivy();
+  const { walletAddress } = usePrivyBaseWallet();
+  const {
+    wallets: linkedWalletRows,
+    refetch: refetchLinkedWallets,
+  } = useUserWalletLinks(authenticated);
+  const {
+    linkCurrentWallet,
+    isLinking: isLinkingWallet,
+    status: linkStatus,
+    error: linkError,
+  } = useSiweWalletLink();
   const { transfer, isTransferring } = useJBMTransfer();
 
   const [itemType, setItemType] = useState<WallItemType>("link");
@@ -68,6 +83,9 @@ export default function AddItemModal({
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedPayWallet, setSelectedPayWallet] = useState<string>("");
+  const [showWalletGate, setShowWalletGate] = useState(false);
+  const [resumeAfterLink, setResumeAfterLink] = useState(false);
   const [pendingPayment, setPendingPayment] = useState<PendingPayment | null>(
     null,
   );
@@ -82,9 +100,17 @@ export default function AddItemModal({
     setCaption("");
     setPortalTarget("");
     setError(null);
+    setShowWalletGate(false);
+    setResumeAfterLink(false);
     setPendingPayment(null);
     setIsSubmitting(false);
   }, [open]);
+
+  useEffect(() => {
+    if (!walletAddress) return;
+    if (selectedPayWallet) return;
+    setSelectedPayWallet(walletAddress);
+  }, [selectedPayWallet, walletAddress]);
 
   useEffect(() => {
     if (!open) return;
@@ -165,6 +191,21 @@ export default function AddItemModal({
       return;
     }
 
+    const linkedWallets = linkedWalletRows.map((wallet) =>
+      wallet.address.toLowerCase(),
+    );
+    const payoutWallet = selectedPayWallet || walletAddress;
+    if (!payoutWallet || linkedWalletRows.length === 0) {
+      setShowWalletGate(true);
+      setResumeAfterLink(true);
+      return;
+    }
+    if (!linkedWallets.includes(payoutWallet.toLowerCase())) {
+      setError("Link this wallet first to use it for transactions.");
+      setShowWalletGate(true);
+      return;
+    }
+
     setError(null);
     setIsSubmitting(true);
 
@@ -204,9 +245,17 @@ export default function AddItemModal({
         setPendingPayment(confirmedPayment);
       }
 
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      const token = await getAccessToken();
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
       const response = await fetch(`/api/bungalow/${chain}/${ca}/items`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           item_type: itemType,
           content,
@@ -239,6 +288,20 @@ export default function AddItemModal({
       }
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleAddWallet = async () => {
+    try {
+      await linkCurrentWallet();
+      await refetchLinkedWallets();
+      setShowWalletGate(false);
+      if (resumeAfterLink) {
+        setResumeAfterLink(false);
+        await handleSubmit();
+      }
+    } catch {
+      // Hook error state already shows a useful message.
     }
   };
 
@@ -337,6 +400,25 @@ export default function AddItemModal({
                   </option>
                 ))}
             </select>
+          </div>
+        ) : null}
+
+        <WalletSelector label="Pay with" onSelect={setSelectedPayWallet} />
+        {showWalletGate || linkedWalletRows.length === 0 ? (
+          <div className={styles.error}>
+            <strong>You need a linked wallet to continue.</strong>
+            <button
+              type="button"
+              className={styles.submitButton}
+              onClick={() => {
+                void handleAddWallet();
+              }}
+              disabled={isLinkingWallet}
+            >
+              {isLinkingWallet ? "Linking..." : "Add wallet"}
+            </button>
+            {linkStatus ? <div>{linkStatus}</div> : null}
+            {linkError ? <div>{linkError}</div> : null}
           </div>
         ) : null}
 

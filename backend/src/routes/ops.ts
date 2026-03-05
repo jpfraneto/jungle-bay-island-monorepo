@@ -163,7 +163,7 @@ opsRoute.get("/health-auth", async (c) => {
     try {
       const verified = await verifyPrivyToken(bearerToken);
       tokenCheck.verified = true;
-      tokenCheck.wallet = verified.walletAddress;
+      tokenCheck.wallet = verified.walletAddress ?? undefined;
       tokenCheck.issuer =
         typeof verified.payload.iss === "string" ? verified.payload.iss : "unknown";
     } catch (error) {

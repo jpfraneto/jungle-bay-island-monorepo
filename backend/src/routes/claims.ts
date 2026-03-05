@@ -5,9 +5,10 @@ import {
   getAggregatedUserByWallets,
   getIdentityClusterByWallet,
   getWalletTokenHeats,
+  userOwnsWallet,
   type IdentityClusterWallet,
 } from "../db/queries";
-import { optionalWalletContext } from "../middleware/auth";
+import { optionalWalletContext, requirePrivyAuth } from "../middleware/auth";
 import { resolveUserWalletMap } from "../services/identityMap";
 import {
   CONFIG,
@@ -467,6 +468,16 @@ function claimsBelongToWallet(
   return contextWallet.toLowerCase() === requestedWallet.toLowerCase();
 }
 
+function getPrivyUserIdFromClaims(
+  claims: Record<string, unknown> | null,
+): string {
+  const privyUserId = typeof claims?.sub === "string" ? claims.sub.trim() : "";
+  if (!privyUserId) {
+    throw new ApiError(401, "auth_required", "Privy authentication required");
+  }
+  return privyUserId;
+}
+
 function deriveIdentityFromClaims(
   requesterWallet: string,
   claims: Record<string, unknown> | null,
@@ -908,7 +919,7 @@ claimsRoute.get("/claims/:chain/:ca/:address", async (c) => {
   });
 });
 
-claimsRoute.post("/claims/:chain/:ca/sign", async (c) => {
+claimsRoute.post("/claims/:chain/:ca/sign", requirePrivyAuth, async (c) => {
   const chain = toSupportedChain(c.req.param("chain"));
   if (!chain) {
     throw new ApiError(400, "invalid_chain", "Invalid chain");
@@ -924,51 +935,40 @@ claimsRoute.post("/claims/:chain/:ca/sign", async (c) => {
     payout_wallet?: unknown;
   }>();
 
-  const contextWallet = c.get("walletAddress") ?? null;
-  const requesterWallet =
-    (typeof body.wallet === "string"
-      ? normalizeAddress(body.wallet) ?? normalizeAddress(body.wallet, "solana")
-      : null) ??
-    (contextWallet ? normalizeAddress(contextWallet) ?? normalizeAddress(contextWallet, "solana") : null);
+  const rawClaims = c.get("privyClaims") as Record<string, unknown> | undefined;
+  const claims = rawClaims ?? null;
+  const privyUserId = getPrivyUserIdFromClaims(claims);
 
-  if (!requesterWallet) {
+  const requestedPayoutWallet =
+    typeof body.payout_wallet === "string" ? normalizeAddress(body.payout_wallet) : null;
+  const payoutWallet = requestedPayoutWallet;
+  if (!payoutWallet) {
     throw new ApiError(
       400,
-      "invalid_wallet",
-      "wallet must be provided or authenticated",
+      "invalid_payout_wallet",
+      "payout_wallet must be provided and must be a valid EVM address",
     );
   }
 
-  const rawClaims = c.get("privyClaims") as Record<string, unknown> | undefined;
-  const claims = rawClaims ?? null;
+  const ownsPayoutWallet = await userOwnsWallet(privyUserId, payoutWallet);
+  if (!ownsPayoutWallet) {
+    throw new ApiError(
+      401,
+      "wallet_not_owned",
+      "wallet_not_owned",
+    );
+  }
+
+  const requesterWallet =
+    (typeof body.wallet === "string"
+      ? normalizeAddress(body.wallet) ?? normalizeAddress(body.wallet, "solana")
+      : null) ?? payoutWallet;
 
   const identity = await resolveIdentity({
     requesterWallet,
     claims,
-    allowClaimsEnrichment: claimsBelongToWallet(contextWallet, requesterWallet),
+    allowClaimsEnrichment: true,
   });
-
-  const requestedPayoutWallet =
-    typeof body.payout_wallet === "string"
-      ? normalizeAddress(body.payout_wallet)
-      : null;
-
-  const payoutWallet = requestedPayoutWallet ?? pickDefaultPayoutWallet(identity, requesterWallet);
-  if (!payoutWallet) {
-    throw new ApiError(
-      400,
-      "missing_evm_wallet",
-      "No EVM wallet found for payouts. Link an EVM wallet in Privy/Farcaster.",
-    );
-  }
-
-  if (!identity.evm_wallets.includes(payoutWallet)) {
-    throw new ApiError(
-      403,
-      "invalid_payout_wallet",
-      "Payout wallet is not part of this identity",
-    );
-  }
 
   const periodId = getCurrentPeriodId();
   const claimEntries = await getIdentityClaimEntries({ identity, periodId });
@@ -1322,7 +1322,7 @@ claimsRoute.post("/claims/:chain/:ca/sign", async (c) => {
   return c.json(response);
 });
 
-claimsRoute.post("/claims/:chain/:ca/confirm", async (c) => {
+claimsRoute.post("/claims/:chain/:ca/confirm", requirePrivyAuth, async (c) => {
   const chain = toSupportedChain(c.req.param("chain"));
   if (!chain) {
     throw new ApiError(400, "invalid_chain", "Invalid chain");
@@ -1338,51 +1338,43 @@ claimsRoute.post("/claims/:chain/:ca/confirm", async (c) => {
     payout_wallet?: unknown;
   }>();
 
-  const contextWallet = c.get("walletAddress") ?? null;
-  const requesterWallet =
-    (typeof body.wallet === "string"
-      ? normalizeAddress(body.wallet) ?? normalizeAddress(body.wallet, "solana")
-      : null) ??
-    (contextWallet ? normalizeAddress(contextWallet) ?? normalizeAddress(contextWallet, "solana") : null);
-
-  if (!requesterWallet) {
-    throw new ApiError(
-      400,
-      "invalid_wallet",
-      "wallet must be provided or authenticated",
-    );
-  }
-
   const rawClaims = c.get("privyClaims") as Record<string, unknown> | undefined;
   const claims = rawClaims ?? null;
-
-  const identity = await resolveIdentity({
-    requesterWallet,
-    claims,
-    allowClaimsEnrichment: claimsBelongToWallet(contextWallet, requesterWallet),
-  });
+  const privyUserId = getPrivyUserIdFromClaims(claims);
 
   const requestedPayoutWallet =
     typeof body.payout_wallet === "string"
       ? normalizeAddress(body.payout_wallet)
       : null;
-  const payoutWallet = requestedPayoutWallet ?? pickDefaultPayoutWallet(identity, requesterWallet);
+  const payoutWallet = requestedPayoutWallet;
 
   if (!payoutWallet) {
     throw new ApiError(
       400,
-      "missing_evm_wallet",
-      "No EVM wallet found for payouts. Link an EVM wallet in Privy/Farcaster.",
+      "invalid_payout_wallet",
+      "payout_wallet must be provided and must be a valid EVM address",
     );
   }
 
-  if (!identity.evm_wallets.includes(payoutWallet)) {
+  const ownsPayoutWallet = await userOwnsWallet(privyUserId, payoutWallet);
+  if (!ownsPayoutWallet) {
     throw new ApiError(
-      403,
-      "invalid_payout_wallet",
-      "Payout wallet is not part of this identity",
+      401,
+      "wallet_not_owned",
+      "wallet_not_owned",
     );
   }
+
+  const requesterWallet =
+    (typeof body.wallet === "string"
+      ? normalizeAddress(body.wallet) ?? normalizeAddress(body.wallet, "solana")
+      : null) ?? payoutWallet;
+
+  const identity = await resolveIdentity({
+    requesterWallet,
+    claims,
+    allowClaimsEnrichment: true,
+  });
 
   const claimContractAddress = getClaimContractAddress();
   if (!claimContractAddress) {

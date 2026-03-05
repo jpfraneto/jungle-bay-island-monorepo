@@ -1,177 +1,125 @@
-import { createPublicKey, verify } from 'node:crypto'
 import { Hono } from 'hono'
 import { verifyMessage } from 'viem'
-import { CONFIG, db, normalizeAddress } from '../config'
+import { normalizeAddress } from '../config'
 import {
-  getIdentityClusterByWallet,
-  getLinkedWallets,
-  linkWallet,
-  unlinkWallet,
+  getUserWallets,
+  removeUserWallet,
+  upsertUser,
+  upsertUserWalletLinks,
+  userOwnsWallet,
 } from '../db/queries'
-import { requireWalletAuth } from '../middleware/auth'
+import { requirePrivyAuth } from '../middleware/auth'
 import { ApiError } from '../services/errors'
+import { getPrivyLinkedAccounts } from '../services/privyClaims'
 import type { AppEnv } from '../types'
 
 const walletLinkRoute = new Hono<AppEnv>()
 
-interface LinkedWalletCandidate {
-  address: string
-  kind: 'evm' | 'solana'
+const SIWE_NONCE_TTL_MS = 5 * 60 * 1000
+const siweNonceStore = new Map<string, { nonce: string; expiresAt: number }>()
+
+function normalizeXUsername(value: string): string {
+  const clean = value.trim().replace(/^@+/, '').toLowerCase()
+  return clean ? `@${clean}` : ''
 }
 
-/**
- * Decodes base58 strings so Solana public keys can be verified without extra dependencies.
- */
-function base58Decode(value: string): Uint8Array {
-  const alphabet = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
-  const bytes: number[] = [0]
+function extractUserIdentityFromClaims(claims: Record<string, unknown>): {
+  privyUserId: string
+  email: string | null
+  xUsername: string | null
+} {
+  const privyUserId = typeof claims.sub === 'string' ? claims.sub.trim() : ''
+  if (!privyUserId) {
+    throw new ApiError(401, 'auth_required', 'Privy user id missing from token')
+  }
 
-  for (const character of value) {
-    const index = alphabet.indexOf(character)
-    if (index < 0) {
-      throw new ApiError(400, 'invalid_signature', 'Solana signatures require a valid base58 wallet address')
+  let email: string | null = null
+  let xUsername: string | null = null
+
+  const linkedAccounts = getPrivyLinkedAccounts(claims)
+  for (const account of linkedAccounts) {
+    const candidate = account as Record<string, unknown>
+    const type = typeof candidate.type === 'string' ? candidate.type : ''
+
+    if (!email && type === 'email') {
+      const address = typeof candidate.address === 'string' ? candidate.address.trim().toLowerCase() : ''
+      if (address) {
+        email = address
+      }
     }
 
-    let carry = index
-    for (let pointer = 0; pointer < bytes.length; pointer += 1) {
-      carry += bytes[pointer] * 58
-      bytes[pointer] = carry & 0xff
-      carry >>= 8
+    if (!xUsername && (type === 'twitter_oauth' || type === 'twitter')) {
+      const username =
+        typeof candidate.username === 'string'
+          ? candidate.username
+          : typeof candidate.screen_name === 'string'
+            ? candidate.screen_name
+            : ''
+      const normalized = normalizeXUsername(username)
+      if (normalized) {
+        xUsername = normalized
+      }
     }
-
-    while (carry > 0) {
-      bytes.push(carry & 0xff)
-      carry >>= 8
-    }
   }
 
-  for (const character of value) {
-    if (character !== '1') break
-    bytes.push(0)
-  }
-
-  return new Uint8Array(bytes.reverse())
-}
-
-/**
- * Verifies Solana detached signatures so linked wallets can be proven without transactions.
- */
-function verifySolanaSignature(
-  message: string,
-  signature: string,
-  publicKey: string,
-): boolean {
-  try {
-    const publicKeyBytes = base58Decode(publicKey)
-    const signatureBytes = Buffer.from(signature, 'base64')
-    if (signatureBytes.length === 0) return false
-
-    const key = createPublicKey({
-      key: Buffer.concat([
-        Buffer.from('302a300506032b6570032100', 'hex'),
-        Buffer.from(publicKeyBytes),
-      ]),
-      format: 'der',
-      type: 'spki',
-    })
-
-    return verify(null, Buffer.from(message), key, signatureBytes)
-  } catch {
-    return false
+  return {
+    privyUserId,
+    email,
+    xUsername,
   }
 }
 
-/**
- * Normalizes linked wallet input across EVM and Solana so the route can support both address families.
- */
-function normalizeLinkedWallet(input: unknown): LinkedWalletCandidate | null {
-  const raw = typeof input === 'string' ? input.trim() : ''
-  if (!raw) return null
-
-  const evm = normalizeAddress(raw)
-  if (evm) {
-    return { address: evm, kind: 'evm' }
-  }
-
-  const solana = normalizeAddress(raw, 'solana')
-  if (solana) {
-    return { address: solana, kind: 'solana' }
-  }
-
-  return null
+function extractNonce(message: string): string {
+  const match = message.match(/\bnonce:\s*([^\n\r]+)/i)
+  return match?.[1]?.trim() ?? ''
 }
 
-/**
- * Checks that the signed message includes a concrete timestamp so link proofs are replay-resistant.
- */
-function messageHasTimestamp(message: string): boolean {
-  return (
-    /\b\d{10,13}\b/.test(message) ||
-    /\b\d{4}-\d{2}-\d{2}t\d{2}:\d{2}:\d{2}/i.test(message)
-  )
+function extractAddressFromSiweMessage(message: string): string | null {
+  const match = message.match(/\b0x[a-fA-F0-9]{40}\b/)
+  if (!match) return null
+  return normalizeAddress(match[0])
 }
 
-/**
- * Validates that the proof message binds the link to the authenticated primary wallet.
- */
-function assertValidLinkMessage(message: string, primaryWallet: string): void {
-  if (!message.toLowerCase().includes(primaryWallet.toLowerCase())) {
-    throw new ApiError(400, 'invalid_message', 'verification message must contain the primary_wallet address')
+function assertFreshSiweNonce(address: string, nonce: string): void {
+  if (!nonce) {
+    throw new ApiError(400, 'invalid_message', 'SIWE message must include a nonce')
   }
 
-  if (!messageHasTimestamp(message)) {
-    throw new ApiError(400, 'invalid_message', 'verification message must contain a timestamp')
+  const now = Date.now()
+  const existing = siweNonceStore.get(address)
+
+  if (existing && existing.expiresAt <= now) {
+    siweNonceStore.delete(address)
   }
+
+  const active = siweNonceStore.get(address)
+  if (active && active.nonce === nonce && active.expiresAt > now) {
+    throw new ApiError(400, 'invalid_nonce', 'SIWE nonce has already been used')
+  }
+
+  siweNonceStore.set(address, {
+    nonce,
+    expiresAt: now + SIWE_NONCE_TTL_MS,
+  })
 }
 
-/**
- * Verifies ownership of the linked wallet from an off-chain signature so hardware wallets stay read-only.
- */
-async function verifyLinkedWalletOwnership(
-  linkedWallet: LinkedWalletCandidate,
-  signature: string,
-  message: string,
-): Promise<void> {
-  if (linkedWallet.kind === 'evm') {
-    const valid = await verifyMessage({
-      address: linkedWallet.address as `0x${string}`,
-      message,
-      signature: signature as `0x${string}`,
-    })
-
-    if (!valid) {
-      throw new ApiError(403, 'invalid_signature', 'Signature does not recover to linked_wallet')
-    }
-    return
+walletLinkRoute.post('/user/link-wallet', requirePrivyAuth, async (c) => {
+  const claims = c.get('privyClaims') as Record<string, unknown> | undefined
+  if (!claims) {
+    throw new ApiError(401, 'auth_required', 'Privy authentication required')
   }
 
-  const valid = verifySolanaSignature(message, signature, linkedWallet.address)
-  if (!valid) {
-    throw new ApiError(403, 'invalid_signature', 'Signature does not verify for linked_wallet')
-  }
-}
-
-// ── Link ────────────────────────────────────────────────────
-
-walletLinkRoute.post('/link', requireWalletAuth, async (c) => {
-  const primaryWallet = c.get('walletAddress')
-  if (!primaryWallet) {
-    throw new ApiError(401, 'auth_required', 'Wallet authentication required')
-  }
+  const { privyUserId, email, xUsername } = extractUserIdentityFromClaims(claims)
 
   const body = await c.req.json<{
-    linked_wallet?: unknown
+    address?: unknown
     signature?: unknown
     message?: unknown
   }>()
 
-  const linkedWallet = normalizeLinkedWallet(body.linked_wallet)
-  if (!linkedWallet) {
-    throw new ApiError(400, 'invalid_linked_wallet', 'linked_wallet must be a valid EVM or Solana address')
-  }
-
-  if (linkedWallet.address.toLowerCase() === primaryWallet.toLowerCase()) {
-    throw new ApiError(400, 'invalid_linked_wallet', 'linked_wallet must differ from primary_wallet')
+  const normalizedAddress = typeof body.address === 'string' ? normalizeAddress(body.address) : null
+  if (!normalizedAddress) {
+    throw new ApiError(400, 'invalid_address', 'address must be a valid EVM address')
   }
 
   const signature = typeof body.signature === 'string' ? body.signature.trim() : ''
@@ -184,75 +132,80 @@ walletLinkRoute.post('/link', requireWalletAuth, async (c) => {
     throw new ApiError(400, 'invalid_message', 'message is required')
   }
 
-  assertValidLinkMessage(message, primaryWallet)
-  await verifyLinkedWalletOwnership(linkedWallet, signature, message)
+  const nonce = extractNonce(message)
+  assertFreshSiweNonce(normalizedAddress, nonce)
 
-  const link = await linkWallet(
-    primaryWallet,
-    linkedWallet.address,
-    signature,
-    message,
-  )
-
-  return c.json({ link }, 201)
-})
-
-// ── Read ────────────────────────────────────────────────────
-
-walletLinkRoute.get('/links/:wallet', async (c) => {
-  const wallet = normalizeLinkedWallet(c.req.param('wallet'))
-  if (!wallet) {
-    throw new ApiError(400, 'invalid_wallet', 'Invalid wallet address')
+  const addressInMessage = extractAddressFromSiweMessage(message)
+  if (addressInMessage && addressInMessage !== normalizedAddress) {
+    throw new ApiError(400, 'invalid_message', 'SIWE message address does not match request address')
   }
 
-  const [linkedWallets, linkedUnder, cluster] = await Promise.all([
-    getLinkedWallets(wallet.address),
-    db<Array<{
-      id: number
-      primary_wallet: string
-      linked_wallet: string
-      verification_signature: string
-      verification_message: string
-      created_at: string
-    }>>`
-      SELECT
-        id,
-        primary_wallet,
-        linked_wallet,
-        verification_signature,
-        verification_message,
-        created_at::text AS created_at
-      FROM ${db(CONFIG.SCHEMA)}.user_wallet_links
-      WHERE linked_wallet = ${wallet.address}
-      ORDER BY created_at ASC, id ASC
-    `,
-    getIdentityClusterByWallet(wallet.address),
-  ])
+  const valid = await verifyMessage({
+    address: normalizedAddress as `0x${string}`,
+    message,
+    signature: signature as `0x${string}`,
+  })
 
+  if (!valid) {
+    throw new ApiError(401, 'invalid_signature', 'SIWE signature verification failed')
+  }
+
+  await upsertUser(privyUserId, {
+    email: email ?? undefined,
+    x_username: xUsername ?? undefined,
+  })
+
+  await upsertUserWalletLinks(privyUserId, normalizedAddress, 'privy_siwe')
+
+  const wallets = await getUserWallets(privyUserId)
   return c.json({
-    wallet: wallet.address,
-    linked_wallets: linkedWallets,
-    linked_under: linkedUnder,
-    cluster,
+    success: true,
+    wallets,
   })
 })
 
-// ── Unlink ──────────────────────────────────────────────────
-
-walletLinkRoute.delete('/link', requireWalletAuth, async (c) => {
-  const primaryWallet = c.get('walletAddress')
-  if (!primaryWallet) {
-    throw new ApiError(401, 'auth_required', 'Wallet authentication required')
+walletLinkRoute.get('/user/wallets', requirePrivyAuth, async (c) => {
+  const claims = c.get('privyClaims') as Record<string, unknown> | undefined
+  if (!claims) {
+    throw new ApiError(401, 'auth_required', 'Privy authentication required')
   }
 
-  const body = await c.req.json<{ linked_wallet?: unknown }>()
-  const linkedWallet = normalizeLinkedWallet(body.linked_wallet)
-  if (!linkedWallet) {
-    throw new ApiError(400, 'invalid_linked_wallet', 'linked_wallet must be a valid EVM or Solana address')
+  const { privyUserId, email, xUsername } = extractUserIdentityFromClaims(claims)
+
+  await upsertUser(privyUserId, {
+    email: email ?? undefined,
+    x_username: xUsername ?? undefined,
+  })
+
+  const wallets = await getUserWallets(privyUserId)
+  return c.json({ wallets })
+})
+
+walletLinkRoute.delete('/user/link-wallet/:address', requirePrivyAuth, async (c) => {
+  const claims = c.get('privyClaims') as Record<string, unknown> | undefined
+  if (!claims) {
+    throw new ApiError(401, 'auth_required', 'Privy authentication required')
   }
 
-  await unlinkWallet(primaryWallet, linkedWallet.address)
-  return c.json({ ok: true })
+  const { privyUserId } = extractUserIdentityFromClaims(claims)
+
+  const address = normalizeAddress(c.req.param('address'))
+  if (!address) {
+    throw new ApiError(400, 'invalid_address', 'Invalid wallet address')
+  }
+
+  const ownsWallet = await userOwnsWallet(privyUserId, address)
+  if (!ownsWallet) {
+    throw new ApiError(401, 'wallet_not_owned', 'Wallet is not linked to this profile')
+  }
+
+  await removeUserWallet(privyUserId, address)
+  const wallets = await getUserWallets(privyUserId)
+
+  return c.json({
+    success: true,
+    wallets,
+  })
 })
 
 export default walletLinkRoute

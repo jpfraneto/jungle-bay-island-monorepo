@@ -16,10 +16,11 @@ import {
   getCatalogItems,
   getCatalogItemsByCreator,
   getIdentityClusterByWallet,
+  userOwnsWallet,
   getUnclaimedCreatorCredits,
   incrementInstallCount,
 } from '../db/queries'
-import { optionalWalletContext } from '../middleware/auth'
+import { optionalWalletContext, requirePrivyAuth } from '../middleware/auth'
 import { getCanonicalProjectContext } from '../services/canonicalProjects'
 import { ApiError } from '../services/errors'
 import type { AppEnv } from '../types'
@@ -69,6 +70,14 @@ function asObject(input: unknown): Record<string, unknown> | null {
  */
 function asString(input: unknown): string {
   return typeof input === 'string' ? input.trim() : ''
+}
+
+function getPrivyUserIdFromClaims(claims: Record<string, unknown> | undefined): string {
+  const privyUserId = typeof claims?.sub === 'string' ? claims.sub.trim() : ''
+  if (!privyUserId) {
+    throw new ApiError(401, 'auth_required', 'Privy authentication required')
+  }
+  return privyUserId
 }
 
 /**
@@ -400,16 +409,23 @@ async function upsertCreatorClaimAllocation(input: {
 
 // ── Submit ───────────────────────────────────────────────────
 
-bodegaRoute.post('/submit', optionalWalletContext, async (c) => {
+bodegaRoute.post('/submit', requirePrivyAuth, async (c) => {
+  const claims = c.get('privyClaims') as Record<string, unknown> | undefined
+  const privyUserId = getPrivyUserIdFromClaims(claims)
+
   const body = await c.req.json<BodegaSubmitBody>()
-  const creatorWallet =
-    normalizeWallet(body.creator_wallet) ?? c.get('walletAddress') ?? null
+  const creatorWallet = normalizeWallet(body.creator_wallet) ?? c.get('walletAddress') ?? null
   if (!creatorWallet) {
     throw new ApiError(
       400,
       'invalid_wallet',
-      'creator_wallet is required when wallet authentication is unavailable',
+      'creator_wallet is required',
     )
+  }
+
+  const ownsWallet = await userOwnsWallet(privyUserId, creatorWallet)
+  if (!ownsWallet) {
+    throw new ApiError(401, 'wallet_not_owned', 'wallet_not_owned')
   }
 
   const assetType = asString(body.asset_type).toLowerCase()
@@ -573,16 +589,23 @@ bodegaRoute.get('/catalog/:id', async (c) => {
 
 // ── Install ────────────────────────────────────────────────
 
-bodegaRoute.post('/install', optionalWalletContext, async (c) => {
+bodegaRoute.post('/install', requirePrivyAuth, async (c) => {
+  const claims = c.get('privyClaims') as Record<string, unknown> | undefined
+  const privyUserId = getPrivyUserIdFromClaims(claims)
+
   const body = await c.req.json<BodegaInstallBody>()
-  const installedByWallet =
-    normalizeWallet(body.installed_by_wallet) ?? c.get('walletAddress') ?? null
+  const installedByWallet = normalizeWallet(body.installed_by_wallet) ?? c.get('walletAddress') ?? null
   if (!installedByWallet) {
     throw new ApiError(
       400,
       'invalid_wallet',
-      'installed_by_wallet is required when wallet authentication is unavailable',
+      'installed_by_wallet is required',
     )
+  }
+
+  const ownsWallet = await userOwnsWallet(privyUserId, installedByWallet)
+  if (!ownsWallet) {
+    throw new ApiError(401, 'wallet_not_owned', 'wallet_not_owned')
   }
 
   const catalogItemId = Number.parseInt(String(body.catalog_item_id ?? ''), 10)

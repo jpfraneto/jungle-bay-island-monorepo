@@ -1,0 +1,50 @@
+.selectorWrap {
+  display: grid;
+  gap: 8px;
+}
+
+.selectorLabel {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.selector {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(7, 17, 12, 0.78);
+  color: var(--text-primary);
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.warning {
+  margin: 0;
+  font-size: 12px;
+  color: #ffcf9e;
+}
+
+.error {
+  margin: 0;
+  font-size: 12px;
+  color: #ffb9b9;
+}
+
+.selectorHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.selectorHeader span {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.connectButton {
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 8px 12px;
+  background: rgba(14, 31, 21, 0.8);
+  cursor: pointer;
+}

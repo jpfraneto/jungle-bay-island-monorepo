@@ -211,6 +211,22 @@ export interface UserWalletLinkRow {
   created_at: string
 }
 
+export interface UserRow {
+  id: string
+  privy_user_id: string
+  x_username: string | null
+  email: string | null
+  created_at: string
+}
+
+export interface UserWalletRow {
+  id: string
+  privy_user_id: string
+  address: string
+  source: 'privy_siwe'
+  linked_at: string
+}
+
 export interface ClaimHistoryRow {
   id: number
   wallet: string

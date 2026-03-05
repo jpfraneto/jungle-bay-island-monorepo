@@ -2,7 +2,11 @@ import { useEffect, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { useNavigate } from "react-router-dom";
 import BungalowOptionPicker from "./BungalowOptionPicker";
+import WalletSelector from "./WalletSelector";
 import { useJBMTransfer } from "../hooks/useJBMTransfer";
+import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
+import { useSiweWalletLink } from "../hooks/useSiweWalletLink";
+import { useUserWalletLinks } from "../hooks/useUserWalletLinks";
 import { formatJbmAmount } from "../utils/formatters";
 import {
   formatCreatorLabel,
@@ -149,6 +153,17 @@ export default function BodegaInstallModal({
 }: BodegaInstallModalProps) {
   const navigate = useNavigate();
   const { authenticated, getAccessToken, login } = usePrivy();
+  const { walletAddress } = usePrivyBaseWallet();
+  const {
+    wallets: linkedWalletRows,
+    refetch: refetchLinkedWallets,
+  } = useUserWalletLinks(authenticated);
+  const {
+    linkCurrentWallet,
+    isLinking: isLinkingWallet,
+    status: linkStatus,
+    error: linkError,
+  } = useSiweWalletLink();
   const { transfer, isTransferring } = useJBMTransfer();
 
   const [selectedKey, setSelectedKey] = useState(() => {
@@ -161,6 +176,9 @@ export default function BodegaInstallModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [selectedPayWallet, setSelectedPayWallet] = useState<string>("");
+  const [showWalletGate, setShowWalletGate] = useState(false);
+  const [resumeAfterLink, setResumeAfterLink] = useState(false);
   const [successBungalow, setSuccessBungalow] = useState<DirectoryBungalow | null>(
     null,
   );
@@ -189,6 +207,8 @@ export default function BodegaInstallModal({
     setIsSubmitting(false);
     setStatus(null);
     setError(null);
+    setShowWalletGate(false);
+    setResumeAfterLink(false);
     setSuccessBungalow(null);
   }, [bungalowOptions, isWalletScoped, item, open, pendingPayment, preselectedBungalow]);
 
@@ -211,6 +231,12 @@ export default function BodegaInstallModal({
     };
   }, [open]);
 
+  useEffect(() => {
+    if (!walletAddress) return;
+    if (selectedPayWallet) return;
+    setSelectedPayWallet(walletAddress);
+  }, [selectedPayWallet, walletAddress]);
+
   if (!open || !item) return null;
 
   const selectedBungalow = bungalowOptions.find(
@@ -224,6 +250,21 @@ export default function BodegaInstallModal({
   const handleInstall = async () => {
     if (!authenticated) {
       login();
+      return;
+    }
+
+    const linkedWallets = linkedWalletRows.map((wallet) =>
+      wallet.address.toLowerCase(),
+    );
+    const payoutWallet = selectedPayWallet || walletAddress;
+    if (!payoutWallet || linkedWalletRows.length === 0) {
+      setShowWalletGate(true);
+      setResumeAfterLink(true);
+      return;
+    }
+    if (!linkedWallets.includes(payoutWallet.toLowerCase())) {
+      setError("Link this wallet first to use it for transactions.");
+      setShowWalletGate(true);
       return;
     }
 
@@ -330,6 +371,20 @@ export default function BodegaInstallModal({
     }
   };
 
+  const handleAddWallet = async () => {
+    try {
+      await linkCurrentWallet();
+      await refetchLinkedWallets();
+      setShowWalletGate(false);
+      if (resumeAfterLink) {
+        setResumeAfterLink(false);
+        await handleInstall();
+      }
+    } catch {
+      // Hook already provides user-facing error feedback.
+    }
+  };
+
   return (
     <div className={styles.overlay}>
       <div className={styles.modal}>
@@ -361,6 +416,25 @@ export default function BodegaInstallModal({
             </span>
           </div>
         </section>
+
+        <WalletSelector label="Pay with" onSelect={setSelectedPayWallet} />
+        {showWalletGate || linkedWalletRows.length === 0 ? (
+          <section className={styles.emptyState}>
+            <strong>You need a linked wallet to continue.</strong>
+            <button
+              type="button"
+              className={styles.submitButton}
+              onClick={() => {
+                void handleAddWallet();
+              }}
+              disabled={isLinkingWallet}
+            >
+              {isLinkingWallet ? "Linking..." : "Add wallet"}
+            </button>
+            {linkStatus ? <span>{linkStatus}</span> : null}
+            {linkError ? <span className={styles.error}>{linkError}</span> : null}
+          </section>
+        ) : null}
 
         {successBungalow ? (
           <section className={styles.successCard}>

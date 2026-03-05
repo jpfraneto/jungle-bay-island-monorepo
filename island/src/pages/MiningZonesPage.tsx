@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
-import { usePrivy, useWallets } from "@privy-io/react-auth";
+import { useEffect, useState } from "react";
+import { usePrivy } from "@privy-io/react-auth";
+import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
 import MiningZones from "../components/MiningZones";
 import { formatAddress } from "../utils/formatters";
 import styles from "../styles/mining-zones-page.module.css";
@@ -9,16 +10,10 @@ interface UserProfileResponse {
 }
 
 export default function MiningZonesPage() {
-  const { authenticated, user } = usePrivy();
-  const { wallets } = useWallets();
+  const { authenticated } = usePrivy();
+  const { walletAddress } = usePrivyBaseWallet();
   const [heat, setHeat] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
-
-  const walletAddress = useMemo(() => {
-    if (user?.wallet?.address) return user.wallet.address;
-    if (wallets.length > 0) return wallets[0].address;
-    return "";
-  }, [user, wallets]);
 
   useEffect(() => {
     if (!authenticated || !walletAddress) {

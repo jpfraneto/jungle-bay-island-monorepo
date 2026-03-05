@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import ChainIcon from "./ChainIcon";
+import WalletSelector from "./WalletSelector";
 import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
+import { useSiweWalletLink } from "../hooks/useSiweWalletLink";
+import { useUserWalletLinks } from "../hooks/useUserWalletLinks";
 import { useWalletClaims } from "../hooks/useWalletClaims";
 import { CLAIM_CONTRACT_ADDRESS } from "../utils/constants";
 import {
@@ -158,6 +161,16 @@ function getAmountJbmFromPayload(payload: ClaimSignaturePayload): string {
 export default function RewardsInboxButton() {
   const { authenticated, getAccessToken, login } = usePrivy();
   const { publicClient, requireWallet, walletAddress } = usePrivyBaseWallet();
+  const {
+    wallets: linkedWalletRows,
+    refetch: refetchLinkedWallets,
+  } = useUserWalletLinks(authenticated);
+  const {
+    linkCurrentWallet,
+    isLinking: isLinkingWallet,
+    status: linkStatus,
+    error: linkError,
+  } = useSiweWalletLink();
   const { claims, isLoading, error: loadError, refetch } = useWalletClaims(
     walletAddress ?? undefined,
   );
@@ -167,6 +180,9 @@ export default function RewardsInboxButton() {
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [clockMs, setClockMs] = useState(() => Date.now());
+  const [selectedPayoutWallet, setSelectedPayoutWallet] = useState<string>("");
+  const [showWalletGate, setShowWalletGate] = useState(false);
+  const [resumeAfterLink, setResumeAfterLink] = useState(false);
   const [cachedClaimedPeriod, setCachedClaimedPeriod] =
     useState<CachedClaimedPeriod | null>(null);
 
@@ -174,6 +190,13 @@ export default function RewardsInboxButton() {
     setCachedClaimedPeriod(readCachedClaimedPeriod(walletAddress));
   }, [walletAddress]);
 
+  useEffect(() => {
+    if (!walletAddress) return;
+    if (selectedPayoutWallet) return;
+    setSelectedPayoutWallet(walletAddress);
+  }, [selectedPayoutWallet, walletAddress]);
+
+  const linkedWallets = linkedWalletRows.map((wallet) => wallet.address.toLowerCase());
   const claimableItems = claims?.items.filter((item) => item.can_claim) ?? [];
   const claimedItems = claims?.items.filter((item) => item.claimed_today) ?? [];
   const claimedTodayTotal = useMemo(() => {
@@ -244,18 +267,26 @@ export default function RewardsInboxButton() {
   const handleOpen = () => {
     setStatus(null);
     setError(null);
+    setShowWalletGate(false);
+    setResumeAfterLink(false);
     setOpen(true);
     void refetch();
   };
 
-  const handleClaimAll = async () => {
-    if (!authenticated) {
-      login();
+  const executeClaimAll = async () => {
+    if (claimableItems.length === 0) {
+      setStatus("No rewards ready to claim");
       return;
     }
 
-    if (claimableItems.length === 0) {
-      setStatus("No rewards ready to claim");
+    const payoutWallet = selectedPayoutWallet || walletAddress;
+    if (!payoutWallet) {
+      setError("Select a payout wallet first");
+      return;
+    }
+
+    if (!linkedWallets.includes(payoutWallet.toLowerCase())) {
+      setError("Link this wallet first to use it for transactions.");
       return;
     }
 
@@ -286,7 +317,7 @@ export default function RewardsInboxButton() {
           headers,
           body: JSON.stringify({
             wallet: address,
-            payout_wallet: address,
+            payout_wallet: payoutWallet,
           }),
         },
       );
@@ -382,7 +413,7 @@ export default function RewardsInboxButton() {
           headers,
           body: JSON.stringify({
             wallet: address,
-            payout_wallet: signData.payout_wallet,
+            payout_wallet: payoutWallet,
           }),
         },
       );
@@ -402,6 +433,35 @@ export default function RewardsInboxButton() {
       await refetch().catch(() => undefined);
     } finally {
       setIsClaiming(false);
+    }
+  };
+
+  const handleClaimAll = async () => {
+    if (!authenticated) {
+      login();
+      return;
+    }
+
+    if (linkedWalletRows.length === 0) {
+      setShowWalletGate(true);
+      setResumeAfterLink(true);
+      return;
+    }
+
+    await executeClaimAll();
+  };
+
+  const handleAddWallet = async () => {
+    try {
+      await linkCurrentWallet();
+      await refetchLinkedWallets();
+      setShowWalletGate(false);
+      if (resumeAfterLink) {
+        setResumeAfterLink(false);
+        await executeClaimAll();
+      }
+    } catch {
+      // Hook error state already contains user-friendly messaging.
     }
   };
 
@@ -430,12 +490,12 @@ export default function RewardsInboxButton() {
                 <h3>Island Rewards</h3>
                 <p>
                   {hasClaimedToday
-                      ? "You already claimed today's rewards."
+                    ? "You already claimed today's rewards."
                     : isLoading
-                    ? "Loading rewards..."
+                      ? "Loading rewards..."
                       : claims
-                      ? `You have heat score on ${claims.claimable_count} bungalow${claims.claimable_count === 1 ? "" : "s"}.`
-                      : "Loading rewards..."}
+                        ? `You have heat score on ${claims.claimable_count} bungalow${claims.claimable_count === 1 ? "" : "s"}.`
+                        : "Loading rewards..."}
                 </p>
               </div>
               <button
@@ -446,6 +506,25 @@ export default function RewardsInboxButton() {
                 ×
               </button>
             </header>
+
+            <WalletSelector onSelect={setSelectedPayoutWallet} />
+            {showWalletGate || linkedWalletRows.length === 0 ? (
+              <div className={styles.error}>
+                <strong>You need a linked wallet to continue.</strong>
+                <button
+                  type="button"
+                  className={styles.claimButton}
+                  onClick={() => {
+                    void handleAddWallet();
+                  }}
+                  disabled={isLinkingWallet}
+                >
+                  {isLinkingWallet ? "Linking..." : "Add wallet"}
+                </button>
+                {linkStatus ? <div className={styles.status}>{linkStatus}</div> : null}
+                {linkError ? <div className={styles.error}>{linkError}</div> : null}
+              </div>
+            ) : null}
 
             <div className={styles.list}>
               {isLoading && !hasClaimedToday ? (
@@ -472,7 +551,7 @@ export default function RewardsInboxButton() {
               ) : null}
 
               {!isLoading && !loadError
-                  ? (hasClaimedToday ? claimedItems : claimableItems).map((item) => (
+                ? (hasClaimedToday ? claimedItems : claimableItems).map((item) => (
                     <div
                       key={`${item.chain}:${item.token_address}`}
                       className={styles.item}
@@ -511,17 +590,20 @@ export default function RewardsInboxButton() {
                 disabled={
                   isClaiming ||
                   hasClaimedToday ||
+                  linkedWalletRows.length === 0 ||
                   (isLoading && !hasClaimedToday) ||
                   claimableItems.length === 0
                 }
-                onClick={handleClaimAll}
+                onClick={() => {
+                  void handleClaimAll();
+                }}
               >
                 {isClaiming
                   ? "Claiming..."
                   : hasClaimedToday
-                      ? "Claimed today ✓"
+                    ? "Claimed today ✓"
                     : isLoading
-                    ? "Loading rewards..."
+                      ? "Loading rewards..."
                       : `Claim ${claims ? formatJbmCount(claims.total_claimable_jbm) : "0"} jungle bay memes`}
               </button>
               {hasClaimedToday && countdown ? (

@@ -1,7 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
+import WalletSelector from "./WalletSelector";
 import { useClaimable } from "../hooks/useClaimable";
 import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
+import { useSiweWalletLink } from "../hooks/useSiweWalletLink";
+import { useUserWalletLinks } from "../hooks/useUserWalletLinks";
 import { CLAIM_CONTRACT_ADDRESS } from "../utils/constants";
 import {
   claimEscrowAbi,
@@ -68,30 +71,58 @@ export default function ClaimPanel({
 }: ClaimPanelProps) {
   const { authenticated, login, getAccessToken } = usePrivy();
   const { publicClient, requireWallet, walletAddress } = usePrivyBaseWallet();
+  const {
+    wallets: linkedWalletRows,
+    refetch: refetchLinkedWallets,
+  } = useUserWalletLinks(authenticated);
+  const {
+    linkCurrentWallet,
+    isLinking: isLinkingWallet,
+    status: linkStatus,
+    error: linkError,
+  } = useSiweWalletLink();
+
+  const [selectedPayoutWallet, setSelectedPayoutWallet] = useState<string>("");
+  const claimLookupWallet = selectedPayoutWallet || walletAddress || undefined;
   const { claimable, isLoading, refetch } = useClaimable(
     chain,
     ca,
-    walletAddress ?? undefined,
+    claimLookupWallet,
   );
 
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isClaiming, setIsClaiming] = useState(false);
+  const [resumeAfterLink, setResumeAfterLink] = useState(false);
+  const [showWalletGate, setShowWalletGate] = useState(false);
   const nextClaimText = getNextClaimCountdown(claimable?.claimed_today);
   const panelClassName = `${styles.panel} ${!sticky ? styles.panelStatic : ""}`;
+  const linkedWallets = linkedWalletRows.map((wallet) => wallet.address.toLowerCase());
 
-  const handleClaim = async () => {
-    if (!authenticated) {
-      login();
-      return;
-    }
+  useEffect(() => {
+    if (!walletAddress) return;
+    if (selectedPayoutWallet) return;
+    setSelectedPayoutWallet(walletAddress);
+  }, [selectedPayoutWallet, walletAddress]);
 
+  const runClaim = async () => {
     if (!claimable?.can_claim || !claimable.claimable_jbm) {
       return;
     }
 
     if (!publicClient) {
       setError("Missing Base public client");
+      return;
+    }
+
+    const payoutWallet = selectedPayoutWallet || walletAddress;
+    if (!payoutWallet) {
+      setError("Select a payout wallet first");
+      return;
+    }
+
+    if (!linkedWallets.includes(payoutWallet.toLowerCase())) {
+      setError("Link this wallet first to use it for transactions.");
       return;
     }
 
@@ -114,6 +145,7 @@ export default function ClaimPanel({
         headers,
         body: JSON.stringify({
           wallet: address,
+          payout_wallet: payoutWallet,
         }),
       });
 
@@ -194,7 +226,7 @@ export default function ClaimPanel({
         headers,
         body: JSON.stringify({
           wallet: address,
-          payout_wallet: signData.payout_wallet,
+          payout_wallet: payoutWallet,
         }),
       });
 
@@ -213,6 +245,35 @@ export default function ClaimPanel({
       await refetch().catch(() => undefined);
     } finally {
       setIsClaiming(false);
+    }
+  };
+
+  const handleClaim = async () => {
+    if (!authenticated) {
+      login();
+      return;
+    }
+
+    if (linkedWalletRows.length === 0) {
+      setShowWalletGate(true);
+      setResumeAfterLink(true);
+      return;
+    }
+
+    await runClaim();
+  };
+
+  const handleAddWallet = async () => {
+    try {
+      await linkCurrentWallet();
+      await refetchLinkedWallets();
+      setShowWalletGate(false);
+      if (resumeAfterLink) {
+        setResumeAfterLink(false);
+        await runClaim();
+      }
+    } catch {
+      // Hook state already exposes a user-friendly error.
     }
   };
 
@@ -253,6 +314,30 @@ export default function ClaimPanel({
     <aside className={panelClassName}>
       <h3>Claim Rewards</h3>
 
+      <WalletSelector
+        label="Pay with"
+        onSelect={(address) => {
+          setSelectedPayoutWallet(address);
+          setError(null);
+        }}
+      />
+
+      {showWalletGate || linkedWalletRows.length === 0 ? (
+        <div className={styles.error}>
+          <strong>You need a linked wallet to continue.</strong>
+          <button
+            type="button"
+            className={styles.actionButton}
+            onClick={handleAddWallet}
+            disabled={isLinkingWallet}
+          >
+            {isLinkingWallet ? "Linking..." : "Add wallet"}
+          </button>
+          {linkStatus ? <div className={styles.status}>{linkStatus}</div> : null}
+          {linkError ? <div className={styles.error}>{linkError}</div> : null}
+        </div>
+      ) : null}
+
       <div className={styles.metric}>
         <span>Your heat</span>
         <strong>{claimable.heat_degrees.toFixed(1)}°</strong>
@@ -270,8 +355,10 @@ export default function ClaimPanel({
       <button
         type="button"
         className={styles.actionButton}
-        disabled={!claimable.can_claim || isClaiming}
-        onClick={handleClaim}
+        disabled={!claimable.can_claim || isClaiming || linkedWalletRows.length === 0}
+        onClick={() => {
+          void handleClaim();
+        }}
       >
         {claimable.can_claim ? "Claim" : "Claimed today ✓"}
       </button>

@@ -14,7 +14,9 @@ import type {
   ScanLogRow,
   TokenHolderRow,
   TokenRegistryRow,
+  UserRow,
   UserWalletLinkRow,
+  UserWalletRow,
 } from './schema'
 import type { DexScreenerData } from '../services/dexscreener'
 
@@ -1288,15 +1290,6 @@ async function ensureUserWalletLinksTable(): Promise<void> {
   await userWalletLinksTablePromise
 }
 
-export interface UserWalletLinkUpsertRow {
-  wallet: string
-  wallet_kind: 'evm' | 'solana'
-  seen_via_privy: boolean
-  seen_via_farcaster: boolean
-  farcaster_verified: boolean
-  last_seen_requester_wallet: boolean
-}
-
 export interface IdentityClusterWallet {
   wallet: string
   wallet_kind: 'evm' | 'solana'
@@ -1322,130 +1315,216 @@ export interface IdentityCluster {
   } | null
 }
 
-export async function upsertUserWalletLinks(input: {
-  privyUserId: string | null
-  fid: number | null
-  xUsername: string | null
-  rows: UserWalletLinkUpsertRow[]
-}): Promise<void> {
-  void input
+export async function getUserByPrivyUserId(privyUserId: string): Promise<UserRow | null> {
+  const rows = await db<UserRow[]>`
+    SELECT
+      id::text AS id,
+      privy_user_id,
+      x_username,
+      email,
+      created_at::text AS created_at
+    FROM ${db(CONFIG.SCHEMA)}.users
+    WHERE privy_user_id = ${privyUserId}
+    LIMIT 1
+  `
+  return rows[0] ?? null
+}
+
+export async function upsertUser(
+  privyUserId: string,
+  fields: { email?: string; x_username?: string },
+): Promise<UserRow> {
+  const normalizedEmail = fields.email?.trim() || null
+  const normalizedUsername = fields.x_username?.trim() || null
+
+  const rows = await db<UserRow[]>`
+    INSERT INTO ${db(CONFIG.SCHEMA)}.users (
+      privy_user_id,
+      email,
+      x_username
+    )
+    VALUES (
+      ${privyUserId},
+      ${normalizedEmail},
+      ${normalizedUsername}
+    )
+    ON CONFLICT (privy_user_id)
+    DO UPDATE SET
+      email = COALESCE(EXCLUDED.email, ${db(CONFIG.SCHEMA)}.users.email),
+      x_username = COALESCE(EXCLUDED.x_username, ${db(CONFIG.SCHEMA)}.users.x_username)
+    RETURNING
+      id::text AS id,
+      privy_user_id,
+      x_username,
+      email,
+      created_at::text AS created_at
+  `
+
+  return rows[0]
+}
+
+export async function clearUserXUsername(privyUserId: string): Promise<void> {
+  await db`
+    UPDATE ${db(CONFIG.SCHEMA)}.users
+    SET x_username = NULL
+    WHERE privy_user_id = ${privyUserId}
+  `
+}
+
+export async function getUserByXUsername(xUsername: string): Promise<UserRow | null> {
+  const rows = await db<UserRow[]>`
+    SELECT
+      id::text AS id,
+      privy_user_id,
+      x_username,
+      email,
+      created_at::text AS created_at
+    FROM ${db(CONFIG.SCHEMA)}.users
+    WHERE x_username = ${xUsername}
+    LIMIT 1
+  `
+  return rows[0] ?? null
+}
+
+export async function upsertUserWalletLinks(
+  privyUserId: string,
+  address: string,
+  source: 'privy_siwe',
+): Promise<UserWalletRow | null> {
+  const rows = await db<UserWalletRow[]>`
+    INSERT INTO ${db(CONFIG.SCHEMA)}.user_wallets (privy_user_id, address, source)
+    VALUES (${privyUserId}, ${address}, ${source})
+    ON CONFLICT (privy_user_id, address) DO NOTHING
+    RETURNING
+      id::text AS id,
+      privy_user_id,
+      address,
+      source,
+      linked_at::text AS linked_at
+  `
+
+  return rows[0] ?? null
+}
+
+export async function getUserWallets(privyUserId: string): Promise<UserWalletRow[]> {
+  return db<UserWalletRow[]>`
+    SELECT
+      id::text AS id,
+      privy_user_id,
+      address,
+      source,
+      linked_at::text AS linked_at
+    FROM ${db(CONFIG.SCHEMA)}.user_wallets
+    WHERE privy_user_id = ${privyUserId}
+    ORDER BY linked_at ASC, id ASC
+  `
+}
+
+export async function removeUserWallet(privyUserId: string, address: string): Promise<void> {
+  await db`
+    DELETE FROM ${db(CONFIG.SCHEMA)}.user_wallets
+    WHERE privy_user_id = ${privyUserId}
+      AND address = ${address}
+  `
+}
+
+export async function userOwnsWallet(privyUserId: string, address: string): Promise<boolean> {
+  const rows = await db<Array<{ owns_wallet: boolean }>>`
+    SELECT EXISTS (
+      SELECT 1
+      FROM ${db(CONFIG.SCHEMA)}.user_wallets
+      WHERE privy_user_id = ${privyUserId}
+        AND address = ${address}
+    ) AS owns_wallet
+  `
+
+  return Boolean(rows[0]?.owns_wallet)
+}
+
+export async function getUserByWalletAddress(address: string): Promise<UserRow | null> {
+  const rows = await db<UserRow[]>`
+    SELECT
+      u.id::text AS id,
+      u.privy_user_id,
+      u.x_username,
+      u.email,
+      u.created_at::text AS created_at
+    FROM ${db(CONFIG.SCHEMA)}.users u
+    INNER JOIN ${db(CONFIG.SCHEMA)}.user_wallets uw
+      ON uw.privy_user_id = u.privy_user_id
+    WHERE uw.address = ${address}
+    LIMIT 1
+  `
+
+  return rows[0] ?? null
 }
 
 export async function getIdentityClusterByWallet(wallet: string): Promise<IdentityCluster | null> {
-  await ensureUserWalletLinksTable()
-
   const normalizedWallet = normalizeAddress(wallet) ?? normalizeAddress(wallet, 'solana')
   if (!normalizedWallet) return null
-  const requesterKind = getWalletKind(normalizedWallet)
-  if (!requesterKind) return null
 
-  const directRows = await db<Array<{ primary_wallet: string | null; linked_wallet: string | null }>>`
-    SELECT primary_wallet, linked_wallet
-    FROM ${db(CONFIG.SCHEMA)}.user_wallet_links
-    WHERE primary_wallet = ${normalizedWallet}
-       OR linked_wallet = ${normalizedWallet}
-  `
+  const user = await getUserByWalletAddress(normalizedWallet)
+  if (!user) {
+    const walletKind = getWalletKind(normalizedWallet)
+    if (!walletKind) return null
 
-  const primaryWallets = new Set<string>()
-  for (const row of directRows) {
-    if (row.primary_wallet) {
-      primaryWallets.add(row.primary_wallet)
+    return {
+      identity_key: `wallet:${normalizedWallet}`,
+      identity_source: 'wallet',
+      identity_value: normalizedWallet,
+      wallets: [
+        {
+          wallet: normalizedWallet,
+          wallet_kind: walletKind,
+          linked_via_privy: false,
+          linked_via_farcaster: false,
+          farcaster_verified: false,
+          is_requester_wallet: true,
+        },
+      ],
+      evm_wallets: walletKind === 'evm' ? [normalizedWallet] : [],
+      solana_wallets: walletKind === 'solana' ? [normalizedWallet] : [],
+      x_username: null,
+      farcaster: null,
     }
   }
 
-  const primaryList = [...primaryWallets]
-  const clusterRows = primaryList.length > 0
-    ? await db<Array<{ primary_wallet: string | null; linked_wallet: string | null }>>`
-      SELECT primary_wallet, linked_wallet
-      FROM ${db(CONFIG.SCHEMA)}.user_wallet_links
-      WHERE primary_wallet IN ${db(primaryList)}
-    `
-    : []
-
+  const linkedWalletRows = await getUserWallets(user.privy_user_id)
   const dedup = new Map<string, IdentityClusterWallet>()
-  // Fold manual link rows into one typed cluster map without duplicating wallets.
-  const addClusterWallet = (candidate: string | null): void => {
-    if (!candidate) return
-    const walletKind = getWalletKind(candidate)
-    if (!walletKind) return
 
-    const key = `${walletKind}:${candidate}`
-    const existing = dedup.get(key)
-    if (existing) {
-      existing.is_requester_wallet = existing.is_requester_wallet || candidate === normalizedWallet
-      return
-    }
-
+  for (const row of linkedWalletRows) {
+    const walletKind = getWalletKind(row.address)
+    if (!walletKind) continue
+    const key = `${walletKind}:${row.address}`
     dedup.set(key, {
-      wallet: candidate,
+      wallet: row.address,
+      wallet_kind: walletKind,
+      linked_via_privy: true,
+      linked_via_farcaster: false,
+      farcaster_verified: false,
+      is_requester_wallet: row.address === normalizedWallet,
+    })
+  }
+
+  if (dedup.size === 0) {
+    const walletKind = getWalletKind(normalizedWallet)
+    if (!walletKind) return null
+    dedup.set(`${walletKind}:${normalizedWallet}`, {
+      wallet: normalizedWallet,
       wallet_kind: walletKind,
       linked_via_privy: false,
       linked_via_farcaster: false,
       farcaster_verified: false,
-      is_requester_wallet: candidate === normalizedWallet,
+      is_requester_wallet: true,
     })
   }
 
-  addClusterWallet(normalizedWallet)
-  for (const candidate of primaryList) {
-    addClusterWallet(candidate)
-  }
-  for (const row of clusterRows) {
-    addClusterWallet(row.primary_wallet)
-    addClusterWallet(row.linked_wallet)
-  }
-
   const wallets = [...dedup.values()]
-  const clusterWallets = wallets.map((entry) => entry.wallet)
-
-  const farcasterRows = clusterWallets.length > 0
-    ? await db<Array<{
-      wallet: string
-      fid: number | null
-      username: string | null
-      display_name: string | null
-      pfp_url: string | null
-    }>>`
-      SELECT wallet, fid, username, display_name, pfp_url
-      FROM ${db(CONFIG.SCHEMA)}.wallet_farcaster_profiles
-      WHERE wallet IN ${db(clusterWallets)}
-      ORDER BY CASE WHEN wallet = ${normalizedWallet} THEN 0 ELSE 1 END, resolved_at DESC
-    `
-    : []
-
-  const verifiedWallets = new Set(
-    farcasterRows
-      .filter((row) => row.fid !== null)
-      .map((row) => row.wallet),
-  )
-
-  for (const entry of wallets) {
-    if (!verifiedWallets.has(entry.wallet)) continue
-    entry.linked_via_farcaster = true
-    entry.farcaster_verified = true
-  }
-
-  const farcasterProfile = farcasterRows.find((row) => row.fid !== null) ?? null
-  const farcaster = farcasterProfile?.fid
-    ? {
-        fid: Number(farcasterProfile.fid),
-        username: farcasterProfile.username,
-        display_name: farcasterProfile.display_name,
-        pfp_url: farcasterProfile.pfp_url,
-      }
-    : null
-
-  const identitySource: 'privy' | 'farcaster' | 'wallet' = farcaster && primaryList.length === 0
-    ? 'farcaster'
-    : 'wallet'
-  const identityValue = identitySource === 'farcaster'
-    ? String(farcaster?.fid ?? normalizedWallet)
-    : primaryList[0] ?? normalizedWallet
 
   return {
-    identity_key: `${identitySource}:${identityValue}`,
-    identity_source: identitySource,
-    identity_value: identityValue,
+    identity_key: `privy:${user.privy_user_id}`,
+    identity_source: 'privy',
+    identity_value: user.privy_user_id,
     wallets,
     evm_wallets: wallets
       .filter((entry) => entry.wallet_kind === 'evm')
@@ -1453,8 +1532,8 @@ export async function getIdentityClusterByWallet(wallet: string): Promise<Identi
     solana_wallets: wallets
       .filter((entry) => entry.wallet_kind === 'solana')
       .map((entry) => entry.wallet),
-    x_username: farcaster?.username ?? null,
-    farcaster,
+    x_username: user.x_username,
+    farcaster: null,
   }
 }
 

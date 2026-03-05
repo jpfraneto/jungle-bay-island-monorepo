@@ -1,5 +1,7 @@
 import { Hono } from "hono";
 import { CONFIG, db, normalizeAddress, toSupportedChain } from "../config";
+import { userOwnsWallet } from "../db/queries";
+import { requirePrivyAuth } from "../middleware/auth";
 import {
   getCanonicalProjectContext,
   type CanonicalDeploymentRef,
@@ -98,6 +100,14 @@ function parseJbmAmount(input: unknown): bigint | null {
   } catch {
     return null;
   }
+}
+
+function getPrivyUserIdFromClaims(claims: Record<string, unknown> | undefined): string {
+  const privyUserId = typeof claims?.sub === "string" ? claims.sub.trim() : "";
+  if (!privyUserId) {
+    throw new ApiError(401, "auth_required", "Privy authentication required");
+  }
+  return privyUserId;
 }
 
 function asObject(input: unknown): Record<string, unknown> | null {
@@ -270,8 +280,11 @@ itemsRoute.get("/bungalow/:chain/:ca/items", async (c) => {
   return c.json({ items: rows });
 });
 
-itemsRoute.post("/bungalow/:chain/:ca/items", async (c) => {
+itemsRoute.post("/bungalow/:chain/:ca/items", requirePrivyAuth, async (c) => {
   await ensureBungalowItemsTable();
+
+  const claims = c.get("privyClaims") as Record<string, unknown> | undefined;
+  const privyUserId = getPrivyUserIdFromClaims(claims);
 
   const chain = toSupportedChain(c.req.param("chain"));
   if (!chain) {
@@ -316,6 +329,11 @@ itemsRoute.post("/bungalow/:chain/:ca/items", async (c) => {
   const placedBy = normalizeAddress(placedByRaw, chain) ?? normalizeAddress(placedByRaw);
   if (!placedBy) {
     throw new ApiError(400, "invalid_placed_by", "placed_by must be a valid wallet address");
+  }
+
+  const ownsWallet = await userOwnsWallet(privyUserId, placedBy);
+  if (!ownsWallet) {
+    throw new ApiError(401, "wallet_not_owned", "wallet_not_owned");
   }
 
   const txHash = typeof body.tx_hash === "string" ? body.tx_hash.trim() : "";

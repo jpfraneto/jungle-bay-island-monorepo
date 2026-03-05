@@ -181,6 +181,33 @@ export default function AboutPage() {
       </article>
 
       <article className={styles.card}>
+        <h2 className={styles.heading}>Identity And Wallet Ownership</h2>
+        <p>
+          The Island now separates account identity from transaction wallets on
+          purpose. Your authenticated identity is your Privy user ID. Wallets
+          are attributes you link with explicit SIWE signatures.
+        </p>
+        <ul className={styles.list}>
+          <li>
+            <strong>Identity key</strong> &mdash; authenticated flows anchor to
+            your Privy account, not to whichever wallet is active in the moment.
+          </li>
+          <li>
+            <strong>Wallets are explicit</strong> &mdash; only wallets you
+            intentionally link are allowed for claims and other onchain actions.
+          </li>
+          <li>
+            <strong>Handles are X-based</strong> &mdash; email users can claim a
+            handle by linking X; X-login users are verified from login.
+          </li>
+          <li>
+            <strong>No silent imports</strong> &mdash; Farcaster/Neynar wallet
+            auto-enrichment is removed so profile ownership stays user-controlled.
+          </li>
+        </ul>
+      </article>
+
+      <article className={styles.card}>
         <h2 className={styles.heading}>Why Heat Exists</h2>
         <p>
           Heat is the Island&apos;s quiet recognition layer. It exists to

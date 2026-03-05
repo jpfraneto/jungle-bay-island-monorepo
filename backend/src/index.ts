@@ -209,7 +209,7 @@ app.route("/api", homeTeamRoute);
 app.route("/api", itemsRoute);
 app.route("/api", claimsRoute);
 app.route("/api/bodega", bodegaRoute);
-app.route("/api/wallet", walletLinkRoute);
+app.route("/api", walletLinkRoute);
 app.route("/api/ops", opsRoute);
 
 // Solana RPC proxy (browser can't hit public RPC directly due to CORS/403)

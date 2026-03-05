@@ -19,6 +19,37 @@ export default function ChangelogPage() {
       <article className={styles.entry}>
         <div className={styles.entryHeader}>
           <span className={styles.date}>March 5, 2026</span>
+          <h2 className={styles.heading}>Identity Refactor: Privy User IDs + Explicit SIWE Wallet Linking</h2>
+        </div>
+        <p>
+          Authentication, handle ownership, and transaction wallets now follow one
+          strict model: identity is your Privy account, and transaction wallets
+          must be explicitly linked with SIWE.
+        </p>
+        <ul className={styles.list}>
+          <li>
+            Wallet auto-discovery from Farcaster/Neynar was removed. The Island
+            now only uses wallets users explicitly signed to link.
+          </li>
+          <li>
+            Wallet linking now runs as a mobile-safe sequential SIWE flow and
+            supports unlimited linked wallets under one profile.
+          </li>
+          <li>
+            Claim signing/confirmation now enforces strict ownership checks: if
+            a payout wallet is not linked to the authenticated profile, the
+            request is rejected.
+          </li>
+          <li>
+            Email users can claim handles by linking X, while duplicate X
+            account links are blocked and logged for manual resolution.
+          </li>
+        </ul>
+      </article>
+
+      <article className={styles.entry}>
+        <div className={styles.entryHeader}>
+          <span className={styles.date}>March 5, 2026</span>
           <h2 className={styles.heading}>Rewards Claimed State + Mobile Bodega Tightening</h2>
         </div>
         <p>

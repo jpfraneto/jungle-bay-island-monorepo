@@ -1,50 +1,60 @@
 import { Hono } from 'hono'
 import { normalizeAddress } from '../config'
-import { getUserByWallet, getAggregatedUserByWallets, getIdentityClusterByWallet } from '../db/queries'
-import { requireWalletAuth } from '../middleware/auth'
+import {
+  clearUserXUsername,
+  getAggregatedUserByWallets,
+  getUserByWallet,
+  getUserByWalletAddress,
+  getUserByXUsername,
+  getUserWallets,
+  upsertUser,
+} from '../db/queries'
+import { requirePrivyAuth } from '../middleware/auth'
 import { ApiError } from '../services/errors'
-import { resolveUserWalletMap } from '../services/identityMap'
-import { logInfo } from '../services/logger'
+import { logInfo, logWarn } from '../services/logger'
+import { getPrivyLinkedAccounts } from '../services/privyClaims'
 import type { AppEnv } from '../types'
 
 const userRoute = new Hono<AppEnv>()
 
-async function buildCurrentUserResponse(
-  wallet: string,
-  claims?: Record<string, unknown>,
-  identityOverride?: Awaited<ReturnType<typeof resolveUserWalletMap>>,
-) {
-  const [user, identity] = await Promise.all([
-    getUserByWallet(wallet),
-    identityOverride
-      ? Promise.resolve(identityOverride)
-      : resolveUserWalletMap({
-          requesterWallet: wallet,
-          claims,
-          persist: true,
-        }),
-  ])
+function normalizeXUsername(value: string): string {
+  const clean = value.trim().replace(/^@+/, '').toLowerCase()
+  return clean ? `@${clean}` : ''
+}
 
-  return {
-    wallet,
-    island_heat: user?.island_heat ?? 0,
-    tier: user?.tier ?? 'drifter',
-    farcaster: identity.farcaster
-      ? {
-          fid: identity.farcaster.fid,
-          username: identity.farcaster.username,
-          display_name: identity.farcaster.display_name,
-          pfp_url: identity.farcaster.pfp_url,
-        }
-      : user?.farcaster ?? null,
-    token_breakdown: user?.token_breakdown ?? [],
-    scans: user?.scans ?? [],
-    connected_wallets: identity.wallets.map((entry) => entry.address),
-    wallet_map: identity.wallets,
-    wallet_map_summary: identity.summary,
-    x_username: identity.x_username,
-    farcaster_found: identity.farcaster !== null,
+function getPrivyUserIdFromClaims(claims: Record<string, unknown> | undefined): string {
+  const privyUserId = typeof claims?.sub === 'string' ? claims.sub.trim() : ''
+  if (!privyUserId) {
+    throw new ApiError(401, 'auth_required', 'Privy user id missing from token')
   }
+  return privyUserId
+}
+
+function getEmailFromClaims(claims: Record<string, unknown> | undefined): string | null {
+  if (!claims) return null
+
+  const linkedAccounts = getPrivyLinkedAccounts(claims)
+  for (const account of linkedAccounts) {
+    const candidate = account as Record<string, unknown>
+    if (candidate.type !== 'email') continue
+    const email = typeof candidate.address === 'string' ? candidate.address.trim().toLowerCase() : ''
+    if (email) {
+      return email
+    }
+  }
+
+  return null
+}
+
+function buildWalletMap(wallets: string[], requesterWallet: string) {
+  return wallets.map((wallet) => ({
+    wallet,
+    wallet_kind: normalizeAddress(wallet) ? 'evm' : 'solana',
+    linked_via_privy: true,
+    linked_via_farcaster: false,
+    farcaster_verified: false,
+    is_requester_wallet: wallet === requesterWallet,
+  }))
 }
 
 userRoute.get('/wallet/:wallet', async (c) => {
@@ -56,37 +66,44 @@ userRoute.get('/wallet/:wallet', async (c) => {
   const aggregate = c.req.query('aggregate') === 'true'
 
   if (aggregate) {
-    const identity = await getIdentityClusterByWallet(wallet)
-    if (identity) {
-      const allWallets = identity.wallets.map((w) => w.wallet)
-      const aggregated = await getAggregatedUserByWallets(allWallets)
-      if (aggregated) {
-        logInfo(
-          'USER AGGREGATE',
-          `wallet=${wallet} linked_wallets=${allWallets.length} identity=${identity.identity_key} tokens=${aggregated.token_breakdown.length}`,
-        )
-        return c.json({
-          wallet,
-          ...aggregated,
-          linked_wallets: identity.wallets.map((entry) => ({
-            wallet: entry.wallet,
-            wallet_kind: entry.wallet_kind,
-          })),
-          x_username: identity.x_username,
-          farcaster: identity.farcaster,
-          identity_key: identity.identity_key,
-          identity_source: identity.identity_source,
-          wallet_map: identity.wallets,
-          wallet_map_summary: {
-            total_wallets: identity.wallets.length,
-            evm_wallets: identity.evm_wallets.length,
-            solana_wallets: identity.solana_wallets.length,
-            farcaster_verified_wallets: identity.wallets.filter((entry) => entry.farcaster_verified).length,
-          },
-          aggregated: true,
-        })
-      }
-    }
+    const owner = await getUserByWalletAddress(wallet)
+    const linkedWalletRows = owner
+      ? await getUserWallets(owner.privy_user_id)
+      : []
+
+    const linkedWallets = linkedWalletRows.length > 0
+      ? linkedWalletRows.map((row) => row.address)
+      : [wallet]
+
+    const aggregated = await getAggregatedUserByWallets(linkedWallets)
+
+    logInfo(
+      'USER AGGREGATE',
+      `wallet=${wallet} linked_wallets=${linkedWallets.length} owner=${owner?.privy_user_id ?? 'none'} tokens=${aggregated?.token_breakdown.length ?? 0}`,
+    )
+
+    const walletMap = buildWalletMap(linkedWallets, wallet)
+
+    return c.json({
+      wallet,
+      island_heat: aggregated?.island_heat ?? 0,
+      tier: aggregated?.tier ?? 'drifter',
+      token_breakdown: aggregated?.token_breakdown ?? [],
+      scans: aggregated?.scans ?? [],
+      linked_wallets: linkedWallets,
+      x_username: owner?.x_username ?? null,
+      farcaster: null,
+      identity_key: owner ? `privy:${owner.privy_user_id}` : `wallet:${wallet}`,
+      identity_source: owner ? 'privy' : 'wallet',
+      wallet_map: walletMap,
+      wallet_map_summary: {
+        total_wallets: linkedWallets.length,
+        evm_wallets: walletMap.filter((entry) => entry.wallet_kind === 'evm').length,
+        solana_wallets: walletMap.filter((entry) => entry.wallet_kind === 'solana').length,
+        farcaster_verified_wallets: 0,
+      },
+      aggregated: true,
+    })
   }
 
   const user = await getUserByWallet(wallet)
@@ -102,34 +119,101 @@ userRoute.get('/wallet/:wallet', async (c) => {
   return c.json(user)
 })
 
-// Get current user's profile (auth required)
-// Always returns something for an authed user — never 404s
-userRoute.get('/me', requireWalletAuth, async (c) => {
-  const wallet = c.get('walletAddress')!
+userRoute.get('/me', requirePrivyAuth, async (c) => {
   const claims = c.get('privyClaims') as Record<string, unknown> | undefined
+  const privyUserId = getPrivyUserIdFromClaims(claims)
+  const email = getEmailFromClaims(claims)
 
-  return c.json(await buildCurrentUserResponse(wallet, claims))
-})
-
-// Auto-setup profile: Privy-linked accounts + X/Farcaster wallet map
-// Idempotent — safe to call on every login
-userRoute.post('/me/setup', requireWalletAuth, async (c) => {
-  const wallet = c.get('walletAddress')!
-  const claims = c.get('privyClaims') as Record<string, unknown> | undefined
-
-  const identity = await resolveUserWalletMap({
-    requesterWallet: wallet,
-    claims,
-    persist: true,
+  await upsertUser(privyUserId, {
+    email: email ?? undefined,
   })
 
-  logInfo(
-    'PROFILE SETUP',
-    `wallet=${wallet} x=${identity.x_username ?? 'none'} fid=${identity.farcaster?.fid ?? 'none'} ` +
-    `wallets=${identity.summary.total_wallets} evm=${identity.summary.evm_wallets} sol=${identity.summary.solana_wallets}`,
-  )
+  const wallets = await getUserWallets(privyUserId)
 
-  return c.json(await buildCurrentUserResponse(wallet, claims, identity))
+  return c.json({
+    privy_user_id: privyUserId,
+    email,
+    wallets,
+  })
+})
+
+userRoute.post('/me/setup', requirePrivyAuth, async (c) => {
+  const claims = c.get('privyClaims') as Record<string, unknown> | undefined
+  const privyUserId = getPrivyUserIdFromClaims(claims)
+  const email = getEmailFromClaims(claims)
+
+  const user = await upsertUser(privyUserId, {
+    email: email ?? undefined,
+  })
+
+  const wallets = await getUserWallets(privyUserId)
+
+  return c.json({
+    success: true,
+    privy_user_id: privyUserId,
+    email: user.email,
+    x_username: user.x_username,
+    wallets,
+  })
+})
+
+userRoute.post('/user/link-x', requirePrivyAuth, async (c) => {
+  const claims = c.get('privyClaims') as Record<string, unknown> | undefined
+  const privyUserId = getPrivyUserIdFromClaims(claims)
+  const email = getEmailFromClaims(claims)
+
+  if (!email) {
+    throw new ApiError(
+      403,
+      'invalid_link_x',
+      'X-login accounts are already verified and cannot link a secondary X handle',
+    )
+  }
+
+  const body = await c.req.json<{ x_username?: unknown }>()
+  const rawUsername = typeof body.x_username === 'string' ? body.x_username : ''
+  const xUsername = normalizeXUsername(rawUsername)
+
+  if (!xUsername) {
+    throw new ApiError(400, 'invalid_x_username', 'x_username is required')
+  }
+
+  const existing = await getUserByXUsername(xUsername)
+  if (existing && existing.privy_user_id !== privyUserId) {
+    logWarn(
+      'X DUPLICATE',
+      `conflict username=${xUsername} current_user=${privyUserId} existing_user=${existing.privy_user_id}`,
+    )
+
+    return c.json(
+      {
+        error: 'duplicate_x_account',
+        message: 'This X account is already linked to another profile.',
+      },
+      409 as any,
+    )
+  }
+
+  await upsertUser(privyUserId, {
+    email: email ?? undefined,
+    x_username: xUsername,
+  })
+
+  return c.json({
+    success: true,
+    x_username: xUsername,
+  })
+})
+
+userRoute.post('/user/unlink-x', requirePrivyAuth, async (c) => {
+  const claims = c.get('privyClaims') as Record<string, unknown> | undefined
+  const privyUserId = getPrivyUserIdFromClaims(claims)
+
+  await clearUserXUsername(privyUserId)
+
+  return c.json({
+    success: true,
+  })
 })
 
 export default userRoute

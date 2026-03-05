@@ -1,5 +1,10 @@
 import { useCallback, useMemo } from "react";
-import { usePrivy, useWallets, type ConnectedWallet } from "@privy-io/react-auth";
+import {
+  useActiveWallet,
+  usePrivy,
+  useWallets,
+  type ConnectedWallet,
+} from "@privy-io/react-auth";
 import { createPublicClient, createWalletClient, custom, http } from "viem";
 import { base } from "viem/chains";
 
@@ -10,32 +15,64 @@ function isHexAddress(value: string): value is `0x${string}` {
   return /^0x[0-9a-fA-F]{40}$/.test(value);
 }
 
-function pickActiveWallet(
+function pickFallbackWallet(
   wallets: ConnectedWallet[],
 ): ConnectedWallet | null {
   if (wallets.length === 0) return null;
 
   const orderedWallets = [...wallets].sort((a, b) => b.connectedAt - a.connectedAt);
-
   return orderedWallets.find((wallet) => wallet.linked) ?? orderedWallets[0] ?? null;
 }
 
 export function usePrivyBaseWallet() {
   const { authenticated, connectWallet, login } = usePrivy();
   const { wallets } = useWallets();
+  const { wallet: sdkActiveWallet, setActiveWallet: setPrivyActiveWallet } =
+    useActiveWallet();
 
   const ethereumWallets = useMemo(
     () => wallets.filter((wallet): wallet is ConnectedWallet => wallet.type === "ethereum"),
     [wallets],
   );
 
-  const activeWallet = useMemo(() => pickActiveWallet(ethereumWallets), [ethereumWallets]);
+  const sdkActiveAddress =
+    sdkActiveWallet?.type === "ethereum"
+      ? sdkActiveWallet.address.toLowerCase()
+      : null;
+
+  const activeWallet = useMemo(() => {
+    if (sdkActiveAddress) {
+      const sdkWallet = ethereumWallets.find(
+        (wallet) => wallet.address.toLowerCase() === sdkActiveAddress,
+      );
+      if (sdkWallet) {
+        return sdkWallet;
+      }
+    }
+
+    return pickFallbackWallet(ethereumWallets);
+  }, [ethereumWallets, sdkActiveAddress]);
 
   const walletAddress = activeWallet?.address ?? null;
 
   const publicClient = useMemo(
     () => createPublicClient({ chain: base, transport: http(BASE_RPC_URL) }),
     [],
+  );
+
+  const setActiveWallet = useCallback(
+    (address: string) => {
+      const next = ethereumWallets.find(
+        (wallet) => wallet.address.toLowerCase() === address.toLowerCase(),
+      );
+
+      if (!next) {
+        throw new Error("Wallet is not connected in Privy");
+      }
+
+      setPrivyActiveWallet(next);
+    },
+    [ethereumWallets, setPrivyActiveWallet],
   );
 
   const requireWallet = useCallback(async () => {
@@ -75,8 +112,10 @@ export function usePrivyBaseWallet() {
 
   return {
     activeWallet,
+    wallets: ethereumWallets,
     publicClient,
     requireWallet,
+    setActiveWallet,
     walletAddress,
   };
 }

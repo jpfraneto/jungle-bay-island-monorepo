@@ -19,7 +19,15 @@ ReactDOM.createRoot(document.getElementById("island-root")!).render(
           theme: "dark",
           accentColor: "#2ecc71",
         },
-        loginMethods: ["wallet"],
+        loginMethods: ["twitter", "email"],
+        embeddedWallets: {
+          ethereum: {
+            createOnLogin: "off",
+          },
+          solana: {
+            createOnLogin: "off",
+          },
+        },
         defaultChain: base,
         supportedChains: [base, mainnet],
       }}

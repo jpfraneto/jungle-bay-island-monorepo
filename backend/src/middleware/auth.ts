@@ -161,7 +161,7 @@ function walletFromClaims(payload: JWTPayload): string | null {
   return null
 }
 
-export async function verifyPrivyToken(token: string): Promise<{ walletAddress: string; payload: JWTPayload }> {
+export async function verifyPrivyToken(token: string): Promise<{ walletAddress: string | null; payload: JWTPayload }> {
   const algorithmCandidates = getPrivyAlgorithmCandidates(token)
   const issuerCandidates = [
     'privy.io',
@@ -262,9 +262,6 @@ export async function verifyPrivyToken(token: string): Promise<{ walletAddress: 
   }
 
   const walletAddress = walletFromClaims(payload)
-  if (!walletAddress) {
-    throw new ApiError(401, 'invalid_privy_claims', 'Privy token is missing a wallet account')
-  }
 
   return { walletAddress, payload }
 }
@@ -280,7 +277,9 @@ export const optionalWalletContext: MiddlewareHandler<AppEnv> = async (c, next) 
   if (token) {
     try {
       const { walletAddress, payload } = await verifyPrivyToken(token)
-      c.set('walletAddress', walletAddress)
+      if (walletAddress) {
+        c.set('walletAddress', walletAddress)
+      }
       c.set('privyClaims', payload)
     } catch {
       // Optional context should not fail public endpoints.
@@ -327,7 +326,34 @@ export const requireWalletAuth: MiddlewareHandler<AppEnv> = async (c, next) => {
     )
   }
 
+  if (!verified.walletAddress) {
+    throw new ApiError(401, 'wallet_required', 'Privy token is missing a wallet account')
+  }
+
   c.set('walletAddress', verified.walletAddress)
+  c.set('privyClaims', verified.payload)
+  await next()
+}
+
+export const requirePrivyAuth: MiddlewareHandler<AppEnv> = async (c, next) => {
+  const token = extractBearerToken(c.req.header('Authorization'))
+  if (!token) {
+    throw new ApiError(401, 'auth_required', 'Missing Authorization bearer token')
+  }
+
+  let verified
+  try {
+    verified = await verifyPrivyToken(token)
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error
+    }
+    throw new ApiError(401, 'invalid_token', 'Privy token verification failed')
+  }
+
+  if (verified.walletAddress) {
+    c.set('walletAddress', verified.walletAddress)
+  }
   c.set('privyClaims', verified.payload)
   await next()
 }

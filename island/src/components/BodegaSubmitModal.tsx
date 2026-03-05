@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { usePrivy, useWallets } from "@privy-io/react-auth";
+import { usePrivy } from "@privy-io/react-auth";
 import { useNavigate } from "react-router-dom";
 import BodegaCard from "./BodegaCard";
 import BungalowOptionPicker from "./BungalowOptionPicker";
+import WalletSelector from "./WalletSelector";
 import { useJBMTransfer } from "../hooks/useJBMTransfer";
+import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
+import { useSiweWalletLink } from "../hooks/useSiweWalletLink";
+import { useUserWalletLinks } from "../hooks/useUserWalletLinks";
 import { formatJbmAmount } from "../utils/formatters";
 import styles from "../styles/bodega-submit-modal.module.css";
 import {
@@ -226,8 +230,18 @@ export default function BodegaSubmitModal({
   onSubmitted,
 }: BodegaSubmitModalProps) {
   const navigate = useNavigate();
-  const { authenticated, getAccessToken, login, user } = usePrivy();
-  const { wallets } = useWallets();
+  const { authenticated, getAccessToken, login } = usePrivy();
+  const { walletAddress } = usePrivyBaseWallet();
+  const {
+    wallets: linkedWalletRows,
+    refetch: refetchLinkedWallets,
+  } = useUserWalletLinks(authenticated);
+  const {
+    linkCurrentWallet,
+    isLinking: isLinkingWallet,
+    status: linkStatus,
+    error: linkError,
+  } = useSiweWalletLink();
   const { transfer, isTransferring } = useJBMTransfer();
 
   const [step, setStep] = useState<ModalStep>(1);
@@ -252,6 +266,9 @@ export default function BodegaSubmitModal({
   const [submittedItem, setSubmittedItem] = useState<BodegaCatalogItem | null>(
     null,
   );
+  const [selectedPayWallet, setSelectedPayWallet] = useState<string>("");
+  const [showWalletGate, setShowWalletGate] = useState(false);
+  const [resumeAfterLink, setResumeAfterLink] = useState(false);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const priceInputRef = useRef<HTMLInputElement | null>(null);
   const previewUrlInputRef = useRef<HTMLInputElement | null>(null);
@@ -281,6 +298,8 @@ export default function BodegaSubmitModal({
     setIsSubmitting(false);
     setPendingFocusField(null);
     setSubmittedItem(null);
+    setShowWalletGate(false);
+    setResumeAfterLink(false);
   }, [bungalowOptions, defaultOriginBungalow, isWalletScoped, open]);
 
   useEffect(() => {
@@ -343,8 +362,13 @@ export default function BodegaSubmitModal({
     return () => window.cancelAnimationFrame(frame);
   }, [pendingFocusField, step]);
 
-  const creatorWallet =
-    user?.wallet?.address ?? (wallets.length > 0 ? wallets[0].address : "");
+  useEffect(() => {
+    if (!walletAddress) return;
+    if (selectedPayWallet) return;
+    setSelectedPayWallet(walletAddress);
+  }, [selectedPayWallet, walletAddress]);
+
+  const creatorWallet = selectedPayWallet || walletAddress || "";
   const assetType: BodegaAssetType =
     listingType === "art" ? "decoration" : "miniapp";
   const listingTitle = listingType === "art" ? "Art" : "Miniapp";
@@ -461,6 +485,21 @@ export default function BodegaSubmitModal({
       return;
     }
 
+    const linkedWallets = linkedWalletRows.map((wallet) =>
+      wallet.address.toLowerCase(),
+    );
+    const payoutWallet = selectedPayWallet || walletAddress;
+    if (!payoutWallet || linkedWalletRows.length === 0) {
+      setShowWalletGate(true);
+      setResumeAfterLink(true);
+      return;
+    }
+    if (!linkedWallets.includes(payoutWallet.toLowerCase())) {
+      setError("Link this wallet first to use it for transactions.");
+      setShowWalletGate(true);
+      return;
+    }
+
     const validation = validateDraft({
       assetType,
       artFormat,
@@ -573,6 +612,20 @@ export default function BodegaSubmitModal({
     }
   };
 
+  const handleAddWallet = async () => {
+    try {
+      await linkCurrentWallet();
+      await refetchLinkedWallets();
+      setShowWalletGate(false);
+      if (resumeAfterLink) {
+        setResumeAfterLink(false);
+        await handleSubmit();
+      }
+    } catch {
+      // Hook already exposes a user-friendly error message.
+    }
+  };
+
   return (
     <div className={styles.overlay}>
       <div className={styles.modal}>
@@ -600,6 +653,25 @@ export default function BodegaSubmitModal({
           <span className={step >= 2 ? styles.stepActive : ""}>2. Details</span>
           <span className={step >= 3 ? styles.stepActive : ""}>3. Preview</span>
         </div>
+
+        <WalletSelector label="Pay with" onSelect={setSelectedPayWallet} />
+        {showWalletGate || linkedWalletRows.length === 0 ? (
+          <div className={styles.error}>
+            <strong>You need a linked wallet to continue.</strong>
+            <button
+              type="button"
+              className={styles.primaryButton}
+              onClick={() => {
+                void handleAddWallet();
+              }}
+              disabled={isLinkingWallet}
+            >
+              {isLinkingWallet ? "Linking..." : "Add wallet"}
+            </button>
+            {linkStatus ? <div className={styles.status}>{linkStatus}</div> : null}
+            {linkError ? <div className={styles.error}>{linkError}</div> : null}
+          </div>
+        ) : null}
 
         {submittedItem ? (
           <section className={styles.successSection}>

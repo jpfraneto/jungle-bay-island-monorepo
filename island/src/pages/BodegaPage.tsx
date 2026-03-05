@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { usePrivy, useWallets } from "@privy-io/react-auth";
+import { usePrivy } from "@privy-io/react-auth";
 import { useLocation } from "react-router-dom";
 import BodegaCard from "../components/BodegaCard";
 import BodegaInstallModal from "../components/BodegaInstallModal";
 import BodegaSubmitModal from "../components/BodegaSubmitModal";
 import { useBungalowDirectory } from "../hooks/useBungalowDirectory";
+import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
 import styles from "../styles/bodega-page.module.css";
 import {
   BODEGA_ASSET_GROUP_LABELS,
@@ -39,13 +40,8 @@ function parseLocationBungalow(input: unknown): DirectoryBungalow | null {
 
 export default function BodegaPage() {
   const location = useLocation();
-  const { authenticated, login, user } = usePrivy();
-  const { wallets } = useWallets();
-  const walletAddress = useMemo(() => {
-    if (user?.wallet?.address) return user.wallet.address;
-    if (wallets.length > 0) return wallets[0].address;
-    return "";
-  }, [user, wallets]);
+  const { authenticated, login } = usePrivy();
+  const { walletAddress } = usePrivyBaseWallet();
   const {
     bungalows: selectorBungalows,
     isLoading: isSelectorLoading,

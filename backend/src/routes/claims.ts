@@ -29,6 +29,34 @@ const DAILY_DISTRIBUTION_CAP_JBM = BigInt(Math.max(0, CONFIG.DAILY_CLAIM_CAP_JBM
 const WEI_PER_JBM = 10n ** 18n;
 
 const CLAIM_ESCROW_ABI = [
+  { type: "error", name: "AdminOnly", inputs: [] },
+  { type: "error", name: "ArrayLengthMismatch", inputs: [] },
+  { type: "error", name: "ECDSAInvalidSignature", inputs: [] },
+  {
+    type: "error",
+    name: "ECDSAInvalidSignatureLength",
+    inputs: [{ name: "length", type: "uint256" }],
+  },
+  {
+    type: "error",
+    name: "ECDSAInvalidSignatureS",
+    inputs: [{ name: "s", type: "bytes32" }],
+  },
+  { type: "error", name: "EscrowEqualsRecipient", inputs: [] },
+  { type: "error", name: "InsufficientAllowance", inputs: [] },
+  { type: "error", name: "InsufficientBalance", inputs: [] },
+  { type: "error", name: "InvalidShortString", inputs: [] },
+  { type: "error", name: "InvalidSignature", inputs: [] },
+  { type: "error", name: "PeriodAlreadyClaimed", inputs: [] },
+  { type: "error", name: "SignatureExpired", inputs: [] },
+  {
+    type: "error",
+    name: "StringTooLong",
+    inputs: [{ name: "str", type: "string" }],
+  },
+  { type: "error", name: "TransferFailed", inputs: [] },
+  { type: "error", name: "ZeroAddress", inputs: [] },
+  { type: "error", name: "ZeroAmount", inputs: [] },
   {
     name: "claimPeriodTotal",
     type: "function",
@@ -231,6 +259,15 @@ function extractRevertReason(error: unknown): string | null {
 
     if (typeof current === "object") {
       const candidate = current as Record<string, unknown>;
+
+      const errorName = candidate.errorName;
+      if (typeof errorName === "string" && errorName.length > 0) {
+        const args = candidate.args;
+        if (Array.isArray(args) && args.length > 0) {
+          return `${errorName}(${args.map((arg) => String(arg)).join(", ")})`;
+        }
+        return errorName;
+      }
 
       const shortMessage = candidate.shortMessage;
       if (typeof shortMessage === "string") {
@@ -712,6 +749,10 @@ claimsRoute.get("/claims/wallet/:address", async (c) => {
     .map((entry, index) => {
       const claimedToday = claimedStatuses[index] ?? false;
       const reservedJbm = getReservedJbm(entry.allocation.amount_wei);
+      const periodRewardJbm =
+        reservedJbm > 0n
+          ? reservedJbm
+          : entry.allocation.reward_jbm_bigint;
       const claimableJbm = claimedToday
         ? 0n
         : reservedJbm > 0n
@@ -724,6 +765,7 @@ claimsRoute.get("/claims/wallet/:address", async (c) => {
         token_name: entry.tokenName,
         token_symbol: entry.tokenSymbol,
         heat_degrees: Number(entry.allocation.heat_degrees_number.toFixed(2)),
+        period_reward_jbm: periodRewardJbm.toString(),
         claimable_jbm: claimableJbm.toString(),
         claimable_wei: (claimableJbm * WEI_PER_JBM).toString(),
         can_claim: Boolean(payoutWallet && claimableJbm > 0n && !claimedToday),
@@ -752,6 +794,10 @@ claimsRoute.get("/claims/wallet/:address", async (c) => {
     (sum, entry) => sum + parseNumericBigInt(entry.claimable_jbm),
     0n,
   );
+  const claimedTodayTotalJbm = items.reduce((sum, entry) => {
+    if (!entry.claimed_today) return sum;
+    return sum + parseNumericBigInt(entry.period_reward_jbm);
+  }, 0n);
 
   return c.json({
     payout_wallet: payoutWallet,
@@ -760,6 +806,7 @@ claimsRoute.get("/claims/wallet/:address", async (c) => {
     period_end_at: getPeriodEndIso(periodId),
     claimable_count: claimableItems.length,
     total_claimable_jbm: totalClaimableJbm.toString(),
+    claimed_today_total_jbm: claimedTodayTotalJbm.toString(),
     daily_cap_jbm: periodCap.cap_jbm.toString(),
     daily_distributed_jbm: periodCap.distributed_jbm.toString(),
     daily_remaining_jbm: periodCap.remaining_jbm.toString(),
@@ -1210,6 +1257,22 @@ claimsRoute.post("/claims/:chain/:ca/sign", async (c) => {
       });
     } catch (error) {
       const reason = extractRevertReason(error);
+      const rawMessage =
+        error instanceof Error
+          ? error.message
+          : typeof error === "string"
+            ? error
+            : "Unknown simulateContract error";
+      console.error("[CLAIMS] claimPeriodTotal preflight failed", {
+        claimContractAddress,
+        escrowAddress,
+        payoutWallet,
+        periodId,
+        amountInWei: amountInWei.toString(),
+        breakdownHash,
+        reason,
+        rawMessage,
+      });
       throw new ApiError(
         500,
         "claim_signature_preflight_failed",

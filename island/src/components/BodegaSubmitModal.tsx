@@ -274,15 +274,7 @@ export default function BodegaSubmitModal({
     const hasPreferred = bungalowOptions.some(
       (bungalow) => getBungalowKey(bungalow) === preferredKey,
     );
-    setOriginKey(
-      hasPreferred
-        ? preferredKey
-        : bungalowOptions[0]
-          ? getBungalowKey(bungalowOptions[0])
-          : !isWalletScoped
-            ? preferredKey
-            : "",
-    );
+    setOriginKey(hasPreferred ? preferredKey : !isWalletScoped ? preferredKey : "");
     setStatus(null);
     setError(null);
     setFieldErrors({});
@@ -358,9 +350,18 @@ export default function BodegaSubmitModal({
   const listingTitle = listingType === "art" ? "Art" : "Miniapp";
 
   const selectedOrigin =
-    bungalowOptions.find(
-      (bungalow) => getBungalowKey(bungalow) === originKey,
-    ) ?? (!isWalletScoped ? (defaultOriginBungalow ?? null) : null);
+    originKey.length > 0
+      ? (
+          bungalowOptions.find(
+            (bungalow) => getBungalowKey(bungalow) === originKey,
+          ) ??
+          (!isWalletScoped &&
+          defaultOriginBungalow &&
+          getBungalowKey(defaultOriginBungalow) === originKey
+            ? defaultOriginBungalow
+            : null)
+        )
+      : null;
 
   const draftItem = useMemo<BodegaCatalogItem>(() => {
     const content = buildContentPayload({
@@ -879,7 +880,7 @@ export default function BodegaSubmitModal({
               {step > 1 ? (
                 <button
                   type="button"
-                  className={styles.secondaryButton}
+                  className={styles.backButton}
                   onClick={() => {
                     setError(null);
                     setStep((current) =>
@@ -887,8 +888,9 @@ export default function BodegaSubmitModal({
                     );
                   }}
                   disabled={isSubmitting}
+                  aria-label="Go back"
                 >
-                  Back
+                  ←
                 </button>
               ) : null}
               <button

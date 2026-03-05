@@ -1,9 +1,9 @@
 .page {
   min-height: 100%;
-  padding: 18px;
+  padding: 14px;
   display: grid;
   align-content: start;
-  gap: 16px;
+  gap: 10px;
   background:
     radial-gradient(circle at 18% 0%, rgba(33, 109, 74, 0.22), transparent 34%),
     radial-gradient(circle at 100% 0%, rgba(157, 103, 33, 0.14), transparent 28%),
@@ -13,9 +13,9 @@
 .hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 16px;
-  padding: 18px;
-  border-radius: 18px;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 14px;
   border: 1px solid rgba(121, 181, 138, 0.16);
   background:
     radial-gradient(700px 220px at 6% -10%, rgba(46, 161, 103, 0.24), transparent 60%),
@@ -39,10 +39,11 @@
 }
 
 .summary {
-  margin: 12px 0 0;
+  margin: 8px 0 0;
   color: var(--text-secondary);
   max-width: 720px;
-  line-height: 1.6;
+  line-height: 1.45;
+  font-size: 13px;
 }
 
 .heroActions {
@@ -55,7 +56,7 @@
 .retryButton {
   border: 1px solid var(--border-subtle);
   border-radius: 999px;
-  padding: 11px 16px;
+  padding: 9px 14px;
   cursor: pointer;
   font-weight: 600;
 }
@@ -77,7 +78,7 @@
 
 .filterField {
   display: grid;
-  gap: 6px;
+  gap: 4px;
   min-width: min(280px, 100%);
 }
 
@@ -90,9 +91,9 @@
 
 .filterField select {
   width: min(320px, 100%);
-  border-radius: 12px;
+  border-radius: 10px;
   border: 1px solid rgba(121, 181, 138, 0.14);
-  padding: 10px 12px;
+  padding: 8px 10px;
   background: rgba(11, 25, 17, 0.78);
   color: var(--text-primary);
   font: inherit;
@@ -101,14 +102,14 @@
 .grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 8px;
+  gap: 6px;
 }
 
 .statusCard {
   display: grid;
-  gap: 8px;
-  padding: 16px;
-  border-radius: 16px;
+  gap: 6px;
+  padding: 12px;
+  border-radius: 12px;
   border: 1px solid rgba(121, 181, 138, 0.14);
   background: rgba(11, 24, 17, 0.84);
 }
@@ -125,12 +126,12 @@
 .loadingGrid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 10px;
+  gap: 6px;
 }
 
 .skeletonCard {
-  min-height: 96px;
-  border-radius: 16px;
+  min-height: 72px;
+  border-radius: 12px;
   border: 1px solid rgba(121, 181, 138, 0.08);
   background: linear-gradient(
     90deg,
@@ -143,7 +144,7 @@
 }
 
 .sentinel {
-  min-height: 36px;
+  min-height: 24px;
   display: grid;
   place-items: center;
   color: var(--text-muted);
@@ -152,11 +153,11 @@
 
 .targetChip {
   display: inline-flex;
-  margin-top: 14px;
+  margin-top: 10px;
   align-items: center;
   gap: 6px;
   border-radius: 999px;
-  padding: 7px 11px;
+  padding: 5px 9px;
   background: rgba(7, 17, 12, 0.74);
   border: 1px solid rgba(121, 181, 138, 0.16);
   color: #d9f7df;
@@ -184,16 +185,16 @@
 
 @media (max-width: 640px) {
   .page {
-    padding: 14px;
-    gap: 12px;
+    padding: 10px;
+    gap: 8px;
   }
 
   .hero {
-    padding: 14px;
+    padding: 10px;
   }
 
   .grid {
-    gap: 6px;
+    gap: 5px;
   }
 
   .submitButton,
@@ -207,6 +208,10 @@
   .filterField select {
     width: 100%;
     min-width: 0;
+  }
+
+  .filterField select {
+    font-size: 16px;
   }
 
   .heroActions {

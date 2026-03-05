@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import ChainIcon from "./ChainIcon";
 import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
@@ -13,6 +13,15 @@ import {
 } from "../utils/claimEscrow";
 import { formatJbmCount } from "../utils/formatters";
 import styles from "../styles/rewards-inbox.module.css";
+
+const CLAIMED_REWARDS_CACHE_PREFIX = "jbi:rewards:claimed-period-total:v1";
+const WEI_PER_JBM = 1_000_000_000_000_000_000n;
+
+interface CachedClaimedPeriod {
+  periodId: string;
+  amountJbm: string;
+  periodEndMs: number;
+}
 
 function getBatchErrorMessage(error: unknown): string {
   if (error instanceof Error) {
@@ -32,6 +41,120 @@ function getBatchErrorMessage(error: unknown): string {
   return "Batch claim failed";
 }
 
+function parseAmount(value: string | null | undefined): bigint {
+  if (!value) return 0n;
+  const trimmed = value.trim();
+  if (!trimmed) return 0n;
+  try {
+    return BigInt(trimmed);
+  } catch {
+    return 0n;
+  }
+}
+
+function getPeriodEndMs(periodEndAt: string | null | undefined): number {
+  if (periodEndAt) {
+    const parsed = Date.parse(periodEndAt);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+
+  const now = new Date();
+  const nextUtcNoon = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 12, 0, 0),
+  );
+  if (nextUtcNoon.getTime() <= now.getTime()) {
+    nextUtcNoon.setUTCDate(nextUtcNoon.getUTCDate() + 1);
+  }
+  return nextUtcNoon.getTime();
+}
+
+function formatClaimCountdown(periodEndAt: string | null | undefined, nowMs: number): string {
+  const endMs = getPeriodEndMs(periodEndAt);
+  const remainingSeconds = Math.max(0, Math.floor((endMs - nowMs) / 1000));
+  const hours = Math.floor(remainingSeconds / 3600);
+  const minutes = Math.floor((remainingSeconds % 3600) / 60);
+  const seconds = remainingSeconds % 60;
+  const pad = (value: number) => value.toString().padStart(2, "0");
+  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+}
+
+function getClaimedRewardsCacheKey(wallet: string): string {
+  return `${CLAIMED_REWARDS_CACHE_PREFIX}:${wallet.toLowerCase()}`;
+}
+
+function readCachedClaimedPeriod(wallet: string | null | undefined): CachedClaimedPeriod | null {
+  if (!wallet || typeof window === "undefined") return null;
+
+  const key = getClaimedRewardsCacheKey(wallet);
+
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<CachedClaimedPeriod> | null;
+    if (
+      !parsed ||
+      typeof parsed.periodId !== "string" ||
+      !parsed.periodId.trim() ||
+      typeof parsed.amountJbm !== "string" ||
+      typeof parsed.periodEndMs !== "number" ||
+      !Number.isFinite(parsed.periodEndMs)
+    ) {
+      window.localStorage.removeItem(key);
+      return null;
+    }
+    return {
+      periodId: parsed.periodId,
+      amountJbm: parsed.amountJbm,
+      periodEndMs: parsed.periodEndMs,
+    };
+  } catch {
+    window.localStorage.removeItem(key);
+    return null;
+  }
+}
+
+function writeCachedClaimedPeriod(
+  wallet: string | null | undefined,
+  value: CachedClaimedPeriod | null,
+): void {
+  if (!wallet || typeof window === "undefined") return;
+
+  const key = getClaimedRewardsCacheKey(wallet);
+  if (!value) {
+    window.localStorage.removeItem(key);
+    return;
+  }
+
+  window.localStorage.setItem(key, JSON.stringify(value));
+}
+
+function toPeriodIdString(value: string | number | null | undefined): string | null {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+  return null;
+}
+
+function getAmountJbmFromPayload(payload: ClaimSignaturePayload): string {
+  if (payload.amount_jbm && payload.amount_jbm.trim()) {
+    return payload.amount_jbm;
+  }
+  if (payload.amount_wei && payload.amount_wei.trim()) {
+    try {
+      return (BigInt(payload.amount_wei) / WEI_PER_JBM).toString();
+    } catch {
+      return "0";
+    }
+  }
+  return "0";
+}
+
 export default function RewardsInboxButton() {
   const { authenticated, getAccessToken, login } = usePrivy();
   const { publicClient, requireWallet, walletAddress } = usePrivyBaseWallet();
@@ -43,8 +166,76 @@ export default function RewardsInboxButton() {
   const [isClaiming, setIsClaiming] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [clockMs, setClockMs] = useState(() => Date.now());
+  const [cachedClaimedPeriod, setCachedClaimedPeriod] =
+    useState<CachedClaimedPeriod | null>(null);
+
+  useEffect(() => {
+    setCachedClaimedPeriod(readCachedClaimedPeriod(walletAddress));
+  }, [walletAddress]);
 
   const claimableItems = claims?.items.filter((item) => item.can_claim) ?? [];
+  const claimedItems = claims?.items.filter((item) => item.claimed_today) ?? [];
+  const claimedTodayTotal = useMemo(() => {
+    if (claims?.claimed_today_total_jbm) {
+      return parseAmount(claims.claimed_today_total_jbm);
+    }
+    return claimedItems.reduce(
+      (sum, item) => sum + parseAmount(item.period_reward_jbm),
+      0n,
+    );
+  }, [claimedItems, claims?.claimed_today_total_jbm]);
+
+  const backendHasClaimedToday =
+    !isLoading && claimableItems.length === 0 && claimedTodayTotal > 0n;
+  const backendPeriodId = toPeriodIdString(claims?.period_id);
+  const cachedPeriodId = toPeriodIdString(cachedClaimedPeriod?.periodId);
+  const cachedClaimIsActive = Boolean(
+    cachedClaimedPeriod &&
+      cachedClaimedPeriod.periodEndMs > Date.now() &&
+      cachedPeriodId &&
+      (!backendPeriodId || cachedPeriodId === backendPeriodId),
+  );
+  const optimisticClaimedTotal = cachedClaimIsActive
+    ? parseAmount(cachedClaimedPeriod?.amountJbm)
+    : 0n;
+  const effectiveClaimedTodayTotal =
+    claimedTodayTotal > 0n ? claimedTodayTotal : optimisticClaimedTotal;
+  const hasClaimedToday = backendHasClaimedToday || cachedClaimIsActive;
+  const effectivePeriodEndAt =
+    claims?.period_end_at ??
+    (cachedClaimIsActive && cachedClaimedPeriod
+      ? new Date(cachedClaimedPeriod.periodEndMs).toISOString()
+      : null);
+
+  useEffect(() => {
+    if (!walletAddress || !cachedClaimedPeriod) return;
+    if (cachedClaimIsActive) return;
+    writeCachedClaimedPeriod(walletAddress, null);
+    setCachedClaimedPeriod(null);
+  }, [cachedClaimIsActive, cachedClaimedPeriod, walletAddress]);
+
+  const countdown = useMemo(
+    () => (hasClaimedToday ? formatClaimCountdown(effectivePeriodEndAt, clockMs) : null),
+    [clockMs, effectivePeriodEndAt, hasClaimedToday],
+  );
+  const summaryLabel = hasClaimedToday
+    ? "jungle bay memes claimed today"
+    : "jungle bay memes to claim today";
+  const summaryValue = hasClaimedToday
+    ? formatJbmCount(effectiveClaimedTodayTotal.toString())
+    : !isLoading && claims
+      ? formatJbmCount(claims.total_claimable_jbm)
+      : "—";
+
+  useEffect(() => {
+    if (!open || !hasClaimedToday) return;
+    setClockMs(Date.now());
+    const timer = window.setInterval(() => {
+      setClockMs(Date.now());
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [hasClaimedToday, open]);
 
   if (!authenticated) {
     return null;
@@ -171,6 +362,19 @@ export default function RewardsInboxButton() {
         throw new Error("Claim transaction failed");
       }
 
+      const periodId = toPeriodIdString(signData.periodId);
+      const periodEndMs = getPeriodEndMs(claims?.period_end_at);
+      const claimedWallet = signData.payout_wallet ?? address;
+      if (periodId) {
+        const nextCachedClaim: CachedClaimedPeriod = {
+          periodId,
+          amountJbm: getAmountJbmFromPayload(signData),
+          periodEndMs,
+        };
+        setCachedClaimedPeriod(nextCachedClaim);
+        writeCachedClaimedPeriod(claimedWallet, nextCachedClaim);
+      }
+
       const confirmResponse = await fetch(
         `/api/claims/${firstClaim.chain}/${firstClaim.token_address}/confirm`,
         {
@@ -210,7 +414,12 @@ export default function RewardsInboxButton() {
         aria-label="Open rewards"
       >
         <span className={styles.icon}>💸</span>
-        <span className={styles.badge}>{claims?.claimable_count ?? 0}</span>
+        <span
+          className={`${styles.badge} ${hasClaimedToday ? styles.badgeClaimed : ""}`}
+          aria-label={hasClaimedToday ? "Claimed today" : "Claimable rewards"}
+        >
+          {hasClaimedToday ? "✓" : claims?.claimable_count ?? 0}
+        </span>
       </button>
 
       {open ? (
@@ -220,9 +429,13 @@ export default function RewardsInboxButton() {
               <div>
                 <h3>Island Rewards</h3>
                 <p>
-                  {claims
-                    ? `you have heat score on ${claims.claimable_count} bungalow${claims.claimable_count === 1 ? "" : "s"}`
-                    : "Loading rewards"}
+                  {hasClaimedToday
+                      ? "You already claimed today's rewards."
+                    : isLoading
+                    ? "Loading rewards..."
+                      : claims
+                      ? `You have heat score on ${claims.claimable_count} bungalow${claims.claimable_count === 1 ? "" : "s"}.`
+                      : "Loading rewards..."}
                 </p>
               </div>
               <button
@@ -235,20 +448,31 @@ export default function RewardsInboxButton() {
             </header>
 
             <div className={styles.list}>
-              {isLoading ? (
+              {isLoading && !hasClaimedToday ? (
                 <div className={styles.empty}>Loading wallet rewards...</div>
               ) : null}
 
-              {!isLoading && loadError ? (
+              {!isLoading && loadError && !hasClaimedToday ? (
                 <div className={styles.error}>{loadError}</div>
               ) : null}
 
-              {!isLoading && !loadError && claimableItems.length === 0 ? (
-                <div className={styles.empty}>No claimable rewards right now.</div>
+              {!loadError &&
+              claimableItems.length === 0 &&
+              (!isLoading || hasClaimedToday) ? (
+                hasClaimedToday ? (
+                  <div className={styles.claimedNotice}>
+                    <strong>
+                      You already claimed for today: {formatJbmCount(effectiveClaimedTodayTotal.toString())}
+                    </strong>
+                    {countdown ? <span>Claim again in {countdown}</span> : null}
+                  </div>
+                ) : (
+                  <div className={styles.empty}>No claimable rewards right now.</div>
+                )
               ) : null}
 
               {!isLoading && !loadError
-                  ? claimableItems.map((item) => (
+                  ? (hasClaimedToday ? claimedItems : claimableItems).map((item) => (
                     <div
                       key={`${item.chain}:${item.token_address}`}
                       className={styles.item}
@@ -265,7 +489,12 @@ export default function RewardsInboxButton() {
                             : item.token_name ?? item.token_address}
                         </strong>
                       </span>
-                      <b>{formatJbmCount(item.claimable_jbm)}</b>
+                      <b>
+                        {formatJbmCount(
+                          hasClaimedToday ? item.period_reward_jbm : item.claimable_jbm,
+                        )}
+                        {hasClaimedToday ? " ✓" : ""}
+                      </b>
                     </div>
                   ))
                 : null}
@@ -273,19 +502,31 @@ export default function RewardsInboxButton() {
 
             <div className={styles.footer}>
               <div className={styles.summary}>
-                <span>jungle bay memes to claim today</span>
-                <strong>{claims ? formatJbmCount(claims.total_claimable_jbm) : "—"}</strong>
+                <span>{summaryLabel}</span>
+                <strong>{summaryValue}</strong>
               </div>
               <button
                 type="button"
                 className={styles.claimButton}
-                disabled={isClaiming || isLoading || claimableItems.length === 0}
+                disabled={
+                  isClaiming ||
+                  hasClaimedToday ||
+                  (isLoading && !hasClaimedToday) ||
+                  claimableItems.length === 0
+                }
                 onClick={handleClaimAll}
               >
                 {isClaiming
                   ? "Claiming..."
-                  : `Claim ${claims ? formatJbmCount(claims.total_claimable_jbm) : "0"} jungle bay memes tokens`}
+                  : hasClaimedToday
+                      ? "Claimed today ✓"
+                    : isLoading
+                    ? "Loading rewards..."
+                      : `Claim ${claims ? formatJbmCount(claims.total_claimable_jbm) : "0"} jungle bay memes`}
               </button>
+              {hasClaimedToday && countdown ? (
+                <div className={styles.status}>Claim again in {countdown}</div>
+              ) : null}
               {status ? <div className={styles.status}>{status}</div> : null}
               {error ? <div className={styles.error}>{error}</div> : null}
             </div>

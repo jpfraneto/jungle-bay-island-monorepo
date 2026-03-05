@@ -7,6 +7,7 @@ export interface WalletClaimItem {
   token_name: string | null;
   token_symbol: string | null;
   heat_degrees: number;
+  period_reward_jbm: string;
   claimable_jbm: string;
   claimable_wei: string;
   can_claim: boolean;
@@ -24,6 +25,7 @@ export interface WalletClaimsData {
   period_end_at: string;
   claimable_count: number;
   total_claimable_jbm: string;
+  claimed_today_total_jbm: string;
   daily_cap_jbm: string;
   daily_distributed_jbm: string;
   daily_remaining_jbm: string;
@@ -46,6 +48,7 @@ export function useWalletClaims(walletAddress?: string) {
 
     setIsLoading(true);
     setError(null);
+    setClaims(null);
 
     try {
       const headers: Record<string, string> = {};

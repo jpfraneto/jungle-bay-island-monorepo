@@ -34,6 +34,11 @@
   justify-content: center;
 }
 
+.badgeClaimed {
+  background: #49b16f;
+  color: #e8ffef;
+}
+
 .overlay {
   position: fixed;
   inset: 0;
@@ -163,6 +168,25 @@
   border-radius: 12px;
   padding: 16px;
   color: var(--text-secondary);
+}
+
+.claimedNotice {
+  display: grid;
+  gap: 6px;
+  border: 1px solid rgba(78, 165, 105, 0.38);
+  border-radius: 12px;
+  padding: 12px;
+  background: rgba(20, 57, 33, 0.62);
+}
+
+.claimedNotice strong {
+  color: #d7f7e2;
+  font-size: 13px;
+}
+
+.claimedNotice span {
+  color: #9ddfb5;
+  font-size: 12px;
 }
 
 .footer {

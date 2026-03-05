@@ -9,6 +9,7 @@
   background: rgba(6, 14, 10, 0.84);
   color: var(--text-primary);
   font: inherit;
+  font-size: 16px;
   padding: 10px 12px;
   min-height: 40px;
 }

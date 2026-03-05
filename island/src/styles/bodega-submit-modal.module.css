@@ -5,9 +5,9 @@
   background: rgba(3, 7, 5, 0.78);
   backdrop-filter: blur(8px);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  padding: 18px;
+  padding: 12px;
   overflow: hidden;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
@@ -15,41 +15,42 @@
 
 .modal {
   width: min(920px, 100%);
-  max-height: min(92dvh, 980px);
+  max-height: calc(100dvh - 24px - env(safe-area-inset-bottom));
   overflow-y: auto;
-  border-radius: 20px;
+  border-radius: 18px;
   border: 1px solid var(--border-subtle);
   background:
-    radial-gradient(900px 300px at 10% -20%, rgba(46, 161, 103, 0.22), transparent 58%),
+    radial-gradient(900px 280px at 10% -20%, rgba(46, 161, 103, 0.2), transparent 58%),
     linear-gradient(180deg, rgba(19, 43, 28, 0.98), rgba(9, 21, 15, 0.98));
-  box-shadow: 0 26px 70px rgba(0, 0, 0, 0.42);
+  box-shadow: 0 20px 54px rgba(0, 0, 0, 0.4);
 }
 
 .header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
-  padding: 18px 18px 14px;
+  gap: 10px;
+  padding: 14px 14px 10px;
   border-bottom: 1px solid rgba(121, 181, 138, 0.12);
 }
 
 .header h3 {
   margin: 0;
-  font-size: 26px;
+  font-size: 22px;
   font-family: var(--font-display);
   font-style: italic;
 }
 
 .header p {
-  margin: 6px 0 0;
+  margin: 5px 0 0;
   color: var(--text-secondary);
-  line-height: 1.5;
+  line-height: 1.35;
+  font-size: 12px;
 }
 
 .closeButton {
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   border-radius: 999px;
   border: 1px solid var(--border-subtle);
   background: rgba(9, 19, 13, 0.85);
@@ -58,17 +59,17 @@
 }
 
 .stepRail {
-  padding: 14px 18px 0;
+  padding: 10px 14px 0;
   display: flex;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
 .stepRail span {
   border-radius: 999px;
   border: 1px solid rgba(121, 181, 138, 0.16);
-  padding: 5px 10px;
-  font-size: 11px;
+  padding: 4px 9px;
+  font-size: 10px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-muted);
@@ -84,34 +85,34 @@
 .formGrid,
 .previewSection,
 .successSection {
-  padding: 18px;
+  padding: 12px 14px;
 }
 
 .typeGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
 }
 
 .typeCard {
   text-align: left;
   display: grid;
-  gap: 8px;
-  border-radius: 16px;
+  gap: 6px;
+  border-radius: 14px;
   border: 1px solid rgba(121, 181, 138, 0.14);
   background: rgba(8, 20, 13, 0.62);
-  padding: 14px;
+  padding: 10px;
   cursor: pointer;
   color: var(--text-primary);
 }
 
 .typeCard strong {
-  font-size: 16px;
+  font-size: 15px;
 }
 
 .typeCard small {
   color: var(--text-secondary);
-  line-height: 1.45;
+  line-height: 1.35;
 }
 
 .typeCardActive {
@@ -121,24 +122,24 @@
 }
 
 .typeIcon {
-  font-size: 24px;
+  font-size: 20px;
 }
 
 .formGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
 }
 
 .field,
 .lockedField {
   display: grid;
-  gap: 8px;
-  border-radius: 14px;
+  gap: 6px;
+  border-radius: 12px;
   border: 1px solid rgba(121, 181, 138, 0.14);
   background: rgba(9, 20, 14, 0.56);
-  padding: 12px;
-  font-size: 13px;
+  padding: 10px;
+  font-size: 12px;
 }
 
 .field input,
@@ -149,7 +150,7 @@
   border: 1px solid var(--border-subtle);
   background: rgba(4, 11, 7, 0.74);
   color: var(--text-primary);
-  padding: 10px 12px;
+  padding: 9px 11px;
   font: inherit;
   box-sizing: border-box;
 }
@@ -162,13 +163,13 @@
 
 .field textarea {
   resize: vertical;
-  min-height: 88px;
+  min-height: 72px;
 }
 
 .field small,
 .lockedField small {
   color: var(--text-muted);
-  line-height: 1.45;
+  line-height: 1.35;
 }
 
 .fieldErrorText {
@@ -182,32 +183,32 @@
 }
 
 .lockedField strong {
-  font-size: 18px;
+  font-size: 16px;
 }
 
 .previewSection,
 .successSection {
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 
 .feeCard {
   display: grid;
-  gap: 6px;
-  border-radius: 14px;
+  gap: 5px;
+  border-radius: 12px;
   border: 1px solid rgba(121, 181, 138, 0.14);
   background: rgba(9, 20, 14, 0.56);
-  padding: 12px;
+  padding: 10px;
 }
 
 .feeCard strong {
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .feeCard span {
   color: var(--text-secondary);
-  line-height: 1.5;
-  font-size: 13px;
+  line-height: 1.4;
+  font-size: 12px;
 }
 
 .successActions {
@@ -216,39 +217,41 @@
 }
 
 .footer {
-  padding: 0 18px 18px;
+  padding: 0 14px 14px;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 14px;
+  gap: 10px;
 }
 
 .feedback {
   display: grid;
-  gap: 6px;
-  min-height: 22px;
+  gap: 4px;
+  min-height: 18px;
+  flex: 1;
 }
 
 .status {
   color: #bde9c8;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .error {
   color: #ffb9b9;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .actions {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   justify-content: flex-end;
+  width: min(320px, 100%);
 }
 
 .primaryButton,
 .secondaryButton {
   border-radius: 999px;
-  padding: 10px 16px;
+  padding: 9px 14px;
   font-weight: 600;
   cursor: pointer;
   border: 1px solid var(--border-subtle);
@@ -264,8 +267,26 @@
   color: var(--text-primary);
 }
 
+.backButton {
+  width: 42px;
+  min-width: 42px;
+  border-radius: 11px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(9, 19, 13, 0.85);
+  color: var(--text-primary);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.actions .primaryButton {
+  flex: 1;
+  text-align: center;
+}
+
 .primaryButton:disabled,
-.secondaryButton:disabled {
+.secondaryButton:disabled,
+.backButton:disabled {
   opacity: 0.6;
   cursor: default;
 }
@@ -277,27 +298,35 @@
 
   .footer {
     flex-direction: column;
+    align-items: stretch;
   }
 
   .actions {
     width: 100%;
   }
 
+  .field input,
+  .field textarea,
+  .field select {
+    font-size: 16px;
+  }
+
   .primaryButton,
-  .secondaryButton {
-    flex: 1;
+  .secondaryButton,
+  .backButton {
+    min-height: 44px;
   }
 }
 
 @media (max-width: 560px) {
   .overlay {
-    align-items: flex-start;
-    padding: 10px 10px calc(18px + env(safe-area-inset-bottom));
+    padding: 8px 8px calc(12px + env(safe-area-inset-bottom));
   }
 
   .modal {
-    max-height: calc(100dvh - 20px - env(safe-area-inset-bottom));
+    max-height: calc(100dvh - 16px - env(safe-area-inset-bottom));
     overflow-y: auto;
+    border-radius: 14px;
   }
 
   .header,
@@ -307,15 +336,15 @@
   .previewSection,
   .successSection,
   .footer {
-    padding-left: 14px;
-    padding-right: 14px;
+    padding-left: 10px;
+    padding-right: 10px;
   }
 
   .typeGrid {
     grid-template-columns: 1fr;
   }
 
-  .actions {
-    flex-direction: column;
+  .header h3 {
+    font-size: 20px;
   }
 }

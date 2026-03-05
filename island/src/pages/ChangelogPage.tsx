@@ -19,6 +19,39 @@ export default function ChangelogPage() {
       <article className={styles.entry}>
         <div className={styles.entryHeader}>
           <span className={styles.date}>March 5, 2026</span>
+          <h2 className={styles.heading}>Rewards Claimed State + Mobile Bodega Tightening</h2>
+        </div>
+        <p>
+          Claim UX now reflects completed daily claims clearly, and Bodega mobile
+          flows were tightened to use less vertical space with cleaner actions.
+        </p>
+        <ul className={styles.list}>
+          <li>
+            Rewards inbox now shows <strong>already claimed today</strong> copy
+            with the claimed JBM total and a live countdown until the next claim window.
+          </li>
+          <li>
+            The navbar rewards badge now switches from a yellow count to a green
+            check mark after today&apos;s claim succeeds.
+          </li>
+          <li>
+            Rewards modal loading now avoids stale totals so the claim button
+            and per-bungalow breakdown load in sync.
+          </li>
+          <li>
+            Bodega submit/install controls now prevent mobile input zoom by using
+            16px form controls on small screens.
+          </li>
+          <li>
+            Bodega list cards and submit modal spacing were flattened, and submit
+            actions now use a compact left-arrow back control plus a larger right-side continue/submit button.
+          </li>
+        </ul>
+      </article>
+
+      <article className={styles.entry}>
+        <div className={styles.entryHeader}>
+          <span className={styles.date}>March 5, 2026</span>
           <h2 className={styles.heading}>Claims Migrated To One-Tx Period Totals (V8)</h2>
         </div>
         <p>

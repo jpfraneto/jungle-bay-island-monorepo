@@ -2,15 +2,15 @@
   display: grid;
   grid-template-columns: 72px minmax(0, 1fr);
   align-items: start;
-  gap: 12px;
+  gap: 8px;
   border: 1px solid var(--border-subtle);
-  border-radius: 16px;
-  padding: 12px;
+  border-radius: 12px;
+  padding: 9px;
   background:
     radial-gradient(240px 140px at 12% 0%, rgba(241, 196, 15, 0.12), transparent 62%),
     radial-gradient(260px 140px at 100% 100%, rgba(26, 188, 156, 0.1), transparent 68%),
     linear-gradient(164deg, rgba(22, 46, 29, 0.96), rgba(11, 25, 17, 0.98));
-  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.22);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
   transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
 }
 
@@ -66,7 +66,7 @@
 
 .content {
   display: grid;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
 }
 
@@ -102,7 +102,7 @@
 
 .title {
   margin: 0;
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1.2;
   overflow-wrap: anywhere;
 }
@@ -150,7 +150,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
@@ -183,11 +183,11 @@
 }
 
 .compactCard {
-  grid-template-columns: 50px minmax(0, 1fr);
-  gap: 8px;
-  padding: 8px;
-  border-radius: 10px;
-  background: rgba(11, 24, 17, 0.86);
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 6px;
+  padding: 6px 7px;
+  border-radius: 9px;
+  background: rgba(11, 24, 17, 0.94);
   box-shadow: none;
 }
 
@@ -198,23 +198,23 @@
 }
 
 .compactCard .media {
-  width: 50px;
-  min-width: 50px;
-  min-height: 50px;
-  border-radius: 9px;
+  width: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  border-radius: 8px;
 }
 
 .compactCard .preview,
 .compactCard .placeholder {
-  height: 50px;
+  height: 40px;
 }
 
 .compactCard .assetIcon {
-  font-size: 20px;
+  font-size: 16px;
 }
 
 .compactCard .content {
-  gap: 3px;
+  gap: 2px;
 }
 
 .compactCard .topRow {
@@ -223,19 +223,19 @@
 
 .compactCard .assetType,
 .compactCard .installCount {
-  padding: 2px 6px;
+  padding: 1px 5px;
   font-size: 8px;
   letter-spacing: 0.04em;
 }
 
 .compactCard .title {
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.2;
 }
 
 .compactCard .footer {
-  margin-top: 1px;
-  gap: 8px;
+  margin-top: 0;
+  gap: 6px;
 }
 
 .compactCard .summary {
@@ -247,7 +247,7 @@
 
 .compactMeta {
   margin: 0;
-  font-size: 11px;
+  font-size: 10px;
   color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -255,12 +255,12 @@
 }
 
 .compactCard .price {
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .compactCard .actionButton {
-  padding: 6px 9px;
-  font-size: 11px;
+  padding: 4px 8px;
+  font-size: 10px;
 }
 
 .featureCard {
@@ -313,42 +313,38 @@
 }
 
 @media (max-width: 640px) {
-  .title {
-    font-size: 15px;
-  }
-
   .compactCard {
-    grid-template-columns: 46px minmax(0, 1fr);
-    gap: 7px;
-    padding: 7px;
+    grid-template-columns: 38px minmax(0, 1fr);
+    gap: 6px;
+    padding: 6px;
   }
 
   .compactCard .media {
-    width: 46px;
-    min-width: 46px;
-    min-height: 46px;
+    width: 38px;
+    min-width: 38px;
+    min-height: 38px;
   }
 
   .compactCard .preview,
   .compactCard .placeholder {
-    height: 46px;
+    height: 38px;
   }
 
   .compactCard .title {
-    font-size: 12px;
+    font-size: 11px;
   }
 
   .compactMeta {
-    font-size: 10px;
+    font-size: 9px;
   }
 
   .compactCard .price {
-    font-size: 10px;
+    font-size: 9px;
   }
 
   .compactCard .actionButton {
-    padding: 5px 8px;
-    font-size: 10px;
+    padding: 4px 7px;
+    font-size: 9px;
   }
 
   .featureCard .preview,

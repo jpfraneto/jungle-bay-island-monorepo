@@ -1,4 +1,32 @@
 export const claimEscrowAbi = [
+  { type: "error", name: "AdminOnly", inputs: [] },
+  { type: "error", name: "ArrayLengthMismatch", inputs: [] },
+  { type: "error", name: "ECDSAInvalidSignature", inputs: [] },
+  {
+    type: "error",
+    name: "ECDSAInvalidSignatureLength",
+    inputs: [{ name: "length", type: "uint256" }],
+  },
+  {
+    type: "error",
+    name: "ECDSAInvalidSignatureS",
+    inputs: [{ name: "s", type: "bytes32" }],
+  },
+  { type: "error", name: "EscrowEqualsRecipient", inputs: [] },
+  { type: "error", name: "InsufficientAllowance", inputs: [] },
+  { type: "error", name: "InsufficientBalance", inputs: [] },
+  { type: "error", name: "InvalidShortString", inputs: [] },
+  { type: "error", name: "InvalidSignature", inputs: [] },
+  { type: "error", name: "PeriodAlreadyClaimed", inputs: [] },
+  { type: "error", name: "SignatureExpired", inputs: [] },
+  {
+    type: "error",
+    name: "StringTooLong",
+    inputs: [{ name: "str", type: "string" }],
+  },
+  { type: "error", name: "TransferFailed", inputs: [] },
+  { type: "error", name: "ZeroAddress", inputs: [] },
+  { type: "error", name: "ZeroAmount", inputs: [] },
   {
     name: "claimPeriodTotal",
     type: "function",

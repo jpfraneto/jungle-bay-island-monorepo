@@ -10,7 +10,10 @@ export interface ResolvedBungalowTarget {
   canonical_path: string;
 }
 
-export function useBungalowResolver(identifier?: string) {
+export function useBungalowResolver(
+  identifier?: string,
+  preferredChain?: string,
+) {
   const [target, setTarget] = useState<ResolvedBungalowTarget | null>(null);
   const [isLoading, setIsLoading] = useState(Boolean(identifier));
   const [error, setError] = useState<string | null>(null);
@@ -27,8 +30,15 @@ export function useBungalowResolver(identifier?: string) {
     setError(null);
 
     try {
+      const params = new URLSearchParams();
+      if (preferredChain) {
+        params.set("chain", preferredChain);
+      }
+      const query = params.toString();
       const response = await fetch(
-        `/api/bungalow/resolve/${encodeURIComponent(identifier)}`,
+        `/api/bungalow/resolve/${encodeURIComponent(identifier)}${
+          query ? `?${query}` : ""
+        }`,
         { cache: "no-store" },
       );
 
@@ -46,7 +56,7 @@ export function useBungalowResolver(identifier?: string) {
     } finally {
       setIsLoading(false);
     }
-  }, [identifier]);
+  }, [identifier, preferredChain]);
 
   useEffect(() => {
     void resolveTarget();

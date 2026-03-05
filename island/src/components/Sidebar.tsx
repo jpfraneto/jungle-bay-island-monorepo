@@ -67,7 +67,7 @@ export default function Sidebar({
             <span>📝</span>
             <span>Changelog</span>
           </button>
-          <button
+          {/* <button
             type="button"
             className={styles.itemButton}
             onClick={() => {
@@ -77,7 +77,7 @@ export default function Sidebar({
           >
             <span>⛏️</span>
             <span>Mining Zones</span>
-          </button>
+          </button> */}
         </section>
 
         <section className={styles.section}>
@@ -111,8 +111,7 @@ export default function Sidebar({
               </div>
             ) : (
               bungalows.map((bungalow, index) => {
-                const bungalowPath =
-                  `/bungalow/${bungalow.canonical_slug ?? bungalow.token_address}`;
+                const bungalowPath = `/bungalow/${bungalow.canonical_slug ?? bungalow.token_address}`;
                 const symbol = bungalow.symbol ?? "?";
                 return (
                   <button

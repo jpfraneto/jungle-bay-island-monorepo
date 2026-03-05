@@ -7,6 +7,10 @@ import styles from "../styles/wallet-selector.module.css";
 interface WalletSelectorProps {
   onSelect: (address: string) => void;
   label?: string;
+  onAddWallet?: () => void | Promise<void>;
+  isAddingWallet?: boolean;
+  addWalletStatus?: string | null;
+  addWalletError?: string | null;
 }
 
 function truncateAddress(address: string): string {
@@ -17,13 +21,17 @@ function truncateAddress(address: string): string {
 export default function WalletSelector({
   onSelect,
   label = "Pay with",
+  onAddWallet,
+  isAddingWallet = false,
+  addWalletStatus = null,
+  addWalletError = null,
 }: WalletSelectorProps) {
-  const { authenticated, login } = usePrivy();
-  const { walletAddress, wallets, setActiveWallet } = usePrivyBaseWallet();
+  const { authenticated, connectWallet, login } = usePrivy();
+  const { walletAddress, setActiveWallet } = usePrivyBaseWallet();
   const {
     wallets: linkedWalletRows,
     isLoading,
-    error,
+    error: loadError,
   } = useUserWalletLinks(authenticated);
 
   const [selectedWallet, setSelectedWallet] = useState<string>("");
@@ -33,28 +41,19 @@ export default function WalletSelector({
     [linkedWalletRows],
   );
 
-  const connectedWalletAddresses = useMemo(
-    () => wallets.map((wallet) => wallet.address),
-    [wallets],
-  );
-
-  const options = useMemo(() => {
-    const combined = [...linkedWallets, ...connectedWalletAddresses];
-    return combined.filter(
-      (address, index) =>
-        combined.findIndex(
-          (candidate) => candidate.toLowerCase() === address.toLowerCase(),
-        ) === index,
-    );
-  }, [connectedWalletAddresses, linkedWallets]);
+  const options = linkedWallets;
 
   const activeWalletAddress = walletAddress ?? "";
 
-  const activeWalletNotLinked =
+  const activeWalletLinked =
     Boolean(activeWalletAddress) &&
-    !linkedWallets.some(
-      (linkedWallet) => linkedWallet.toLowerCase() === activeWalletAddress.toLowerCase(),
+    linkedWallets.some(
+      (linkedWallet) =>
+        linkedWallet.toLowerCase() === activeWalletAddress.toLowerCase(),
     );
+  const activeWalletNotLinked =
+    Boolean(activeWalletAddress) && !activeWalletLinked;
+  const showSelector = activeWalletLinked && options.length > 1;
 
   useEffect(() => {
     if (!walletAddress) return;
@@ -84,47 +83,89 @@ export default function WalletSelector({
     );
   }
 
+  if (!walletAddress) {
+    return (
+      <div className={styles.selectorWrap}>
+        <label className={styles.selectorLabel}>{label}</label>
+        <div className={styles.actionRow}>
+          <p className={styles.warning}>Connect a wallet to continue.</p>
+          <button
+            type="button"
+            className={styles.connectButton}
+            onClick={() => connectWallet({ walletChainType: "ethereum-only" })}
+          >
+            Connect wallet
+          </button>
+        </div>
+        {loadError ? <p className={styles.error}>{loadError}</p> : null}
+        {addWalletStatus ? (
+          <p className={styles.status}>{addWalletStatus}</p>
+        ) : null}
+        {addWalletError ? (
+          <p className={styles.error}>{addWalletError}</p>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div className={styles.selectorWrap}>
       <label className={styles.selectorLabel}>{label}</label>
-      <select
-        className={styles.selector}
-        value={selectedWallet}
-        onChange={(event) => {
-          const nextAddress = event.target.value;
-          setSelectedWallet(nextAddress);
-          try {
-            setActiveWallet(nextAddress);
-          } catch {
-            // Keep selector responsive even if Privy wallet sync lags.
-          }
-          onSelect(nextAddress);
-        }}
-        disabled={isLoading || options.length === 0}
-      >
-        {options.length === 0 ? (
-          <option value="">No wallets connected</option>
-        ) : (
-          options.map((address) => {
-            const isLinked = linkedWallets.some(
-              (linkedWallet) => linkedWallet.toLowerCase() === address.toLowerCase(),
-            );
-            return (
+      {showSelector ? (
+        <select
+          className={styles.selector}
+          value={selectedWallet}
+          onChange={(event) => {
+            const nextAddress = event.target.value;
+            setSelectedWallet(nextAddress);
+            try {
+              setActiveWallet(nextAddress);
+            } catch {
+              // Keep selector responsive even if Privy wallet sync lags.
+            }
+            onSelect(nextAddress);
+          }}
+          disabled={isLoading || options.length === 0}
+        >
+          {options.length === 0 ? (
+            <option value="">No linked wallets</option>
+          ) : (
+            options.map((address) => (
               <option key={address} value={address}>
                 {truncateAddress(address)}
-                {isLinked ? "" : " · Current wallet (not linked)"}
               </option>
-            );
-          })
-        )}
-      </select>
+            ))
+          )}
+        </select>
+      ) : (
+        <div className={styles.walletDisplay}>
+          <strong>{truncateAddress(activeWalletAddress)}</strong>
+          <span>{activeWalletLinked ? "Linked wallet" : "Current wallet"}</span>
+        </div>
+      )}
 
-      {error ? <p className={styles.error}>{error}</p> : null}
+      {loadError ? <p className={styles.error}>{loadError}</p> : null}
       {activeWalletNotLinked ? (
-        <p className={styles.warning}>
-          Link this wallet first to use it for transactions.
-        </p>
+        <div className={styles.actionRow}>
+          <p className={styles.warning}>
+            Link this wallet to use it for transactions.
+          </p>
+          {onAddWallet ? (
+            <button
+              type="button"
+              className={styles.connectButton}
+              onClick={onAddWallet}
+              disabled={isAddingWallet}
+            >
+              {isAddingWallet ? "Linking..." : "Link wallet"}
+            </button>
+          ) : null}
+        </div>
       ) : null}
+      {addWalletStatus ? (
+        <p className={styles.status}>{addWalletStatus}</p>
+      ) : null}
+      {addWalletError ? <p className={styles.error}>{addWalletError}</p> : null}
     </div>
   );
 }

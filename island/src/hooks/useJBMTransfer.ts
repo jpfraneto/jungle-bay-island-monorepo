@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { parseEventLogs, parseUnits } from "viem";
+import { formatUnits, parseEventLogs, parseUnits } from "viem";
 import { JBM_ADDRESS, TREASURY_ADDRESS } from "../utils/constants";
 import { jbmAbi } from "../utils/jbmAbi";
 import { usePrivyBaseWallet } from "./usePrivyBaseWallet";
@@ -39,12 +39,37 @@ export function useJBMTransfer() {
         abi: jbmAbi,
         functionName: "decimals",
       });
-      const amountBaseUnits = parseUnits(String(amountJbm), Number(decimals));
+      const normalizedDecimals = Number(decimals);
+      const amountBaseUnits = parseUnits(String(amountJbm), normalizedDecimals);
       if (amountBaseUnits <= 0n) {
         throw new Error("Transfer amount must be greater than zero");
       }
 
       const { address, walletClient } = await requireWallet();
+      const currentBalance = await publicClient.readContract({
+        address: JBM_ADDRESS,
+        abi: jbmAbi,
+        functionName: "balanceOf",
+        args: [address],
+      });
+
+      if (currentBalance < amountBaseUnits) {
+        const available = Number(
+          formatUnits(currentBalance, normalizedDecimals),
+        ).toLocaleString(undefined, {
+          maximumFractionDigits: 4,
+        });
+        const required = Number(
+          formatUnits(amountBaseUnits, normalizedDecimals),
+        ).toLocaleString(undefined, {
+          maximumFractionDigits: 4,
+        });
+
+        throw new Error(
+          `Insufficient JBM balance on ${address.slice(0, 6)}...${address.slice(-4)}. Available: ${available} JBM. Required: ${required} JBM.`,
+        );
+      }
+
       setIsTransferring(true);
 
       let hash: `0x${string}`;

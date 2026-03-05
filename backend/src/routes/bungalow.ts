@@ -247,6 +247,26 @@ function canonicalPathFor(input: {
   return `/bungalow/${identifier}`;
 }
 
+function pickPreferredDeployment(
+  context: CanonicalProjectContextResult,
+  preferredChain: SupportedChain | null,
+): CanonicalDeploymentRef {
+  if (!preferredChain) {
+    return context.activeDeployment;
+  }
+
+  for (const asset of context.assets) {
+    const match = asset.deployments.find(
+      (deployment) => deployment.chain === preferredChain,
+    );
+    if (match) {
+      return match;
+    }
+  }
+
+  return context.activeDeployment;
+}
+
 async function buildLinkedDeploymentView(input: {
   deployment: CanonicalDeploymentRef;
   isPrimary: boolean;
@@ -337,19 +357,26 @@ bungalowRoute.get("/bungalow/resolve/:identifier", async (c) => {
   if (!identifier) {
     throw new ApiError(400, "invalid_params", "Identifier is required");
   }
+  const preferredChain = toSupportedChain(
+    (c.req.query("chain") ?? "").trim().toLowerCase(),
+  );
 
   const slugContext = await getCanonicalProjectContextBySlug(identifier);
   if (slugContext) {
+    const preferredDeployment = pickPreferredDeployment(
+      slugContext,
+      preferredChain,
+    );
     return c.json({
       found: true,
       identifier,
       identifier_type: "slug",
       canonical_slug: slugContext.project?.slug ?? null,
-      chain: slugContext.activeDeployment.chain,
-      token_address: slugContext.activeDeployment.token_address,
+      chain: preferredDeployment.chain,
+      token_address: preferredDeployment.token_address,
       canonical_path: canonicalPathFor({
         slug: slugContext.project?.slug ?? null,
-        tokenAddress: slugContext.activeDeployment.token_address,
+        tokenAddress: preferredDeployment.token_address,
       }),
     });
   }
@@ -358,16 +385,20 @@ bungalowRoute.get("/bungalow/resolve/:identifier", async (c) => {
     identifier,
   );
   if (canonicalAddressContext) {
+    const preferredDeployment = pickPreferredDeployment(
+      canonicalAddressContext,
+      preferredChain,
+    );
     return c.json({
       found: true,
       identifier,
       identifier_type: "address",
       canonical_slug: canonicalAddressContext.project?.slug ?? null,
-      chain: canonicalAddressContext.activeDeployment.chain,
-      token_address: canonicalAddressContext.activeDeployment.token_address,
+      chain: preferredDeployment.chain,
+      token_address: preferredDeployment.token_address,
       canonical_path: canonicalPathFor({
         slug: canonicalAddressContext.project?.slug ?? null,
-        tokenAddress: canonicalAddressContext.activeDeployment.token_address,
+        tokenAddress: preferredDeployment.token_address,
       }),
     });
   }
@@ -384,6 +415,9 @@ bungalowRoute.get("/bungalow/resolve/:identifier", async (c) => {
     if (matches.length === 0) continue;
 
     const preferredMatch =
+      (preferredChain
+        ? matches.find((match) => match.chain === preferredChain)
+        : null) ??
       matches.find((match) => match.chain === "base") ??
       matches.find((match) => match.chain === "ethereum") ??
       matches[0];

@@ -126,6 +126,20 @@ function parsePositiveNumericString(input: unknown, fieldName: string): string {
  * Parses whole-number JBM amounts for payment proofs so fixed-fee flows cannot send decimals.
  */
 function parseWholeJbmAmount(input: unknown, fieldName: string): bigint {
+  if (typeof input === 'bigint') {
+    if (input <= 0n) {
+      throw new ApiError(400, 'invalid_numeric', `${fieldName} must be a positive JBM amount`)
+    }
+    return input
+  }
+
+  if (typeof input === 'number') {
+    if (!Number.isFinite(input) || !Number.isInteger(input) || input <= 0) {
+      throw new ApiError(400, 'invalid_numeric', `${fieldName} must be a whole-number JBM amount`)
+    }
+    return BigInt(input)
+  }
+
   const raw = asString(input)
   if (!/^\d+$/.test(raw)) {
     throw new ApiError(400, 'invalid_numeric', `${fieldName} must be a whole-number JBM amount`)
@@ -153,7 +167,7 @@ function validateTxHash(input: unknown): string {
   if (!/^0x[0-9a-fA-F]{64}$/.test(txHash)) {
     throw new ApiError(400, 'invalid_tx_hash', 'tx_hash must be a valid transaction hash')
   }
-  return txHash
+  return txHash.toLowerCase()
 }
 
 /**
@@ -580,6 +594,16 @@ bodegaRoute.get('/catalog/:id', async (c) => {
   }
 
   const item = await getCatalogItem(id)
+  if (!item) {
+    throw new ApiError(404, 'catalog_item_not_found', 'Catalog item not found')
+  }
+
+  return c.json({ item })
+})
+
+bodegaRoute.get('/catalog/tx/:tx_hash', async (c) => {
+  const txHash = validateTxHash(c.req.param('tx_hash'))
+  const item = await getCatalogItemBySubmissionTxHash(txHash)
   if (!item) {
     throw new ApiError(404, 'catalog_item_not_found', 'Catalog item not found')
   }

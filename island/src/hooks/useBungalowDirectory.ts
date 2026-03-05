@@ -8,6 +8,7 @@ interface UseBungalowDirectoryOptions {
   walletAddress?: string | null;
   limit?: number;
   enabled?: boolean;
+  fetchAll?: boolean;
 }
 
 interface UseBungalowDirectoryResult {
@@ -23,6 +24,7 @@ export function useBungalowDirectory(
     walletAddress = null,
     limit = 200,
     enabled = true,
+    fetchAll = false,
   } = options;
   const [bungalows, setBungalows] = useState<DirectoryBungalow[]>([]);
   const [isLoading, setIsLoading] = useState(enabled);
@@ -43,27 +45,62 @@ export function useBungalowDirectory(
     void (async () => {
       try {
         const hasWalletAddress = Boolean(walletAddress?.trim());
-        const endpoint = hasWalletAddress
-          ? `/api/address/${encodeURIComponent(walletAddress ?? "")}/bungalows`
-          : `/api/bungalows?limit=${limit}`;
-        const response = await fetch(endpoint, {
-          signal: controller.signal,
-        });
-        if (!response.ok) {
-          throw new Error(`Request failed (${response.status})`);
+        if (hasWalletAddress) {
+          const endpoint = `/api/address/${encodeURIComponent(walletAddress ?? "")}/bungalows`;
+          const response = await fetch(endpoint, {
+            signal: controller.signal,
+          });
+          if (!response.ok) {
+            throw new Error(`Request failed (${response.status})`);
+          }
+
+          const data = (await response.json()) as unknown;
+          setBungalows(normalizeDirectoryBungalows(data));
+          return;
         }
 
-        const data = (await response.json()) as unknown;
+        const pageSize = Math.min(Math.max(limit, 1), 200);
+        const allItems: unknown[] = [];
+        let offset = 0;
+        let total = Number.POSITIVE_INFINITY;
 
-        // Wallet-scoped selectors use /api/address/:wallet/bungalows.
-        // Views without a wallet keep using the public directory.
-        setBungalows(
-          normalizeDirectoryBungalows(
-            hasWalletAddress
-              ? data
-              : (data as { items?: unknown[] } | null)?.items,
-          ),
-        );
+        while (!controller.signal.aborted && offset < total) {
+          const endpoint = `/api/bungalows?limit=${pageSize}&offset=${offset}`;
+          const response = await fetch(endpoint, {
+            signal: controller.signal,
+          });
+          if (!response.ok) {
+            throw new Error(`Request failed (${response.status})`);
+          }
+
+          const data = (await response.json()) as
+            | { items?: unknown[]; total?: unknown }
+            | null;
+          const pageItems = Array.isArray(data?.items) ? data.items : [];
+          allItems.push(...pageItems);
+
+          const parsedTotal = Number(data?.total ?? pageItems.length);
+          total =
+            Number.isFinite(parsedTotal) && parsedTotal > 0
+              ? parsedTotal
+              : allItems.length;
+
+          if (!fetchAll || pageItems.length < pageSize) {
+            break;
+          }
+
+          offset += pageSize;
+        }
+
+        const normalized = normalizeDirectoryBungalows(allItems);
+        const deduped = new Map<string, DirectoryBungalow>();
+        for (const bungalow of normalized) {
+          deduped.set(
+            `${bungalow.chain}:${bungalow.token_address.toLowerCase()}`,
+            bungalow,
+          );
+        }
+        setBungalows([...deduped.values()]);
       } catch (err) {
         if (controller.signal.aborted) return;
         setError(
@@ -84,7 +121,7 @@ export function useBungalowDirectory(
     return () => {
       controller.abort();
     };
-  }, [enabled, limit, walletAddress]);
+  }, [enabled, fetchAll, limit, walletAddress]);
 
   return { bungalows, isLoading, error };
 }

@@ -40,7 +40,8 @@ interface PendingPayment {
   amount: string;
 }
 
-const PENDING_INSTALL_PAYMENT_STORAGE_KEY = "jbi:bodega:pending-install-payment";
+const PENDING_INSTALL_PAYMENT_STORAGE_KEY =
+  "jbi:bodega:pending-install-payment";
 
 function getBungalowKey(bungalow: DirectoryBungalow): string {
   return `${bungalow.chain}:${bungalow.token_address}`;
@@ -57,7 +58,9 @@ function readPendingInstallPayment(): PendingPayment | null {
   if (typeof window === "undefined") return null;
 
   try {
-    const raw = window.localStorage.getItem(PENDING_INSTALL_PAYMENT_STORAGE_KEY);
+    const raw = window.localStorage.getItem(
+      PENDING_INSTALL_PAYMENT_STORAGE_KEY,
+    );
     if (!raw) return null;
 
     const parsed = JSON.parse(raw) as Partial<PendingPayment> | null;
@@ -125,7 +128,9 @@ function normalizeInstallRecord(input: unknown): BodegaInstallRecord | null {
         ? item.installed_to_token_address
         : "",
     installed_to_chain:
-      typeof item.installed_to_chain === "string" ? item.installed_to_chain : "",
+      typeof item.installed_to_chain === "string"
+        ? item.installed_to_chain
+        : "",
     installed_by_wallet:
       typeof item.installed_by_wallet === "string"
         ? item.installed_by_wallet
@@ -133,7 +138,9 @@ function normalizeInstallRecord(input: unknown): BodegaInstallRecord | null {
     tx_hash: typeof item.tx_hash === "string" ? item.tx_hash : "",
     jbm_amount: typeof item.jbm_amount === "string" ? item.jbm_amount : "0",
     creator_credit_jbm:
-      typeof item.creator_credit_jbm === "string" ? item.creator_credit_jbm : "0",
+      typeof item.creator_credit_jbm === "string"
+        ? item.creator_credit_jbm
+        : "0",
     credit_claimed: Boolean(item.credit_claimed),
     created_at: typeof item.created_at === "string" ? item.created_at : "",
     catalog_item: null,
@@ -154,10 +161,8 @@ export default function BodegaInstallModal({
   const navigate = useNavigate();
   const { authenticated, getAccessToken, login } = usePrivy();
   const { walletAddress } = usePrivyBaseWallet();
-  const {
-    wallets: linkedWalletRows,
-    refetch: refetchLinkedWallets,
-  } = useUserWalletLinks(authenticated);
+  const { wallets: linkedWalletRows, refetch: refetchLinkedWallets } =
+    useUserWalletLinks(authenticated);
   const {
     linkCurrentWallet,
     isLinking: isLinkingWallet,
@@ -179,16 +184,18 @@ export default function BodegaInstallModal({
   const [selectedPayWallet, setSelectedPayWallet] = useState<string>("");
   const [showWalletGate, setShowWalletGate] = useState(false);
   const [resumeAfterLink, setResumeAfterLink] = useState(false);
-  const [successBungalow, setSuccessBungalow] = useState<DirectoryBungalow | null>(
-    null,
-  );
+  const [successBungalow, setSuccessBungalow] =
+    useState<DirectoryBungalow | null>(null);
+  const [successInstallTx, setSuccessInstallTx] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open || !item) return;
 
     const storedTargetKey = pendingPayment?.targetKey ?? "";
     const matchingStoredBungalow =
-      bungalowOptions.find((bungalow) => getBungalowKey(bungalow) === storedTargetKey) ??
+      bungalowOptions.find(
+        (bungalow) => getBungalowKey(bungalow) === storedTargetKey,
+      ) ??
       (!isWalletScoped &&
       preselectedBungalow &&
       getBungalowKey(preselectedBungalow) === storedTargetKey
@@ -201,7 +208,9 @@ export default function BodegaInstallModal({
         : !isWalletScoped && preselectedBungalow
           ? preselectedBungalow
           : null);
-    const fallbackKey = preferredBungalow ? getBungalowKey(preferredBungalow) : "";
+    const fallbackKey = preferredBungalow
+      ? getBungalowKey(preferredBungalow)
+      : "";
 
     setSelectedKey(fallbackKey);
     setIsSubmitting(false);
@@ -210,7 +219,15 @@ export default function BodegaInstallModal({
     setShowWalletGate(false);
     setResumeAfterLink(false);
     setSuccessBungalow(null);
-  }, [bungalowOptions, isWalletScoped, item, open, pendingPayment, preselectedBungalow]);
+    setSuccessInstallTx(null);
+  }, [
+    bungalowOptions,
+    isWalletScoped,
+    item,
+    open,
+    pendingPayment,
+    preselectedBungalow,
+  ]);
 
   useEffect(() => {
     writePendingInstallPayment(pendingPayment);
@@ -239,13 +256,14 @@ export default function BodegaInstallModal({
 
   if (!open || !item) return null;
 
-  const selectedBungalow = bungalowOptions.find(
-    (bungalow) => getBungalowKey(bungalow) === selectedKey,
-  ) ??
-    (!isWalletScoped ? preselectedBungalow ?? null : null);
+  const selectedBungalow =
+    bungalowOptions.find(
+      (bungalow) => getBungalowKey(bungalow) === selectedKey,
+    ) ?? (!isWalletScoped ? (preselectedBungalow ?? null) : null);
   const previewUrl = getBodegaPreviewUrl(item);
   const creatorLabel = formatCreatorLabel(item);
-  const canSubmit = Boolean(selectedBungalow) && !isSubmitting && !isTransferring;
+  const canSubmit =
+    Boolean(selectedBungalow) && !isSubmitting && !isTransferring;
 
   const handleInstall = async () => {
     if (!authenticated) {
@@ -334,12 +352,10 @@ export default function BodegaInstallModal({
         }),
       });
 
-      const data = (await response.json().catch(() => null)) as
-        | {
-            install?: unknown;
-            error?: unknown;
-          }
-        | null;
+      const data = (await response.json().catch(() => null)) as {
+        install?: unknown;
+        error?: unknown;
+      } | null;
       const install = normalizeInstallRecord(data?.install);
       const apiError =
         typeof data?.error === "string" && data.error.trim().length > 0
@@ -353,6 +369,7 @@ export default function BodegaInstallModal({
       setPendingPayment(null);
       setStatus("Installed! Check your bungalow.");
       setSuccessBungalow(selectedBungalow);
+      setSuccessInstallTx(install.tx_hash || null);
       onInstalled?.(install, selectedBungalow);
     } catch (err) {
       const message =
@@ -391,7 +408,6 @@ export default function BodegaInstallModal({
         <header className={styles.header}>
           <div>
             <h3>Install from the Bodega</h3>
-            <p>Bring this creator-made asset into one of your venues.</p>
           </div>
           <button
             type="button"
@@ -432,7 +448,9 @@ export default function BodegaInstallModal({
               {isLinkingWallet ? "Linking..." : "Add wallet"}
             </button>
             {linkStatus ? <span>{linkStatus}</span> : null}
-            {linkError ? <span className={styles.error}>{linkError}</span> : null}
+            {linkError ? (
+              <span className={styles.error}>{linkError}</span>
+            ) : null}
           </section>
         ) : null}
 
@@ -443,11 +461,19 @@ export default function BodegaInstallModal({
               type="button"
               className={styles.linkButton}
               onClick={() => {
-                navigate(`/bungalow/${successBungalow.token_address}`);
+                const params = new URLSearchParams();
+                params.set("chain", successBungalow.chain);
+                if (successInstallTx) {
+                  params.set("install_tx", successInstallTx);
+                }
+                navigate(
+                  `/bungalow/${successBungalow.token_address}?${params.toString()}`,
+                );
                 onClose();
               }}
             >
-              Open {successBungalow.symbol ?? successBungalow.name ?? "bungalow"}
+              Open{" "}
+              {successBungalow.symbol ?? successBungalow.name ?? "bungalow"}
             </button>
           </section>
         ) : isDirectoryLoading && bungalowOptions.length === 0 ? (
@@ -459,7 +485,9 @@ export default function BodegaInstallModal({
         ) : isWalletScoped && bungalowOptions.length === 0 ? (
           <section className={styles.emptyState}>
             <strong>You don't own any bungalows yet.</strong>
-            <span>Claim one on the island map, then come back to install this asset.</span>
+            <span>
+              Claim one on the island map, then come back to install this asset.
+            </span>
             <button
               type="button"
               className={styles.linkButton}
@@ -478,9 +506,7 @@ export default function BodegaInstallModal({
           </section>
         ) : (
           <section className={styles.formBlock}>
-            <label className={styles.fieldLabel}>
-              Install into
-            </label>
+            <label className={styles.fieldLabel}>Install into</label>
             <BungalowOptionPicker
               options={bungalowOptions}
               selectedKey={selectedKey}

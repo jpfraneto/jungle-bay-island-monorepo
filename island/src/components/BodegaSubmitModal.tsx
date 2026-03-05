@@ -12,6 +12,7 @@ import { formatJbmAmount } from "../utils/formatters";
 import styles from "../styles/bodega-submit-modal.module.css";
 import {
   getBodegaAssetIcon,
+  getBodegaListingPath,
   normalizeBodegaCatalogItem,
   type BodegaAssetType,
   type BodegaCatalogItem,
@@ -232,10 +233,8 @@ export default function BodegaSubmitModal({
   const navigate = useNavigate();
   const { authenticated, getAccessToken, login } = usePrivy();
   const { walletAddress } = usePrivyBaseWallet();
-  const {
-    wallets: linkedWalletRows,
-    refetch: refetchLinkedWallets,
-  } = useUserWalletLinks(authenticated);
+  const { wallets: linkedWalletRows, refetch: refetchLinkedWallets } =
+    useUserWalletLinks(authenticated);
   const {
     linkCurrentWallet,
     isLinking: isLinkingWallet,
@@ -269,6 +268,7 @@ export default function BodegaSubmitModal({
   const [selectedPayWallet, setSelectedPayWallet] = useState<string>("");
   const [showWalletGate, setShowWalletGate] = useState(false);
   const [resumeAfterLink, setResumeAfterLink] = useState(false);
+  const [shareStatus, setShareStatus] = useState<string | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const priceInputRef = useRef<HTMLInputElement | null>(null);
   const previewUrlInputRef = useRef<HTMLInputElement | null>(null);
@@ -291,7 +291,9 @@ export default function BodegaSubmitModal({
     const hasPreferred = bungalowOptions.some(
       (bungalow) => getBungalowKey(bungalow) === preferredKey,
     );
-    setOriginKey(hasPreferred ? preferredKey : !isWalletScoped ? preferredKey : "");
+    setOriginKey(
+      hasPreferred ? preferredKey : !isWalletScoped ? preferredKey : "",
+    );
     setStatus(null);
     setError(null);
     setFieldErrors({});
@@ -300,6 +302,7 @@ export default function BodegaSubmitModal({
     setSubmittedItem(null);
     setShowWalletGate(false);
     setResumeAfterLink(false);
+    setShareStatus(null);
   }, [bungalowOptions, defaultOriginBungalow, isWalletScoped, open]);
 
   useEffect(() => {
@@ -375,16 +378,14 @@ export default function BodegaSubmitModal({
 
   const selectedOrigin =
     originKey.length > 0
-      ? (
-          bungalowOptions.find(
-            (bungalow) => getBungalowKey(bungalow) === originKey,
-          ) ??
-          (!isWalletScoped &&
-          defaultOriginBungalow &&
-          getBungalowKey(defaultOriginBungalow) === originKey
-            ? defaultOriginBungalow
-            : null)
-        )
+      ? (bungalowOptions.find(
+          (bungalow) => getBungalowKey(bungalow) === originKey,
+        ) ??
+        (!isWalletScoped &&
+        defaultOriginBungalow &&
+        getBungalowKey(defaultOriginBungalow) === originKey
+          ? defaultOriginBungalow
+          : null))
       : null;
 
   const draftItem = useMemo<BodegaCatalogItem>(() => {
@@ -412,6 +413,8 @@ export default function BodegaSubmitModal({
       price_in_jbm: price.trim() || "0",
       install_count: 0,
       active: true,
+      submission_tx_hash: null,
+      submission_fee_jbm: null,
       created_at: new Date().toISOString(),
     };
   }, [
@@ -448,6 +451,11 @@ export default function BodegaSubmitModal({
       title,
       url,
     ],
+  );
+
+  const submittedItemPath = useMemo(
+    () => getBodegaListingPath(submittedItem?.submission_tx_hash),
+    [submittedItem?.submission_tx_hash],
   );
 
   if (!open) return null;
@@ -571,7 +579,7 @@ export default function BodegaSubmitModal({
           preview_url: draftItem.preview_url ?? undefined,
           price_in_jbm: asPositiveNumber(price),
           tx_hash: confirmedPayment.txHash,
-          jbm_amount: BODEGA_SUBMISSION_FEE,
+          jbm_amount: String(BODEGA_SUBMISSION_FEE),
           origin_bungalow_token_address: selectedOrigin?.token_address,
           origin_bungalow_chain: selectedOrigin?.chain,
         }),
@@ -626,6 +634,25 @@ export default function BodegaSubmitModal({
     }
   };
 
+  const handleShareListing = async () => {
+    if (!submittedItemPath) {
+      setShareStatus("This listing does not have a shareable URL yet.");
+      return;
+    }
+
+    const shareUrl =
+      typeof window !== "undefined"
+        ? `${window.location.origin}${submittedItemPath}`
+        : submittedItemPath;
+
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setShareStatus("Listing link copied.");
+    } catch {
+      setShareStatus("Could not copy the link automatically.");
+    }
+  };
+
   return (
     <div className={styles.overlay}>
       <div className={styles.modal}>
@@ -668,7 +695,9 @@ export default function BodegaSubmitModal({
             >
               {isLinkingWallet ? "Linking..." : "Add wallet"}
             </button>
-            {linkStatus ? <div className={styles.status}>{linkStatus}</div> : null}
+            {linkStatus ? (
+              <div className={styles.status}>{linkStatus}</div>
+            ) : null}
             {linkError ? <div className={styles.error}>{linkError}</div> : null}
           </div>
         ) : null}
@@ -684,12 +713,34 @@ export default function BodegaSubmitModal({
             <div className={styles.successActions}>
               <button
                 type="button"
+                className={styles.secondaryButton}
+                onClick={() => {
+                  void handleShareListing();
+                }}
+              >
+                Share
+              </button>
+              {submittedItemPath ? (
+                <button
+                  type="button"
+                  className={styles.secondaryButton}
+                  onClick={() => {
+                    navigate(submittedItemPath);
+                    onClose();
+                  }}
+                >
+                  View listing
+                </button>
+              ) : null}
+              <button
+                type="button"
                 className={styles.primaryButton}
                 onClick={onClose}
               >
                 Back to listing
               </button>
             </div>
+            {shareStatus ? <div className={styles.status}>{shareStatus}</div> : null}
           </section>
         ) : null}
 

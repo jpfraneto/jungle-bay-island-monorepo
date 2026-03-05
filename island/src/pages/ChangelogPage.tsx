@@ -19,6 +19,58 @@ export default function ChangelogPage() {
       <article className={styles.entry}>
         <div className={styles.entryHeader}>
           <span className={styles.date}>March 5, 2026</span>
+          <h2 className={styles.heading}>Bodega Install Flow Now Opens Exact Highlighted Bungalow Items</h2>
+        </div>
+        <p>
+          Installing from the Bodega now uses the full island bungalow directory
+          and opens the destination bungalow with the newly installed item
+          highlighted by install transaction hash.
+        </p>
+        <ul className={styles.list}>
+          <li>
+            Install target picker now loads the full bungalow directory instead
+            of wallet-scoped subsets.
+          </li>
+          <li>
+            Post-install navigation now includes <code>install_tx</code> and
+            chain query params so the right bungalow deployment opens
+            immediately.
+          </li>
+          <li>
+            Bungalow pages now scroll to and highlight the matching installed
+            Bodega card using that install transaction hash.
+          </li>
+        </ul>
+      </article>
+
+      <article className={styles.entry}>
+        <div className={styles.entryHeader}>
+          <span className={styles.date}>March 5, 2026</span>
+          <h2 className={styles.heading}>Bodega Listings Now Have Shareable URLs</h2>
+        </div>
+        <p>
+          Every published Bodega item can now be opened with a direct listing
+          URL based on its publish transaction hash.
+        </p>
+        <ul className={styles.list}>
+          <li>
+            New listing route: <code>/bodega/:tx_hash</code> renders one catalog
+            item by its publish transaction hash.
+          </li>
+          <li>
+            Publishing success flow now includes a <strong>Share</strong> action
+            that copies the listing link.
+          </li>
+          <li>
+            Direct listing pages include share + install actions so creators can
+            distribute links and users can install from that same page.
+          </li>
+        </ul>
+      </article>
+
+      <article className={styles.entry}>
+        <div className={styles.entryHeader}>
+          <span className={styles.date}>March 5, 2026</span>
           <h2 className={styles.heading}>External Wallet Picker Expanded: MetaMask, Rainbow, Phantom</h2>
         </div>
         <p>

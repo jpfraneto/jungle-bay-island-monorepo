@@ -65,7 +65,14 @@ function getPeriodEndMs(periodEndAt: string | null | undefined): number {
 
   const now = new Date();
   const nextUtcNoon = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 12, 0, 0),
+    Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(),
+      12,
+      0,
+      0,
+    ),
   );
   if (nextUtcNoon.getTime() <= now.getTime()) {
     nextUtcNoon.setUTCDate(nextUtcNoon.getUTCDate() + 1);
@@ -73,7 +80,10 @@ function getPeriodEndMs(periodEndAt: string | null | undefined): number {
   return nextUtcNoon.getTime();
 }
 
-function formatClaimCountdown(periodEndAt: string | null | undefined, nowMs: number): string {
+function formatClaimCountdown(
+  periodEndAt: string | null | undefined,
+  nowMs: number,
+): string {
   const endMs = getPeriodEndMs(periodEndAt);
   const remainingSeconds = Math.max(0, Math.floor((endMs - nowMs) / 1000));
   const hours = Math.floor(remainingSeconds / 3600);
@@ -87,7 +97,9 @@ function getClaimedRewardsCacheKey(wallet: string): string {
   return `${CLAIMED_REWARDS_CACHE_PREFIX}:${wallet.toLowerCase()}`;
 }
 
-function readCachedClaimedPeriod(wallet: string | null | undefined): CachedClaimedPeriod | null {
+function readCachedClaimedPeriod(
+  wallet: string | null | undefined,
+): CachedClaimedPeriod | null {
   if (!wallet || typeof window === "undefined") return null;
 
   const key = getClaimedRewardsCacheKey(wallet);
@@ -133,7 +145,9 @@ function writeCachedClaimedPeriod(
   window.localStorage.setItem(key, JSON.stringify(value));
 }
 
-function toPeriodIdString(value: string | number | null | undefined): string | null {
+function toPeriodIdString(
+  value: string | number | null | undefined,
+): string | null {
   if (typeof value === "string") {
     const trimmed = value.trim();
     return trimmed ? trimmed : null;
@@ -161,19 +175,20 @@ function getAmountJbmFromPayload(payload: ClaimSignaturePayload): string {
 export default function RewardsInboxButton() {
   const { authenticated, getAccessToken, login } = usePrivy();
   const { publicClient, requireWallet, walletAddress } = usePrivyBaseWallet();
-  const {
-    wallets: linkedWalletRows,
-    refetch: refetchLinkedWallets,
-  } = useUserWalletLinks(authenticated);
+  const { wallets: linkedWalletRows, refetch: refetchLinkedWallets } =
+    useUserWalletLinks(authenticated);
   const {
     linkCurrentWallet,
     isLinking: isLinkingWallet,
     status: linkStatus,
     error: linkError,
   } = useSiweWalletLink();
-  const { claims, isLoading, error: loadError, refetch } = useWalletClaims(
-    walletAddress ?? undefined,
-  );
+  const {
+    claims,
+    isLoading,
+    error: loadError,
+    refetch,
+  } = useWalletClaims(walletAddress ?? undefined);
 
   const [open, setOpen] = useState(false);
   const [isClaiming, setIsClaiming] = useState(false);
@@ -196,7 +211,9 @@ export default function RewardsInboxButton() {
     setSelectedPayoutWallet(walletAddress);
   }, [selectedPayoutWallet, walletAddress]);
 
-  const linkedWallets = linkedWalletRows.map((wallet) => wallet.address.toLowerCase());
+  const linkedWallets = linkedWalletRows.map((wallet) =>
+    wallet.address.toLowerCase(),
+  );
   const claimableItems = claims?.items.filter((item) => item.can_claim) ?? [];
   const claimedItems = claims?.items.filter((item) => item.claimed_today) ?? [];
   const claimedTodayTotal = useMemo(() => {
@@ -215,9 +232,9 @@ export default function RewardsInboxButton() {
   const cachedPeriodId = toPeriodIdString(cachedClaimedPeriod?.periodId);
   const cachedClaimIsActive = Boolean(
     cachedClaimedPeriod &&
-      cachedClaimedPeriod.periodEndMs > Date.now() &&
-      cachedPeriodId &&
-      (!backendPeriodId || cachedPeriodId === backendPeriodId),
+    cachedClaimedPeriod.periodEndMs > Date.now() &&
+    cachedPeriodId &&
+    (!backendPeriodId || cachedPeriodId === backendPeriodId),
   );
   const optimisticClaimedTotal = cachedClaimIsActive
     ? parseAmount(cachedClaimedPeriod?.amountJbm)
@@ -239,7 +256,10 @@ export default function RewardsInboxButton() {
   }, [cachedClaimIsActive, cachedClaimedPeriod, walletAddress]);
 
   const countdown = useMemo(
-    () => (hasClaimedToday ? formatClaimCountdown(effectivePeriodEndAt, clockMs) : null),
+    () =>
+      hasClaimedToday
+        ? formatClaimCountdown(effectivePeriodEndAt, clockMs)
+        : null,
     [clockMs, effectivePeriodEndAt, hasClaimedToday],
   );
   const summaryLabel = hasClaimedToday
@@ -333,7 +353,9 @@ export default function RewardsInboxButton() {
         !signData.payout_wallet ||
         !signData.breakdown_hash
       ) {
-        throw new Error(signData.error ?? `Signing failed (${signResponse.status})`);
+        throw new Error(
+          signData.error ?? `Signing failed (${signResponse.status})`,
+        );
       }
 
       if (
@@ -419,9 +441,12 @@ export default function RewardsInboxButton() {
       );
 
       if (!confirmResponse.ok) {
-        const confirmData = (await confirmResponse.json()) as { error?: string };
+        const confirmData = (await confirmResponse.json()) as {
+          error?: string;
+        };
         throw new Error(
-          confirmData.error ?? `Claim confirmation failed (${confirmResponse.status})`,
+          confirmData.error ??
+            `Claim confirmation failed (${confirmResponse.status})`,
         );
       }
 
@@ -478,7 +503,7 @@ export default function RewardsInboxButton() {
           className={`${styles.badge} ${hasClaimedToday ? styles.badgeClaimed : ""}`}
           aria-label={hasClaimedToday ? "Claimed today" : "Claimable rewards"}
         >
-          {hasClaimedToday ? "✓" : claims?.claimable_count ?? 0}
+          {hasClaimedToday ? "✓" : (claims?.claimable_count ?? 0)}
         </span>
       </button>
 
@@ -521,8 +546,12 @@ export default function RewardsInboxButton() {
                 >
                   {isLinkingWallet ? "Linking..." : "Add wallet"}
                 </button>
-                {linkStatus ? <div className={styles.status}>{linkStatus}</div> : null}
-                {linkError ? <div className={styles.error}>{linkError}</div> : null}
+                {linkStatus ? (
+                  <div className={styles.status}>{linkStatus}</div>
+                ) : null}
+                {linkError ? (
+                  <div className={styles.error}>{linkError}</div>
+                ) : null}
               </div>
             ) : null}
 
@@ -541,41 +570,49 @@ export default function RewardsInboxButton() {
                 hasClaimedToday ? (
                   <div className={styles.claimedNotice}>
                     <strong>
-                      You already claimed for today: {formatJbmCount(effectiveClaimedTodayTotal.toString())}
+                      You already claimed{" "}
+                      {formatJbmCount(effectiveClaimedTodayTotal.toString())}{" "}
+                      jungle bay memes today.
                     </strong>
                     {countdown ? <span>Claim again in {countdown}</span> : null}
                   </div>
                 ) : (
-                  <div className={styles.empty}>No claimable rewards right now.</div>
+                  <div className={styles.empty}>
+                    No claimable rewards right now.
+                  </div>
                 )
               ) : null}
 
               {!isLoading && !loadError
-                ? (hasClaimedToday ? claimedItems : claimableItems).map((item) => (
-                    <div
-                      key={`${item.chain}:${item.token_address}`}
-                      className={styles.item}
-                    >
-                      <span className={styles.itemLabel}>
-                        <ChainIcon
-                          chain={item.chain}
-                          className={styles.chainIcon}
-                          size={14}
-                        />
-                        <strong>
-                          {item.token_symbol
-                            ? `$${item.token_symbol}`
-                            : item.token_name ?? item.token_address}
-                        </strong>
-                      </span>
-                      <b>
-                        {formatJbmCount(
-                          hasClaimedToday ? item.period_reward_jbm : item.claimable_jbm,
-                        )}
-                        {hasClaimedToday ? " ✓" : ""}
-                      </b>
-                    </div>
-                  ))
+                ? (hasClaimedToday ? claimedItems : claimableItems).map(
+                    (item) => (
+                      <div
+                        key={`${item.chain}:${item.token_address}`}
+                        className={styles.item}
+                      >
+                        <span className={styles.itemLabel}>
+                          <ChainIcon
+                            chain={item.chain}
+                            className={styles.chainIcon}
+                            size={14}
+                          />
+                          <strong>
+                            {item.token_symbol
+                              ? `$${item.token_symbol}`
+                              : (item.token_name ?? item.token_address)}
+                          </strong>
+                        </span>
+                        <b>
+                          {formatJbmCount(
+                            hasClaimedToday
+                              ? item.period_reward_jbm
+                              : item.claimable_jbm,
+                          )}
+                          {hasClaimedToday ? " ✓" : ""}
+                        </b>
+                      </div>
+                    ),
+                  )
                 : null}
             </div>
 

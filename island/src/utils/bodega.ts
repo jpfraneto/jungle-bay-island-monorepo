@@ -23,6 +23,8 @@ export interface BodegaCatalogItem {
   price_in_jbm: string;
   install_count: number;
   active: boolean;
+  submission_tx_hash: string | null;
+  submission_fee_jbm: string | null;
   created_at: string;
 }
 
@@ -150,6 +152,8 @@ export function normalizeBodegaCatalogItem(input: unknown): BodegaCatalogItem | 
     price_in_jbm: asString(item.price_in_jbm) || "0",
     install_count: asNumber(item.install_count),
     active: Boolean(item.active),
+    submission_tx_hash: asString(item.submission_tx_hash) || null,
+    submission_fee_jbm: asString(item.submission_fee_jbm) || null,
     created_at: asString(item.created_at),
   };
 }
@@ -251,4 +255,14 @@ export function getBungalowLookupKey(
 ): string | null {
   if (!chain || !tokenAddress) return null;
   return `${chain}:${tokenAddress.toLowerCase()}`;
+}
+
+export function isHexTxHash(value: string): boolean {
+  return /^0x[0-9a-fA-F]{64}$/.test(value);
+}
+
+export function getBodegaListingPath(txHash: string | null | undefined): string | null {
+  if (!txHash) return null;
+  if (!isHexTxHash(txHash)) return null;
+  return `/bodega/${txHash.toLowerCase()}`;
 }

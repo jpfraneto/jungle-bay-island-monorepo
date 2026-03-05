@@ -17,6 +17,13 @@ export const jbmAbi = [
     outputs: [{ name: "", type: "bool", internalType: "bool" }],
   },
   {
+    type: "function",
+    name: "balanceOf",
+    stateMutability: "view",
+    inputs: [{ name: "account", type: "address", internalType: "address" }],
+    outputs: [{ name: "", type: "uint256", internalType: "uint256" }],
+  },
+  {
     type: "event",
     name: "Transfer",
     anonymous: false,

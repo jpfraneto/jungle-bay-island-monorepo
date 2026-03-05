@@ -2384,7 +2384,7 @@ export async function getCatalogItemBySubmissionTxHash(
       submission_fee_jbm::text AS submission_fee_jbm,
       created_at::text AS created_at
     FROM ${db(CONFIG.SCHEMA)}.bodega_catalog
-    WHERE submission_tx_hash = ${tx_hash}
+    WHERE LOWER(submission_tx_hash) = LOWER(${tx_hash})
     LIMIT 1
   `
 
@@ -2570,8 +2570,14 @@ export async function getBodegaInstallsByBungalow(
     FROM ${db(CONFIG.SCHEMA)}.bodega_installs bi
     INNER JOIN ${db(CONFIG.SCHEMA)}.bodega_catalog bc
       ON bc.id = bi.catalog_item_id
-    WHERE bi.installed_to_token_address = ${token_address}
-      AND bi.installed_to_chain = ${chain}
+    WHERE bi.installed_to_chain = ${chain}
+      AND (
+        CASE
+          WHEN bi.installed_to_chain = 'solana'
+            THEN bi.installed_to_token_address = ${token_address}
+          ELSE LOWER(bi.installed_to_token_address) = LOWER(${token_address})
+        END
+      )
     ORDER BY bi.created_at DESC, bi.id DESC
   `
 

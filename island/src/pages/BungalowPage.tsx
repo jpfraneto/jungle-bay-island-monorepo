@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import AddItemModal from "../components/AddItemModal";
 import BodegaCard from "../components/BodegaCard";
 import ChainIcon, { getChainLabel } from "../components/ChainIcon";
@@ -185,14 +185,25 @@ export default function BungalowPage() {
     ca?: string;
     identifier?: string;
   }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { authenticated, login } = usePrivy();
+  const preferredResolveChain = (searchParams.get("chain") ?? "")
+    .trim()
+    .toLowerCase();
+  const highlightedInstallTx = useMemo(() => {
+    const value = (searchParams.get("install_tx") ?? "").trim().toLowerCase();
+    return /^0x[0-9a-f]{64}$/.test(value) ? value : null;
+  }, [searchParams]);
   const hasDirectRoute = Boolean(routeChain && routeCa);
   const {
     target: resolvedTarget,
     isLoading: resolveLoading,
     error: resolveError,
-  } = useBungalowResolver(hasDirectRoute ? undefined : routeIdentifier);
+  } = useBungalowResolver(
+    hasDirectRoute ? undefined : routeIdentifier,
+    hasDirectRoute ? undefined : preferredResolveChain || undefined,
+  );
   const chain = hasDirectRoute
     ? (routeChain ?? "")
     : (resolvedTarget?.chain ?? "");
@@ -210,6 +221,7 @@ export default function BungalowPage() {
   } = useBungalowItems(chain, ca);
   const { bungalows: directoryBungalows } = useBungalowDirectory({
     limit: 200,
+    fetchAll: true,
   });
 
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -291,6 +303,22 @@ export default function BungalowPage() {
       controller.abort();
     };
   }, [installLookupChain, installLookupToken]);
+
+  useEffect(() => {
+    if (!highlightedInstallTx || bodegaInstalls.length === 0) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      const element = document.getElementById(
+        `bodega-install-${highlightedInstallTx}`,
+      );
+      element?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [bodegaInstalls, highlightedInstallTx]);
 
   const handleOpenAddModal = () => {
     if (!authenticated) {
@@ -513,6 +541,7 @@ export default function BungalowPage() {
                 <div className={styles.installedGrid}>
                   {bodegaInstalls.map((install) => {
                     if (!install.catalog_item) return null;
+                    const normalizedInstallTx = install.tx_hash.toLowerCase();
 
                     const originKey = getBungalowLookupKey(
                       install.catalog_item.origin_bungalow_chain,
@@ -522,7 +551,9 @@ export default function BungalowPage() {
                     return (
                       <BodegaCard
                         key={install.id}
+                        domId={`bodega-install-${normalizedInstallTx}`}
                         item={install.catalog_item}
+                        highlighted={highlightedInstallTx === normalizedInstallTx}
                         originBungalow={
                           originKey
                             ? (originLookup.get(originKey) ?? null)
@@ -561,14 +592,6 @@ export default function BungalowPage() {
                         </span>
                       ) : null}
                     </h2>
-                  </div>
-
-                  <div className={styles.deploymentBadges}>
-                    {asset.is_primary ? (
-                      <span className={styles.deploymentPill}>
-                        Primary Asset
-                      </span>
-                    ) : null}
                   </div>
                 </div>
 

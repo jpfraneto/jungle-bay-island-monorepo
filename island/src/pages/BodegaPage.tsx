@@ -45,7 +45,6 @@ export default function BodegaPage() {
   const {
     bungalows: selectorBungalows,
     isLoading: isSelectorLoading,
-    error: selectorError,
   } = useBungalowDirectory({
     walletAddress,
     limit: 200,
@@ -56,7 +55,8 @@ export default function BodegaPage() {
     error: publicDirectoryError,
   } = useBungalowDirectory({
     limit: 200,
-    enabled: Boolean(walletAddress),
+    enabled: true,
+    fetchAll: true,
   });
 
   const locationState = (location.state as BodegaPageState | null) ?? null;
@@ -65,12 +65,11 @@ export default function BodegaPage() {
     [locationState?.preselectedBungalow],
   );
   const isWalletScoped = Boolean(walletAddress);
-  const visibleBungalowOptions = selectorBungalows;
+  const visibleBungalowOptions = publicBungalows;
   const submitOriginOptions = isWalletScoped ? publicBungalows : selectorBungalows;
   const originLookupBungalows = isWalletScoped ? publicBungalows : selectorBungalows;
   const effectivePreselectedBungalow = useMemo(() => {
     if (!preselectedBungalow) return null;
-    if (!isWalletScoped) return preselectedBungalow;
 
     const targetKey = getBungalowLookupKey(
       preselectedBungalow.chain,
@@ -79,12 +78,12 @@ export default function BodegaPage() {
     if (!targetKey) return null;
 
     return (
-      selectorBungalows.find(
+      visibleBungalowOptions.find(
         (bungalow) =>
           getBungalowLookupKey(bungalow.chain, bungalow.token_address) === targetKey,
-      ) ?? null
+      ) ?? preselectedBungalow
     );
-  }, [isWalletScoped, preselectedBungalow, selectorBungalows]);
+  }, [preselectedBungalow, visibleBungalowOptions]);
 
   const [filter, setFilter] = useState<AssetFilter>("all");
   const [items, setItems] = useState<BodegaCatalogItem[]>([]);
@@ -250,11 +249,9 @@ export default function BodegaPage() {
     return () => window.cancelAnimationFrame(frame);
   }, [highlightedItemId, items]);
 
-  const selectionNote = selectorError
-    ? `Bungalow list is unavailable right now: ${selectorError}`
-    : isWalletScoped
-      ? "Only bungalows you own or manage are shown here."
-      : "Connect a wallet to filter this down to your own bungalows. Showing the public directory for now.";
+  const selectionNote = publicDirectoryError
+    ? `Bungalow list is unavailable right now: ${publicDirectoryError}`
+    : "Choose any bungalow on the island.";
   const submitSelectionNote = publicDirectoryError
     ? `Bungalow list is unavailable right now: ${publicDirectoryError}`
     : "Choose any bungalow on the island as the source, or leave it blank.";
@@ -374,8 +371,8 @@ export default function BodegaPage() {
         open={Boolean(selectedItem)}
         item={selectedItem}
         bungalowOptions={visibleBungalowOptions}
-        isDirectoryLoading={isSelectorLoading}
-        isWalletScoped={isWalletScoped}
+        isDirectoryLoading={isPublicDirectoryLoading}
+        isWalletScoped={false}
         selectionNote={selectionNote}
         preselectedBungalow={effectivePreselectedBungalow}
         onClose={() => setSelectedItem(null)}

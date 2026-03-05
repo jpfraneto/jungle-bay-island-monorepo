@@ -3,7 +3,12 @@ import { useModalStatus, usePrivy } from "@privy-io/react-auth";
 import { useNavigate } from "react-router-dom";
 import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
 import { useUserWalletLinks } from "../hooks/useUserWalletLinks";
-import { formatAddress, formatNumber } from "../utils/formatters";
+import { formatNumber } from "../utils/formatters";
+import {
+  getPrivyWalletChainType,
+  getPrivyWalletList,
+  isMobileBrowser,
+} from "../utils/privyWalletOptions";
 import styles from "../styles/profile-page.module.css";
 
 interface UserProfileResponse {
@@ -14,29 +19,20 @@ interface UserProfileResponse {
   x_username?: string | null;
 }
 
-function asArray(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : [];
-}
-
 function truncateAddress(address: string): string {
   if (address.length < 12) return address;
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
-function formatLinkedDate(value: string): string {
-  const parsed = Date.parse(value);
-  if (!Number.isFinite(parsed)) return "Linked";
-
-  return `Linked ${new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(new Date(parsed))}`;
-}
-
 function normalizeXUsername(value: string): string {
   const clean = value.trim().replace(/^@+/, "").toLowerCase();
   return clean ? `@${clean}` : "";
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
 }
 
 export default function ProfilePage() {
@@ -61,9 +57,11 @@ export default function ProfilePage() {
   } = useUserWalletLinks(authenticated);
 
   const [profile, setProfile] = useState<UserProfileResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [unlinkingWallet, setUnlinkingWallet] = useState<string | null>(null);
-  const [walletActionError, setWalletActionError] = useState<string | null>(null);
+  const [walletActionError, setWalletActionError] = useState<string | null>(
+    null,
+  );
   const [walletLinkStatus, setWalletLinkStatus] = useState<string | null>(null);
   const [isLinkingWallet, setIsLinkingWallet] = useState(false);
   const [pendingWalletLink, setPendingWalletLink] = useState(false);
@@ -85,7 +83,9 @@ export default function ProfilePage() {
       }
 
       const fromUser =
-        typeof user?.twitter?.username === "string" ? user.twitter.username : "";
+        typeof user?.twitter?.username === "string"
+          ? user.twitter.username
+          : "";
       const normalized = normalizeXUsername(fromUser);
       return normalized || null;
     });
@@ -173,7 +173,9 @@ export default function ProfilePage() {
       try {
         await syncXHandle(username);
       } catch (err) {
-        setXError(err instanceof Error ? err.message : "Failed to link X account");
+        setXError(
+          err instanceof Error ? err.message : "Failed to link X account",
+        );
       } finally {
         setPendingTwitterSync(false);
         setIsLinkingX(false);
@@ -210,14 +212,45 @@ export default function ProfilePage() {
       throw new Error(`Request failed (${response.status})`);
     }
 
-    const data = (await response.json().catch(() => null)) as
-      | { wallets?: unknown }
-      | null;
-    const walletCount = Array.isArray(data?.wallets) ? data.wallets.length : null;
+    const data = (await response.json().catch(() => null)) as {
+      wallets?: unknown;
+    } | null;
+    const walletCount = Array.isArray(data?.wallets)
+      ? data.wallets.length
+      : null;
 
     await refetchWallets();
     return walletCount;
   }, [getAccessToken, refetchWallets]);
+
+  const waitForLinkedWalletSync = useCallback(
+    async (previousCount: number) => {
+      let latestCount: number | null = null;
+      let lastError: unknown = null;
+
+      for (let attempt = 0; attempt < 6; attempt += 1) {
+        try {
+          latestCount = await syncLinkedWalletsFromPrivy();
+          if (typeof latestCount === "number" && latestCount > previousCount) {
+            return { didLinkWallet: true, walletCount: latestCount };
+          }
+        } catch (error) {
+          lastError = error;
+        }
+
+        if (attempt < 5) {
+          await wait(1_000);
+        }
+      }
+
+      if (lastError) {
+        throw lastError;
+      }
+
+      return { didLinkWallet: false, walletCount: latestCount };
+    },
+    [syncLinkedWalletsFromPrivy],
+  );
 
   useEffect(() => {
     if (!pendingWalletLink) return;
@@ -235,19 +268,23 @@ export default function ProfilePage() {
 
     void (async () => {
       try {
-        const syncedWalletCount = await syncLinkedWalletsFromPrivy();
-        const didLinkWallet =
-          typeof syncedWalletCount === "number"
-            ? syncedWalletCount > walletCountBeforeLink
-            : linkedWallets.length > walletCountBeforeLink;
+        const { didLinkWallet } = await waitForLinkedWalletSync(
+          walletCountBeforeLink,
+        );
+        if (cancelled) return;
+
         setWalletLinkStatus(
-          didLinkWallet ? "Wallet linked successfully." : "No new wallet was linked.",
+          didLinkWallet
+            ? "Wallet linked successfully."
+            : "No new wallet was linked.",
         );
         setWalletActionError(null);
       } catch (error) {
         if (cancelled) return;
         setWalletActionError(
-          error instanceof Error ? error.message : "Failed to sync linked wallets",
+          error instanceof Error
+            ? error.message
+            : "Failed to sync linked wallets",
         );
         setWalletLinkStatus(null);
       } finally {
@@ -263,9 +300,8 @@ export default function ProfilePage() {
     };
   }, [
     isPrivyModalOpen,
-    linkedWallets.length,
     pendingWalletLink,
-    syncLinkedWalletsFromPrivy,
+    waitForLinkedWalletSync,
     walletCountBeforeLink,
     walletLinkModalOpened,
   ]);
@@ -295,17 +331,12 @@ export default function ProfilePage() {
     setWalletLinkModalOpened(false);
     setIsLinkingWallet(true);
 
+    const walletChainType = getPrivyWalletChainType();
+    const walletList = getPrivyWalletList();
+
     linkWallet({
-      walletChainType: "ethereum-and-solana",
-      walletList: [
-        "metamask",
-        "rainbow",
-        "phantom",
-        "coinbase_wallet",
-        "base_account",
-        "uniswap",
-        "okx_wallet",
-      ],
+      walletChainType,
+      walletList,
     });
   };
 
@@ -386,7 +417,9 @@ export default function ProfilePage() {
       setClaimedXUsername(null);
       setXError(null);
     } catch (err) {
-      setXError(err instanceof Error ? err.message : "Failed to unlink X account");
+      setXError(
+        err instanceof Error ? err.message : "Failed to unlink X account",
+      );
     }
   };
 
@@ -396,11 +429,7 @@ export default function ProfilePage() {
         <article className={styles.card}>
           <h1>Profile</h1>
           <p>Connect your account to view your profile.</p>
-          <button
-            type="button"
-            className={styles.actionButton}
-            onClick={login}
-          >
+          <button type="button" className={styles.actionButton} onClick={login}>
             Connect
           </button>
         </article>
@@ -410,8 +439,7 @@ export default function ProfilePage() {
 
   const islandHeat = Number(profile?.island_heat ?? 0);
   const tier = profile?.tier ?? "drifter";
-  const tokensTracked = asArray(profile?.token_breakdown).length;
-  const scansCount = asArray(profile?.scans).length;
+  const isProfileStatsLoading = isLoading;
   const isEmailLoginUser = Boolean(user?.email);
   const isXLoginUser = Boolean(user?.twitter) && !user?.email;
   const emailClaimedHandle = claimedXUsername || null;
@@ -420,99 +448,6 @@ export default function ProfilePage() {
     <section className={styles.page}>
       <article className={styles.card}>
         <h1>Profile</h1>
-
-        <div className={styles.identity}>
-          <strong>{user?.email?.address ?? "Island User"}</strong>
-          <span>{walletAddress ? formatAddress(walletAddress) : "No active wallet"}</span>
-        </div>
-
-        <div className={styles.stats}>
-          <div>
-            <span>Island Heat</span>
-            <strong>{isLoading ? "..." : `${islandHeat.toFixed(1)}°`}</strong>
-          </div>
-          <div>
-            <span>Tier</span>
-            <strong>{isLoading ? "..." : tier}</strong>
-          </div>
-          <div>
-            <span>Tokens Tracked</span>
-            <strong>{isLoading ? "..." : formatNumber(tokensTracked)}</strong>
-          </div>
-          <div>
-            <span>Scans</span>
-            <strong>{isLoading ? "..." : formatNumber(scansCount)}</strong>
-          </div>
-          <div>
-            <span>Linked Wallets</span>
-            <strong>
-              {isWalletsLoading ? "..." : formatNumber(linkedWallets.length)}
-            </strong>
-          </div>
-        </div>
-
-        <section className={styles.linkedWallets}>
-          <div className={styles.sectionHeader}>
-            <div>
-              <h2>Linked Wallets</h2>
-              <p>
-                No wallets linked yet. Add a wallet to start transacting on
-                Jungle Bay Island.
-              </p>
-            </div>
-            <button
-              type="button"
-              className={styles.primaryButton}
-              onClick={() => {
-                void handleAddWallet();
-              }}
-              disabled={isLinkingWallet}
-            >
-              {isLinkingWallet ? "Linking..." : "+ Add wallet"}
-            </button>
-          </div>
-
-          {walletsError ? <p className={styles.inlineError}>{walletsError}</p> : null}
-          {walletActionError ? (
-            <p className={styles.inlineError}>{walletActionError}</p>
-          ) : null}
-          {walletLinkStatus ? (
-            <p className={styles.inlineStatus}>{walletLinkStatus}</p>
-          ) : null}
-
-          {isWalletsLoading ? (
-            <p className={styles.placeholder}>Loading linked wallets...</p>
-          ) : linkedWallets.length === 0 ? (
-            <p className={styles.placeholder}>
-              No wallets linked yet. Add a wallet to start transacting on Jungle
-              Bay Island.
-            </p>
-          ) : (
-            <div className={styles.walletList}>
-              {linkedWallets.map((wallet) => (
-                <div key={wallet.id} className={styles.walletRow}>
-                  <div>
-                    <strong title={wallet.address}>{truncateAddress(wallet.address)}</strong>
-                    <span>
-                      {wallet.source === "privy_siws" ? "SIWS verified" : "SIWE verified"}
-                    </span>
-                    <span>{formatLinkedDate(wallet.linked_at)}</span>
-                  </div>
-                  <button
-                    type="button"
-                    className={styles.unlinkButton}
-                    onClick={() => {
-                      void handleUnlinkWallet(wallet.address);
-                    }}
-                    disabled={unlinkingWallet === wallet.address}
-                  >
-                    {unlinkingWallet === wallet.address ? "..." : "Unlink"}
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
 
         {isEmailLoginUser ? (
           <section className={styles.linkedWallets}>
@@ -525,7 +460,7 @@ export default function ProfilePage() {
             {!emailClaimedHandle ? (
               <div className={styles.walletRow}>
                 <div>
-                  <strong>[X logo icon] Claim your handle</strong>
+                  <strong>Claim your handle</strong>
                   <span>
                     Link your X account to get a username on Jungle Bay Island.
                   </span>
@@ -544,7 +479,7 @@ export default function ProfilePage() {
             ) : (
               <div className={styles.walletRow}>
                 <div>
-                  <strong>[X logo icon] {emailClaimedHandle}</strong>
+                  <strong>{emailClaimedHandle}</strong>
                 </div>
                 <button
                   type="button"
@@ -567,13 +502,101 @@ export default function ProfilePage() {
             <div className={styles.walletRow}>
               <div>
                 <strong>
-                  [X logo icon] @{user?.twitter?.username ?? "unknown"} ✓ Verified via
-                  login
+                  @{user?.twitter?.username ?? "unknown"} ✓ Verified via X
                 </strong>
               </div>
             </div>
           </section>
         ) : null}
+
+        <div className={styles.stats}>
+          <div>
+            <span>Island Heat</span>
+            <strong className={isProfileStatsLoading ? styles.metricLoading : ""}>
+              {isProfileStatsLoading ? "88.8°" : `${islandHeat.toFixed(1)}°`}
+            </strong>
+          </div>
+          <div>
+            <span>Tier</span>
+            <strong className={isProfileStatsLoading ? styles.metricLoading : ""}>
+              {isProfileStatsLoading ? "Drifter" : tier}
+            </strong>
+          </div>
+          <div>
+            <span>Linked Wallets</span>
+            <strong className={isWalletsLoading ? styles.metricLoading : ""}>
+              {isWalletsLoading ? "88" : formatNumber(linkedWallets.length)}
+            </strong>
+          </div>
+        </div>
+
+        <section className={styles.linkedWallets}>
+          <div className={styles.sectionHeader}>
+            <div>
+              <h2>Linked External Wallets</h2>
+              <p>
+                {isWalletsLoading
+                  ? "Loading linked wallets..."
+                  : linkedWallets.length === 0
+                    ? "No wallets linked yet. Add a wallet to start transacting on Jungle Bay Island."
+                    : isMobileBrowser()
+                      ? "Showing external linked wallets only."
+                      : "Desktop wallet linking is optimized for in-browser EVM connectors."}
+              </p>
+            </div>
+            <button
+              type="button"
+              className={styles.primaryButton}
+              onClick={() => {
+                void handleAddWallet();
+              }}
+              disabled={isLinkingWallet}
+            >
+              {isLinkingWallet ? "Linking..." : "+ Add wallet"}
+            </button>
+          </div>
+
+          {walletsError ? (
+            <p className={styles.inlineError}>{walletsError}</p>
+          ) : null}
+          {walletActionError ? (
+            <p className={styles.inlineError}>{walletActionError}</p>
+          ) : null}
+          {walletLinkStatus ? (
+            <p className={styles.inlineStatus}>{walletLinkStatus}</p>
+          ) : null}
+
+          {isWalletsLoading ? (
+            <p className={styles.placeholder}>.</p>
+          ) : linkedWallets.length === 0 ? (
+            <p className={styles.placeholder}>
+              No wallets linked yet. Add a wallet to start transacting on Jungle
+              Bay Island.
+            </p>
+          ) : (
+            <div className={styles.walletList}>
+              {linkedWallets.map((wallet) => (
+                <div key={wallet.id} className={styles.walletRow}>
+                  <div>
+                    <strong title={wallet.address}>
+                      {truncateAddress(wallet.address)}
+                    </strong>
+                  </div>
+                  <button
+                    type="button"
+                    className={styles.unlinkButton}
+                    onClick={() => {
+                      void handleUnlinkWallet(wallet.address);
+                    }}
+                    disabled={unlinkingWallet === wallet.address}
+                  >
+                    {unlinkingWallet === wallet.address ? "..." : "Unlink"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
 
         <div className={styles.actions}>
           <button

@@ -11,6 +11,7 @@ import {
 import { requirePrivyAuth } from '../middleware/auth'
 import { ApiError } from '../services/errors'
 import { getPrivyLinkedAccounts } from '../services/privyClaims'
+import { fetchPrivyUserLinkedAccounts } from '../services/privyServer'
 import type { AppEnv } from '../types'
 
 const walletLinkRoute = new Hono<AppEnv>()
@@ -153,12 +154,11 @@ function normalizeLinkedClaimWallet(input: Record<string, unknown>): {
   return null
 }
 
-function extractWalletsFromClaims(claims: Record<string, unknown>): Array<{
+function extractWalletsFromLinkedAccounts(linkedAccounts: Array<Record<string, unknown>>): Array<{
   address: string
   source: WalletLinkSource
 }> {
   const dedup = new Map<string, WalletLinkSource>()
-  const linkedAccounts = getPrivyLinkedAccounts(claims)
 
   for (const account of linkedAccounts) {
     const candidate = account as Record<string, unknown>
@@ -182,7 +182,10 @@ function extractWalletsFromClaims(claims: Record<string, unknown>): Array<{
 }
 
 async function syncWalletsFromClaims(privyUserId: string, claims: Record<string, unknown>) {
-  const linkedWallets = extractWalletsFromClaims(claims)
+  const linkedAccountsFromPrivy = await fetchPrivyUserLinkedAccounts(privyUserId)
+  const linkedAccounts = linkedAccountsFromPrivy ?? getPrivyLinkedAccounts(claims)
+  const linkedWallets = extractWalletsFromLinkedAccounts(linkedAccounts)
+
   for (const wallet of linkedWallets) {
     await upsertUserWalletLinks(privyUserId, wallet.address, wallet.source)
   }

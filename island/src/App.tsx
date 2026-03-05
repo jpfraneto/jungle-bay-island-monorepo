@@ -3,6 +3,7 @@ import Layout from "./components/Layout";
 import AboutPage from "./pages/AboutPage";
 import AddressProfilePage from "./pages/AddressProfilePage";
 import BodegaPage from "./pages/BodegaPage";
+import BodegaListingPage from "./pages/BodegaListingPage";
 import BungalowPage from "./pages/BungalowPage";
 import ChangelogPage from "./pages/ChangelogPage";
 import HeatScorePage from "./pages/HeatScorePage";
@@ -20,6 +21,7 @@ export default function App() {
         <Route path="/about" element={<AboutPage />} />
         <Route path="/changelog" element={<ChangelogPage />} />
         <Route path="/bodega" element={<BodegaPage />} />
+        <Route path="/bodega/:tx_hash" element={<BodegaListingPage />} />
         <Route path="/bungalow/:identifier" element={<BungalowPage />} />
         <Route path="/heat-score" element={<HeatScorePage />} />
         <Route path="/mining-zones" element={<MiningZonesPage />} />

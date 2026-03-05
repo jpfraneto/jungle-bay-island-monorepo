@@ -6,9 +6,15 @@ import { BrowserRouter } from "react-router-dom";
 import { base, mainnet } from "viem/chains";
 import App from "./App";
 import "./styles/global.css";
+import {
+  getPrivyWalletChainType,
+  getPrivyWalletList,
+} from "./utils/privyWalletOptions";
 
 const PRIVY_APP_ID = "cmgygjwkb00zvi90cvzl7dczv";
 const queryClient = new QueryClient();
+const walletList = getPrivyWalletList();
+const walletChainType = getPrivyWalletChainType();
 
 ReactDOM.createRoot(document.getElementById("island-root")!).render(
   <React.StrictMode>
@@ -18,16 +24,8 @@ ReactDOM.createRoot(document.getElementById("island-root")!).render(
         appearance: {
           theme: "dark",
           accentColor: "#2ecc71",
-          walletList: [
-            "metamask",
-            "rainbow",
-            "phantom",
-            "coinbase_wallet",
-            "base_account",
-            "uniswap",
-            "okx_wallet",
-          ],
-          walletChainType: "ethereum-and-solana",
+          walletList,
+          walletChainType,
         },
         loginMethods: ["twitter", "email"],
         embeddedWallets: {

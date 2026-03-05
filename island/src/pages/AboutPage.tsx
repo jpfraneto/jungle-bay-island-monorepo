@@ -185,7 +185,8 @@ export default function AboutPage() {
         <p>
           The Island now separates account identity from transaction wallets on
           purpose. Your authenticated identity is your Privy user ID. Wallets
-          are attributes you link with explicit SIWE signatures.
+          are attributes you link explicitly through Privy external wallet flows
+          (SIWE for EVM, SIWS for Solana).
         </p>
         <ul className={styles.list}>
           <li>

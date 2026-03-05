@@ -17,6 +17,7 @@ const walletLinkRoute = new Hono<AppEnv>()
 
 const SIWE_NONCE_TTL_MS = 5 * 60 * 1000
 const siweNonceStore = new Map<string, { nonce: string; expiresAt: number }>()
+type WalletLinkSource = 'privy_siwe' | 'privy_siws'
 
 function normalizeXUsername(value: string): string {
   const clean = value.trim().replace(/^@+/, '').toLowerCase()
@@ -103,6 +104,91 @@ function assertFreshSiweNonce(address: string, nonce: string): void {
   })
 }
 
+function normalizeLinkedClaimWallet(input: Record<string, unknown>): {
+  address: string
+  source: WalletLinkSource
+} | null {
+  const rawAddress = typeof input.address === 'string' ? input.address.trim() : ''
+  if (!rawAddress) return null
+
+  const walletClientType = typeof input.wallet_client_type === 'string'
+    ? input.wallet_client_type.trim().toLowerCase()
+    : typeof input.wallet_client === 'string'
+      ? input.wallet_client.trim().toLowerCase()
+      : ''
+  const connectorType = typeof input.connector_type === 'string'
+    ? input.connector_type.trim().toLowerCase()
+    : ''
+
+  if (walletClientType.startsWith('privy') || connectorType === 'embedded') {
+    return null
+  }
+
+  const chainType = typeof input.chain_type === 'string' ? input.chain_type.trim().toLowerCase() : ''
+  const looksEvm = rawAddress.startsWith('0x') || chainType.includes('eip155') || chainType.includes('evm') || chainType.includes('ethereum')
+  const looksSolana = chainType.includes('solana')
+
+  if (looksEvm) {
+    const normalized = normalizeAddress(rawAddress)
+    if (!normalized) return null
+    return { address: normalized, source: 'privy_siwe' }
+  }
+
+  if (looksSolana) {
+    const normalized = normalizeAddress(rawAddress, 'solana')
+    if (!normalized) return null
+    return { address: normalized, source: 'privy_siws' }
+  }
+
+  const fallbackEvm = normalizeAddress(rawAddress)
+  if (fallbackEvm) {
+    return { address: fallbackEvm, source: 'privy_siwe' }
+  }
+
+  const fallbackSolana = normalizeAddress(rawAddress, 'solana')
+  if (fallbackSolana) {
+    return { address: fallbackSolana, source: 'privy_siws' }
+  }
+
+  return null
+}
+
+function extractWalletsFromClaims(claims: Record<string, unknown>): Array<{
+  address: string
+  source: WalletLinkSource
+}> {
+  const dedup = new Map<string, WalletLinkSource>()
+  const linkedAccounts = getPrivyLinkedAccounts(claims)
+
+  for (const account of linkedAccounts) {
+    const candidate = account as Record<string, unknown>
+    const type = typeof candidate.type === 'string' ? candidate.type : ''
+    if (type !== 'wallet') continue
+
+    const normalized = normalizeLinkedClaimWallet(candidate)
+    if (!normalized) continue
+
+    const existing = dedup.get(normalized.address)
+    if (existing === 'privy_siwe' && normalized.source === 'privy_siws') {
+      dedup.set(normalized.address, normalized.source)
+      continue
+    }
+    if (!existing) {
+      dedup.set(normalized.address, normalized.source)
+    }
+  }
+
+  return [...dedup.entries()].map(([address, source]) => ({ address, source }))
+}
+
+async function syncWalletsFromClaims(privyUserId: string, claims: Record<string, unknown>) {
+  const linkedWallets = extractWalletsFromClaims(claims)
+  for (const wallet of linkedWallets) {
+    await upsertUserWalletLinks(privyUserId, wallet.address, wallet.source)
+  }
+  return getUserWallets(privyUserId)
+}
+
 walletLinkRoute.post('/user/link-wallet', requirePrivyAuth, async (c) => {
   const claims = c.get('privyClaims') as Record<string, unknown> | undefined
   if (!claims) {
@@ -177,8 +263,28 @@ walletLinkRoute.get('/user/wallets', requirePrivyAuth, async (c) => {
     x_username: xUsername ?? undefined,
   })
 
-  const wallets = await getUserWallets(privyUserId)
+  const wallets = await syncWalletsFromClaims(privyUserId, claims)
   return c.json({ wallets })
+})
+
+walletLinkRoute.post('/user/sync-wallets', requirePrivyAuth, async (c) => {
+  const claims = c.get('privyClaims') as Record<string, unknown> | undefined
+  if (!claims) {
+    throw new ApiError(401, 'auth_required', 'Privy authentication required')
+  }
+
+  const { privyUserId, email, xUsername } = extractUserIdentityFromClaims(claims)
+
+  await upsertUser(privyUserId, {
+    email: email ?? undefined,
+    x_username: xUsername ?? undefined,
+  })
+
+  const wallets = await syncWalletsFromClaims(privyUserId, claims)
+  return c.json({
+    success: true,
+    wallets,
+  })
 })
 
 walletLinkRoute.delete('/user/link-wallet/:address', requirePrivyAuth, async (c) => {
@@ -189,7 +295,7 @@ walletLinkRoute.delete('/user/link-wallet/:address', requirePrivyAuth, async (c)
 
   const { privyUserId } = extractUserIdentityFromClaims(claims)
 
-  const address = normalizeAddress(c.req.param('address'))
+  const address = normalizeAddress(c.req.param('address')) ?? normalizeAddress(c.req.param('address'), 'solana')
   if (!address) {
     throw new ApiError(400, 'invalid_address', 'Invalid wallet address')
   }

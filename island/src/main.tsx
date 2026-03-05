@@ -18,6 +18,16 @@ ReactDOM.createRoot(document.getElementById("island-root")!).render(
         appearance: {
           theme: "dark",
           accentColor: "#2ecc71",
+          walletList: [
+            "metamask",
+            "rainbow",
+            "phantom",
+            "coinbase_wallet",
+            "base_account",
+            "uniswap",
+            "okx_wallet",
+          ],
+          walletChainType: "ethereum-and-solana",
         },
         loginMethods: ["twitter", "email"],
         embeddedWallets: {

@@ -1389,7 +1389,7 @@ export async function getUserByXUsername(xUsername: string): Promise<UserRow | n
 export async function upsertUserWalletLinks(
   privyUserId: string,
   address: string,
-  source: 'privy_siwe',
+  source: 'privy_siwe' | 'privy_siws',
 ): Promise<UserWalletRow | null> {
   const rows = await db<UserWalletRow[]>`
     INSERT INTO ${db(CONFIG.SCHEMA)}.user_wallets (privy_user_id, address, source)

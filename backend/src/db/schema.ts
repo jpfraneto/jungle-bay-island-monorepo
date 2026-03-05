@@ -223,7 +223,7 @@ export interface UserWalletRow {
   id: string
   privy_user_id: string
   address: string
-  source: 'privy_siwe'
+  source: 'privy_siwe' | 'privy_siws'
   linked_at: string
 }
 

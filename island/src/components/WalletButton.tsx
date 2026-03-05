@@ -1,16 +1,17 @@
 import { usePrivy } from "@privy-io/react-auth";
 import { useNavigate } from "react-router-dom";
-import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
 import styles from "../styles/wallet-button.module.css";
 
 export default function WalletButton() {
-  const { login, authenticated } = usePrivy();
-  const { walletAddress } = usePrivyBaseWallet();
+  const { login, authenticated, user } = usePrivy();
   const navigate = useNavigate();
 
   if (authenticated) {
-    const addr = walletAddress;
-    const short = addr ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : "Profile";
+    const username =
+      typeof user?.twitter?.username === "string"
+        ? user.twitter.username.trim().replace(/^@+/, "")
+        : "";
+    const short = username ? `@${username}` : "ANON";
 
     return (
       <button

@@ -19,6 +19,32 @@ export default function ChangelogPage() {
       <article className={styles.entry}>
         <div className={styles.entryHeader}>
           <span className={styles.date}>March 5, 2026</span>
+          <h2 className={styles.heading}>External Wallet Picker Expanded: MetaMask, Rainbow, Phantom</h2>
+        </div>
+        <p>
+          Wallet linking now opens a wallet-picker flow that supports both
+          Ethereum and Solana external connectors, then syncs linked wallets back
+          into Island profile storage.
+        </p>
+        <ul className={styles.list}>
+          <li>
+            Add Wallet now supports explicit connector selection (MetaMask,
+            Rainbow, Phantom, Coinbase, and other configured external wallets).
+          </li>
+          <li>
+            Linked wallets are now synced from Privy linked accounts into
+            Island&apos;s <code>user_wallets</code> table, including Solana addresses.
+          </li>
+          <li>
+            Embedded Privy wallets are excluded from profile wallet sync so
+            transaction-capable wallet lists stay external-wallet only.
+          </li>
+        </ul>
+      </article>
+
+      <article className={styles.entry}>
+        <div className={styles.entryHeader}>
+          <span className={styles.date}>March 5, 2026</span>
           <h2 className={styles.heading}>Identity Refactor: Privy User IDs + Explicit SIWE Wallet Linking</h2>
         </div>
         <p>

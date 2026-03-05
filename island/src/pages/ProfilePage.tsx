@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { usePrivy } from "@privy-io/react-auth";
+import { useModalStatus, usePrivy } from "@privy-io/react-auth";
 import { useNavigate } from "react-router-dom";
 import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
-import { useSiweWalletLink } from "../hooks/useSiweWalletLink";
 import { useUserWalletLinks } from "../hooks/useUserWalletLinks";
 import { formatAddress, formatNumber } from "../utils/formatters";
 import styles from "../styles/profile-page.module.css";
@@ -45,12 +44,14 @@ export default function ProfilePage() {
   const {
     authenticated,
     getAccessToken,
+    linkWallet,
     linkTwitter,
     login,
     logout,
     unlinkTwitter,
     user,
   } = usePrivy();
+  const { isOpen: isPrivyModalOpen } = useModalStatus();
   const { walletAddress } = usePrivyBaseWallet();
   const {
     wallets: linkedWallets,
@@ -58,17 +59,16 @@ export default function ProfilePage() {
     error: walletsError,
     refetch: refetchWallets,
   } = useUserWalletLinks(authenticated);
-  const {
-    linkCurrentWallet,
-    isLinking,
-    status: linkStatus,
-    error: linkError,
-  } = useSiweWalletLink();
 
   const [profile, setProfile] = useState<UserProfileResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [unlinkingWallet, setUnlinkingWallet] = useState<string | null>(null);
   const [walletActionError, setWalletActionError] = useState<string | null>(null);
+  const [walletLinkStatus, setWalletLinkStatus] = useState<string | null>(null);
+  const [isLinkingWallet, setIsLinkingWallet] = useState(false);
+  const [pendingWalletLink, setPendingWalletLink] = useState(false);
+  const [walletLinkModalOpened, setWalletLinkModalOpened] = useState(false);
+  const [walletCountBeforeLink, setWalletCountBeforeLink] = useState(0);
   const [isLinkingX, setIsLinkingX] = useState(false);
   const [xError, setXError] = useState<string | null>(null);
   const [claimedXUsername, setClaimedXUsername] = useState<string | null>(null);
@@ -192,14 +192,121 @@ export default function ProfilePage() {
     return () => window.clearTimeout(timeout);
   }, [pendingTwitterSync]);
 
-  const handleAddWallet = async () => {
-    try {
-      await linkCurrentWallet();
-      await refetchWallets();
-      setWalletActionError(null);
-    } catch {
-      // useSiweWalletLink already provides error state text.
+  const syncLinkedWalletsFromPrivy = useCallback(async () => {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    const token = await getAccessToken();
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
     }
+
+    const response = await fetch("/api/user/sync-wallets", {
+      method: "POST",
+      headers,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Request failed (${response.status})`);
+    }
+
+    const data = (await response.json().catch(() => null)) as
+      | { wallets?: unknown }
+      | null;
+    const walletCount = Array.isArray(data?.wallets) ? data.wallets.length : null;
+
+    await refetchWallets();
+    return walletCount;
+  }, [getAccessToken, refetchWallets]);
+
+  useEffect(() => {
+    if (!pendingWalletLink) return;
+
+    if (isPrivyModalOpen) {
+      if (!walletLinkModalOpened) {
+        setWalletLinkModalOpened(true);
+      }
+      return;
+    }
+
+    if (!walletLinkModalOpened) return;
+
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const syncedWalletCount = await syncLinkedWalletsFromPrivy();
+        const didLinkWallet =
+          typeof syncedWalletCount === "number"
+            ? syncedWalletCount > walletCountBeforeLink
+            : linkedWallets.length > walletCountBeforeLink;
+        setWalletLinkStatus(
+          didLinkWallet ? "Wallet linked successfully." : "No new wallet was linked.",
+        );
+        setWalletActionError(null);
+      } catch (error) {
+        if (cancelled) return;
+        setWalletActionError(
+          error instanceof Error ? error.message : "Failed to sync linked wallets",
+        );
+        setWalletLinkStatus(null);
+      } finally {
+        if (cancelled) return;
+        setIsLinkingWallet(false);
+        setPendingWalletLink(false);
+        setWalletLinkModalOpened(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    isPrivyModalOpen,
+    linkedWallets.length,
+    pendingWalletLink,
+    syncLinkedWalletsFromPrivy,
+    walletCountBeforeLink,
+    walletLinkModalOpened,
+  ]);
+
+  useEffect(() => {
+    if (!pendingWalletLink || walletLinkModalOpened) return;
+
+    const timeout = window.setTimeout(() => {
+      setPendingWalletLink(false);
+      setIsLinkingWallet(false);
+      setWalletLinkStatus(null);
+      setWalletActionError(
+        "Wallet link modal did not open. Allow wallet popups and try again.",
+      );
+    }, 8_000);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [pendingWalletLink, walletLinkModalOpened]);
+
+  const handleAddWallet = async () => {
+    setWalletActionError(null);
+    setWalletLinkStatus("Choose a wallet in Privy to link it.");
+    setWalletCountBeforeLink(linkedWallets.length);
+    setPendingWalletLink(true);
+    setWalletLinkModalOpened(false);
+    setIsLinkingWallet(true);
+
+    linkWallet({
+      walletChainType: "ethereum-and-solana",
+      walletList: [
+        "metamask",
+        "rainbow",
+        "phantom",
+        "coinbase_wallet",
+        "base_account",
+        "uniswap",
+        "okx_wallet",
+      ],
+    });
   };
 
   const handleUnlinkWallet = async (address: string) => {
@@ -359,9 +466,9 @@ export default function ProfilePage() {
               onClick={() => {
                 void handleAddWallet();
               }}
-              disabled={isLinking}
+              disabled={isLinkingWallet}
             >
-              {isLinking ? "Linking..." : "+ Add wallet"}
+              {isLinkingWallet ? "Linking..." : "+ Add wallet"}
             </button>
           </div>
 
@@ -369,8 +476,9 @@ export default function ProfilePage() {
           {walletActionError ? (
             <p className={styles.inlineError}>{walletActionError}</p>
           ) : null}
-          {linkStatus ? <p className={styles.inlineStatus}>{linkStatus}</p> : null}
-          {linkError ? <p className={styles.inlineError}>{linkError}</p> : null}
+          {walletLinkStatus ? (
+            <p className={styles.inlineStatus}>{walletLinkStatus}</p>
+          ) : null}
 
           {isWalletsLoading ? (
             <p className={styles.placeholder}>Loading linked wallets...</p>
@@ -385,7 +493,9 @@ export default function ProfilePage() {
                 <div key={wallet.id} className={styles.walletRow}>
                   <div>
                     <strong title={wallet.address}>{truncateAddress(wallet.address)}</strong>
-                    <span>SIWE verified</span>
+                    <span>
+                      {wallet.source === "privy_siws" ? "SIWS verified" : "SIWE verified"}
+                    </span>
                     <span>{formatLinkedDate(wallet.linked_at)}</span>
                   </div>
                   <button

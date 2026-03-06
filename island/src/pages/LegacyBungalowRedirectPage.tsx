@@ -3,6 +3,10 @@ import { useNavigate, useParams } from "react-router-dom";
 import NotFoundPage from "./NotFoundPage";
 import styles from "../styles/bungalow-page.module.css";
 
+interface LegacyResolvedBungalowTarget {
+  canonical_slug?: string | null;
+}
+
 export default function LegacyBungalowRedirectPage() {
   const { chain = "", ca = "" } = useParams();
   const navigate = useNavigate();
@@ -27,11 +31,12 @@ export default function LegacyBungalowRedirectPage() {
           throw new Error(`Request failed (${response.status})`);
         }
 
-        const data = (await response.json()) as { canonical_path?: string };
-        const canonicalPath = data.canonical_path;
+        const resolved = (await response.json()) as LegacyResolvedBungalowTarget;
 
-        if (!cancelled && canonicalPath) {
-          navigate(canonicalPath, { replace: true });
+        if (!cancelled) {
+          navigate(`/bungalow/${resolved.canonical_slug ?? ca}`, {
+            replace: true,
+          });
         }
       } catch (err) {
         if (!cancelled) {

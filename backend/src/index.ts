@@ -23,6 +23,7 @@ import widgetRoute from "./routes/widget";
 import v1BungalowRoute from "./routes/v1-bungalow";
 import { homeTeamRoute } from "./routes/home-team";
 import itemsRoute from "./routes/items";
+import sceneRoute from "./routes/scene";
 import claimsRoute from "./routes/claims";
 import bodegaRoute from "./routes/bodega";
 import walletLinkRoute from "./routes/wallet-link";
@@ -141,6 +142,13 @@ const allowedOrigins = CONFIG.CORS_ORIGIN.split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);
 const allowAnyOrigin = allowedOrigins.includes("*");
+const ogCache = new Map<string, { data: OGData; ts: number }>();
+
+type OGData = {
+  title?: string;
+  image?: string;
+  description?: string;
+};
 
 app.use("*", requestIdMiddleware);
 app.use("*", requestLogMiddleware);
@@ -201,12 +209,55 @@ app.route("/api", claimPriceRoute);
 app.route("/api", scanRoute);
 app.route("/api", leaderboardRoute);
 app.route("/api", personaRoute);
+app.get("/api/og", async (c) => {
+  const url = c.req.query("url");
+  if (!url || !url.startsWith("http")) return c.json({});
+
+  const cached = ogCache.get(url);
+  if (cached && Date.now() - cached.ts < 3_600_000) {
+    return c.json(cached.data);
+  }
+
+  try {
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(3000),
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; JBIBot/1.0)" },
+    });
+    const html = await res.text();
+    const get = (prop: string) => {
+      const match =
+        html.match(
+          new RegExp(
+            `<meta[^>]*property=["']${prop}["'][^>]*content=["']([^"']+)["']`,
+            "i",
+          ),
+        ) ??
+        html.match(
+          new RegExp(
+            `<meta[^>]*content=["']([^"']+)["'][^>]*property=["']${prop}["']`,
+            "i",
+          ),
+        );
+      return match?.[1];
+    };
+    const data: OGData = {
+      title: get("og:title") ?? get("twitter:title"),
+      image: get("og:image") ?? get("twitter:image"),
+      description: get("og:description"),
+    };
+    ogCache.set(url, { data, ts: Date.now() });
+    return c.json(data);
+  } catch {
+    return c.json({});
+  }
+});
 app.route("/api", ogRoute);
 app.route("/api", agentRoute);
 app.route("/api", widgetRoute);
 app.route("/api", v1BungalowRoute);
 app.route("/api", homeTeamRoute);
 app.route("/api", itemsRoute);
+app.route("/api", sceneRoute);
 app.route("/api", claimsRoute);
 app.route("/api/bodega", bodegaRoute);
 app.route("/api", walletLinkRoute);

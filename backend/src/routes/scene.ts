@@ -1,17 +1,18 @@
 import { Hono } from 'hono'
-import { normalizeAddress, publicClients, toSupportedChain } from '../config'
+import { CONFIG, db, normalizeAddress, publicClients, toSupportedChain } from '../config'
 import {
   createAssetPurchase,
-  getBungalowOwnerRecord,
   getBungalowSceneConfig,
+  getUserWallets,
   upsertBungalowSceneConfig,
 } from '../db/queries'
-import { requireWalletAuth } from '../middleware/auth'
+import { requirePrivyAuth, requireWalletAuth } from '../middleware/auth'
 import { ApiError } from '../services/errors'
 import type { AppEnv } from '../types'
 
 type SlotType = 'wall-frame' | 'shelf' | 'portal' | 'floor' | 'link'
 type DecorationType = 'image' | 'portal' | 'furniture' | 'social-link' | 'website-link' | 'decoration'
+type SceneChain = 'base' | 'ethereum'
 
 interface DecorationConfig {
   type: DecorationType
@@ -20,6 +21,7 @@ interface DecorationConfig {
   linkUrl?: string
   modelId?: string
   placedBy: string
+  placedByHandle?: string | null
   placedAt: string
   jbmBurned: number
 }
@@ -123,16 +125,92 @@ function createDefaultScene(chain: 'base' | 'ethereum', ca: string): SceneConfig
   }
 }
 
-function normalizeScene(raw: unknown, fallback: SceneConfig): SceneConfig {
-  if (!raw || typeof raw !== 'object') return fallback
+function coerceSceneValue(raw: unknown): Partial<SceneConfig> | null {
+  if (!raw) return null
 
-  const value = raw as Partial<SceneConfig>
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw) as unknown
+      if (parsed && typeof parsed === 'object') {
+        return parsed as Partial<SceneConfig>
+      }
+    } catch {
+      return null
+    }
+
+    return null
+  }
+
+  if (typeof raw === 'object') {
+    return raw as Partial<SceneConfig>
+  }
+
+  return null
+}
+
+function normalizeScene(raw: unknown, fallback: SceneConfig): SceneConfig {
+  const value = coerceSceneValue(raw)
+  if (!value) return fallback
   const slots = Array.isArray(value.slots) ? value.slots : fallback.slots
 
   return {
     version: '1.0',
     bungalowId: typeof value.bungalowId === 'string' ? value.bungalowId : fallback.bungalowId,
     slots: slots as SlotConfig[],
+  }
+}
+
+async function getConnectedUsername(wallet: string): Promise<string | null> {
+  const rows = await db<Array<{ username: string | null }>>`
+    SELECT COALESCE(wfp.username, u.x_username) AS username
+    FROM (SELECT ${wallet}::text AS wallet) AS input
+    LEFT JOIN ${db(CONFIG.SCHEMA)}.wallet_farcaster_profiles wfp
+      ON LOWER(wfp.wallet) = LOWER(input.wallet)
+    LEFT JOIN ${db(CONFIG.SCHEMA)}.user_wallets uw
+      ON LOWER(uw.address) = LOWER(input.wallet)
+    LEFT JOIN ${db(CONFIG.SCHEMA)}.users u
+      ON u.privy_user_id = uw.privy_user_id
+    WHERE COALESCE(wfp.username, u.x_username) IS NOT NULL
+    LIMIT 1
+  `
+
+  const username = rows[0]?.username?.trim() ?? ''
+  return username || null
+}
+
+async function enrichSceneIdentities(scene: SceneConfig): Promise<SceneConfig> {
+  const usernameCache = new Map<string, string | null>()
+
+  const slots = await Promise.all(
+    scene.slots.map(async (slot) => {
+      const placedBy = slot.decoration?.placedBy?.trim()
+      if (!slot.decoration || !placedBy) {
+        return slot
+      }
+
+      const cacheKey = placedBy.toLowerCase()
+      if (!usernameCache.has(cacheKey)) {
+        usernameCache.set(cacheKey, await getConnectedUsername(placedBy))
+      }
+
+      const placedByHandle = usernameCache.get(cacheKey) ?? null
+      if (!placedByHandle) {
+        return slot
+      }
+
+      return {
+        ...slot,
+        decoration: {
+          ...slot.decoration,
+          placedByHandle,
+        },
+      }
+    }),
+  )
+
+  return {
+    ...scene,
+    slots,
   }
 }
 
@@ -144,8 +222,18 @@ function ensureSlot(shape: SceneConfig, slotId: string): SlotConfig {
   return match
 }
 
+function extractPrivyUserId(claims: Record<string, unknown> | undefined): string | null {
+  const privyUserId = typeof claims?.sub === 'string' ? claims.sub.trim() : ''
+  return privyUserId || null
+}
+
+function toSceneChain(input: string): SceneChain | null {
+  const chain = toSupportedChain(input)
+  return chain === 'base' || chain === 'ethereum' ? chain : null
+}
+
 sceneRoute.get('/bungalow/:chain/:ca/scene', async (c) => {
-  const chain = toSupportedChain(c.req.param('chain'))
+  const chain = toSceneChain(c.req.param('chain'))
   const ca = normalizeAddress(c.req.param('ca'))
 
   if (!chain || !ca) {
@@ -154,27 +242,22 @@ sceneRoute.get('/bungalow/:chain/:ca/scene', async (c) => {
 
   const fallback = createDefaultScene(chain, ca)
   const existing = await getBungalowSceneConfig(chain, ca)
-  const scene = normalizeScene(existing?.scene_config, fallback)
+  const scene = await enrichSceneIdentities(
+    normalizeScene(existing?.scene_config, fallback),
+  )
 
   return c.json({ scene })
 })
 
-sceneRoute.put('/bungalow/:chain/:ca/scene', requireWalletAuth, async (c) => {
-  const chain = toSupportedChain(c.req.param('chain'))
+sceneRoute.put('/bungalow/:chain/:ca/scene', requirePrivyAuth, async (c) => {
+  const chain = toSceneChain(c.req.param('chain'))
   const ca = normalizeAddress(c.req.param('ca'))
   const wallet = c.get('walletAddress')
+  const claims = c.get('privyClaims') as Record<string, unknown> | undefined
+  const privyUserId = extractPrivyUserId(claims)
 
-  if (!chain || !ca || !wallet) {
-    throw new ApiError(400, 'invalid_params', 'Invalid chain, contract address, or wallet')
-  }
-
-  const ownerRecord = await getBungalowOwnerRecord(ca, chain)
-  const owner = ownerRecord?.current_owner?.toLowerCase() ?? null
-  const admin = ownerRecord?.verified_admin?.toLowerCase() ?? null
-  const caller = wallet.toLowerCase()
-
-  if ((owner || admin) && owner !== caller && admin !== caller) {
-    throw new ApiError(403, 'not_bungalow_owner', 'Only the bungalow owner can edit scene configuration')
+  if (!chain || !ca || !privyUserId) {
+    throw new ApiError(400, 'invalid_params', 'Invalid chain, contract address, or authenticated user')
   }
 
   const body = await c.req.json<{ slotId?: unknown; decoration?: Partial<DecorationConfig> }>()
@@ -195,6 +278,30 @@ sceneRoute.put('/bungalow/:chain/:ca/scene', requireWalletAuth, async (c) => {
     throw new ApiError(400, 'invalid_decoration', 'decoration requires type and name')
   }
 
+  const linkedWalletRows = await getUserWallets(privyUserId)
+  const linkedWallets = linkedWalletRows
+    .map((row) => normalizeAddress(row.address))
+    .filter((address): address is string => Boolean(address))
+  const scopedWallets = [...new Set([
+    ...(wallet ? [wallet.toLowerCase()] : []),
+    ...linkedWallets.map((address) => address.toLowerCase()),
+  ])]
+  const requestedPlacedBy =
+    typeof body.decoration.placedBy === 'string'
+      ? normalizeAddress(body.decoration.placedBy)
+      : null
+  const actorWallet =
+    (requestedPlacedBy && scopedWallets.includes(requestedPlacedBy.toLowerCase())
+      ? requestedPlacedBy
+      : null) ??
+    wallet ??
+    linkedWallets[0] ??
+    null
+
+  if (!actorWallet || scopedWallets.length === 0) {
+    throw new ApiError(401, 'wallet_required', 'Link a wallet before placing items in a bungalow')
+  }
+
   const existing = await getBungalowSceneConfig(chain, ca)
   const baseline = normalizeScene(existing?.scene_config, createDefaultScene(chain, ca))
   ensureSlot(baseline, slotId)
@@ -207,7 +314,7 @@ sceneRoute.put('/bungalow/:chain/:ca/scene', requireWalletAuth, async (c) => {
     imageUrl: typeof body.decoration.imageUrl === 'string' ? body.decoration.imageUrl : undefined,
     linkUrl: typeof body.decoration.linkUrl === 'string' ? body.decoration.linkUrl : undefined,
     modelId: typeof body.decoration.modelId === 'string' ? body.decoration.modelId : undefined,
-    placedBy: wallet,
+    placedBy: actorWallet,
     placedAt: now,
     jbmBurned: Number(body.decoration.jbmBurned ?? 0),
   }
@@ -228,11 +335,13 @@ sceneRoute.put('/bungalow/:chain/:ca/scene', requireWalletAuth, async (c) => {
     chain,
     contractAddress: ca,
     sceneConfig: updatedScene,
-    updatedBy: wallet,
+    updatedBy: actorWallet,
   })
 
   return c.json({
-    scene: normalizeScene(saved.scene_config, updatedScene),
+    scene: await enrichSceneIdentities(
+      normalizeScene(saved.scene_config, updatedScene),
+    ),
   })
 })
 
@@ -248,7 +357,7 @@ sceneRoute.post('/assets/purchase', requireWalletAuth, async (c) => {
   }
 
   const body = await c.req.json<{ chain?: unknown; ca?: unknown; slotId?: unknown; assetId?: unknown; txHash?: unknown }>()
-  const chain = typeof body.chain === 'string' ? toSupportedChain(body.chain) : null
+  const chain = typeof body.chain === 'string' ? toSceneChain(body.chain) : null
   const ca = typeof body.ca === 'string' ? normalizeAddress(body.ca) : null
   const slotId = typeof body.slotId === 'string' ? body.slotId.trim() : ''
   const assetId = typeof body.assetId === 'string' ? body.assetId.trim() : ''

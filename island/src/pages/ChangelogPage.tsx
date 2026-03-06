@@ -18,6 +18,183 @@ export default function ChangelogPage() {
 
       <article className={styles.entry}>
         <div className={styles.entryHeader}>
+          <span className={styles.date}>March 6, 2026</span>
+          <h2 className={styles.heading}>Bodega Placement Now Chooses The Room Spot Before Payment</h2>
+        </div>
+        <p>
+          The full-Bodega install flow now sends people into the destination
+          bungalow to pick the exact placement before any wallet transaction is
+          requested.
+        </p>
+        <ul className={styles.list}>
+          <li>
+            Global Bodega install modals now act as bungalow pickers, then open
+            the chosen room with the selected item already armed for placement.
+          </li>
+          <li>
+            Room art now shows who placed it and when, using a connected
+            username when one is available for that wallet.
+          </li>
+          <li>
+            In-room project cards now sit behind action modals instead of
+            floating above them, and island bungalow huts were enlarged to read
+            more clearly on the map.
+          </li>
+        </ul>
+      </article>
+
+      <article className={styles.entry}>
+        <div className={styles.entryHeader}>
+          <span className={styles.date}>March 6, 2026</span>
+          <h2 className={styles.heading}>Bungalow Installs Now Persist Correctly After Refresh</h2>
+        </div>
+        <p>
+          Installed Bodega items no longer disappear from a bungalow just
+          because the room was reloaded.
+        </p>
+        <ul className={styles.list}>
+          <li>
+            Saved bungalow scene state is now parsed correctly when the room is
+            fetched again, so existing installs render after refresh instead of
+            falling back to an empty default scene.
+          </li>
+        </ul>
+      </article>
+
+      <article className={styles.entry}>
+        <div className={styles.entryHeader}>
+          <span className={styles.date}>March 6, 2026</span>
+          <h2 className={styles.heading}>In-Room Bodega Placement Now Speaks Plainly and Guides Art Into Visible Spots</h2>
+        </div>
+        <p>
+          The inside-bungalow install flow now stays readable while work is in
+          progress and points each Bodega item toward the kinds of room spots
+          where it can actually be seen.
+        </p>
+        <ul className={styles.list}>
+          <li>
+            The payment button now stays in a processing state until the full
+            install-and-place sequence finishes instead of surfacing retry copy
+            mid-flight.
+          </li>
+          <li>
+            Bodega art now highlights only compatible open room spots, so wall
+            pieces land on visible wall placements instead of disappearing into
+            mismatched anchors.
+          </li>
+          <li>
+            Room guidance now uses plain placement language instead of the
+            internal &quot;curation anchor&quot; vocabulary.
+          </li>
+        </ul>
+      </article>
+
+      <article className={styles.entry}>
+        <div className={styles.entryHeader}>
+          <span className={styles.date}>March 6, 2026</span>
+          <h2 className={styles.heading}>Island Map Now Shows The Full Bungalow Registry</h2>
+        </div>
+        <p>
+          The main island no longer hides bungalow records just because they
+          have not been marked claimed yet.
+        </p>
+        <ul className={styles.list}>
+          <li>
+            The map and sidebar now load from the full bungalow registry
+            instead of the narrower claimed-or-owned subset.
+          </li>
+          <li>
+            Canonical project grouping still stays intact, so multi-chain
+            deployments resolve into one shared bungalow when they belong to
+            the same project.
+          </li>
+        </ul>
+      </article>
+
+      <article className={styles.entry}>
+        <div className={styles.entryHeader}>
+          <span className={styles.date}>March 6, 2026</span>
+          <h2 className={styles.heading}>Inside-Bungalow Bodega Installs Now Stay In-Room From Selection to Payment</h2>
+        </div>
+        <p>
+          Installing from the Bodega inside a bungalow no longer throws people
+          out to a separate listing page before they can finish the job.
+        </p>
+        <ul className={styles.list}>
+          <li>
+            Opening the Bodega from inside a bungalow now starts a placement
+            composer for that exact room instead of navigating to a standalone
+            listing route.
+          </li>
+          <li>
+            Selecting a Bodega item now keeps the user in the interior, lets
+            them click an available room anchor, and opens payment directly for
+            that placement target.
+          </li>
+          <li>
+            Payment, install recording, and scene placement now happen as one
+            continuous in-room flow so the item appears in the bungalow without
+            a context-breaking page jump.
+          </li>
+        </ul>
+      </article>
+
+      <article className={styles.entry}>
+        <div className={styles.entryHeader}>
+          <span className={styles.date}>March 6, 2026</span>
+          <h2 className={styles.heading}>Island World Now Uses Living Topography, Viewport HUDs, and Branded Project Homes</h2>
+        </div>
+        <p>
+          The island map and bungalow interiors were rebuilt to feel more like
+          inhabited places instead of raw scene demos.
+        </p>
+        <ul className={styles.list}>
+          <li>
+            The main island now grows terrain around active bungalow plots,
+            includes lagoon and ocean water, and keeps the primary actions in a
+            viewport HUD instead of floating off-screen in world space.
+          </li>
+          <li>
+            Bungalow markers now render as image-driven overlay buttons so each
+            project home is legible from fresh eyes before anyone clicks in.
+          </li>
+          <li>
+            Interior rooms now use a larger framed pavilion layout with project
+            identity built into the space, tighter camera bounds, and clearer
+            bungalow-targeted curation actions.
+          </li>
+        </ul>
+      </article>
+
+      <article className={styles.entry}>
+        <div className={styles.entryHeader}>
+          <span className={styles.date}>March 5, 2026</span>
+          <h2 className={styles.heading}>3D Island World, 3D Bungalow Rooms, and Direct Deep-Link Entry</h2>
+        </div>
+        <p>
+          Jungle Bay Island now opens as a navigable 3D world, and bungalow
+          pages now render as interactive 3D interiors instead of flat wall
+          lists.
+        </p>
+        <ul className={styles.list}>
+          <li>
+            The home map is now a cinematic 3D island with tap-friendly huts,
+            camera fly-ins, and direct entry into each bungalow.
+          </li>
+          <li>
+            Bungalow interiors now load as 3D rooms with owner-editable slots
+            for frames, portals, links, furniture, and decorations.
+          </li>
+          <li>
+            Legacy <code>/:chain/:ca</code> links now resolve to the canonical
+            bungalow slug before entering the room, so old social links and QR
+            codes still land in the right place.
+          </li>
+        </ul>
+      </article>
+
+      <article className={styles.entry}>
+        <div className={styles.entryHeader}>
           <span className={styles.date}>March 5, 2026</span>
           <h2 className={styles.heading}>Community Bungalows, Quick Add, and Install-Weighted Walls</h2>
         </div>

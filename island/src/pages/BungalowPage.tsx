@@ -1,22 +1,26 @@
-import { useState } from "react";
-import { usePrivy } from "@privy-io/react-auth";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import AddItemModal from "../components/AddItemModal";
+import { Suspense, lazy, useEffect, useState } from "react";
+import {
+  useLocation,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import ChainIcon from "../components/ChainIcon";
-import Wall from "../components/Wall";
 import {
   useBungalow,
   type BungalowAsset,
   type BungalowDeployment,
   type BungalowDetails,
 } from "../hooks/useBungalow";
-import { useBungalowItems } from "../hooks/useBungalowItems";
 import { useBungalowResolver } from "../hooks/useBungalowResolver";
 import { getChainLabel } from "../utils/chains";
+import { normalizeBodegaCatalogItem } from "../utils/bodega";
 import NotFoundPage from "./NotFoundPage";
 import { formatNumber } from "../utils/formatters";
-import { getFallbackTokenImage, getTokenImageUrl } from "../utils/tokenImage";
+import { getTokenImageUrl } from "../utils/tokenImage";
 import styles from "../styles/bungalow-page.module.css";
+
+const BungalowScene = lazy(() => import("../components/BungalowScene"));
 
 function tokenStandardLabel(chain: string, isNft: boolean): string {
   if (chain === "base" || chain === "ethereum") {
@@ -80,6 +84,16 @@ function buildFallbackAsset(bungalow: BungalowDetails): BungalowAsset {
     },
     deployments: [deployment],
   };
+}
+
+function getVerifiedAdminAddress(bungalow: BungalowDetails): string | null {
+  if (!("verified_admin" in bungalow)) {
+    return null;
+  }
+
+  return typeof bungalow.verified_admin === "string"
+    ? bungalow.verified_admin
+    : null;
 }
 
 function BungalowSkeleton() {
@@ -163,6 +177,114 @@ function BungalowSkeleton() {
   );
 }
 
+function BungalowEntryTransition({
+  name,
+  imageUrl,
+}: {
+  name: string;
+  imageUrl?: string;
+}) {
+  const [scale, setScale] = useState(0.3);
+  const [opacity, setOpacity] = useState(0);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      setScale(1.1);
+      setOpacity(1);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  return (
+    <div
+      style={{
+        width: "100%",
+        height: 520,
+        background:
+          "radial-gradient(ellipse at center, #1a3a1a 0%, #0a1a0a 70%)",
+        borderRadius: 12,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 20,
+        overflow: "hidden",
+        position: "relative",
+      }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          width: 200,
+          height: 200,
+          borderRadius: "50%",
+          border: "1px solid rgba(0,255,180,0.15)",
+          animation: "pulse-ring 1.2s ease-out infinite",
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          width: 140,
+          height: 140,
+          borderRadius: "50%",
+          border: "1px solid rgba(0,255,180,0.2)",
+          animation: "pulse-ring 1.2s ease-out 0.3s infinite",
+        }}
+      />
+      <div
+        style={{
+          width: 80,
+          height: 80,
+          borderRadius: "50%",
+          overflow: "hidden",
+          border: "2px solid rgba(0,255,180,0.4)",
+          opacity,
+          transform: `scale(${scale})`,
+          transition: "all 0.5s cubic-bezier(0.34,1.56,0.64,1)",
+          zIndex: 1,
+        }}
+      >
+        {imageUrl ? (
+          <img
+            src={imageUrl}
+            alt={name}
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          />
+        ) : (
+          <div
+            style={{ width: "100%", height: "100%", background: "#1a4a2a" }}
+          />
+        )}
+      </div>
+      <div
+        style={{
+          color: "rgba(0,255,180,0.7)",
+          fontSize: 13,
+          letterSpacing: "0.15em",
+          textTransform: "uppercase",
+          opacity,
+          transition: "opacity 0.5s ease 0.2s",
+          zIndex: 1,
+        }}
+      >
+        entering {name}
+      </div>
+      <style>{`
+        @keyframes pulse-ring {
+          0% { transform: scale(0.8); opacity: 0.6; }
+          100% { transform: scale(1.6); opacity: 0; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+interface BungalowPageLocationState {
+  pendingBodegaItem?: unknown;
+}
+
 export default function BungalowPage() {
   const {
     chain: routeChain,
@@ -174,8 +296,13 @@ export default function BungalowPage() {
     identifier?: string;
   }>();
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const navigate = useNavigate();
-  const { authenticated, login } = usePrivy();
+  const locationState =
+    (location.state as BungalowPageLocationState | null) ?? null;
+  const pendingBodegaItem = normalizeBodegaCatalogItem(
+    locationState?.pendingBodegaItem,
+  );
   const preferredResolveChain = (searchParams.get("chain") ?? "")
     .trim()
     .toLowerCase();
@@ -198,21 +325,6 @@ export default function BungalowPage() {
     chain || undefined,
     ca || undefined,
   );
-  const {
-    items,
-    isLoading: itemsLoading,
-    refetch,
-  } = useBungalowItems(chain, ca);
-
-  const [isAddOpen, setIsAddOpen] = useState(false);
-
-  const handleOpenAddModal = () => {
-    if (!authenticated) {
-      login();
-      return;
-    }
-    setIsAddOpen(true);
-  };
 
   if (!hasDirectRoute && !routeIdentifier) {
     return <div className={styles.page}>Invalid bungalow route</div>;
@@ -276,19 +388,7 @@ export default function BungalowPage() {
     activeDeployment.token_address,
     activeAsset.symbol ?? bungalow.symbol,
   );
-  const aggregateHolderCount =
-    canonicalProject?.total_holder_count ?? bungalow.holder_count;
-  const assetCount = canonicalProject?.asset_count ?? assets.length;
-  const chainCount =
-    canonicalProject?.chain_count ??
-    new Set(
-      assets.flatMap((asset) =>
-        asset.deployments.map((deployment) => deployment.chain),
-      ),
-    ).size;
-  const deploymentCount =
-    canonicalProject?.deployment_count ??
-    assets.reduce((sum, asset) => sum + asset.deployment_count, 0);
+  const adminAddress = getVerifiedAdminAddress(bungalow);
   const visibleChains = [
     ...new Set(
       assets.flatMap((asset) =>
@@ -308,103 +408,43 @@ export default function BungalowPage() {
     <div className={styles.page}>
       <div className={styles.content}>
         <section className={styles.mainColumn}>
-          <header className={styles.headerCard}>
-            <div className={styles.headerTop}>
-              <img
-                className={styles.tokenImage}
-                src={headerImage}
-                alt={displaySymbol ?? "token"}
-                onError={(event) => {
-                  event.currentTarget.src = getFallbackTokenImage(
-                    `${activeDeployment.chain}:${activeDeployment.token_address}`,
-                  );
-                }}
-              />
-
-              <div className={styles.headerText}>
-                <div className={styles.titleRow}>
-                  <h1 className={styles.title}>{displayName}</h1>
-                </div>
-                <div className={styles.headerMeta}>
-                  {visibleChains.map((deploymentChain) => (
-                    <div
-                      key={deploymentChain}
-                      className={`${styles.chainBadge} ${chainToneClass(deploymentChain)}`}
-                    >
-                      {getChainLabel(deploymentChain)}
-                    </div>
-                  ))}
-                </div>
-
-                {assetCount > 1 || deploymentCount > 1 ? (
-                  <p className={styles.identityNote}>
-                    This bungalow groups {assetCount} official assets across{" "}
-                    {deploymentCount} deployments.
-                  </p>
-                ) : null}
-                {bungalow.description ? (
-                  <p className={styles.description}>{bungalow.description}</p>
-                ) : null}
-                <p className={styles.identityNote}>
-                  Community bungalow. Quick Add publishes straight to the Bodega
-                  and installs here immediately. Better-selling items float up;
-                  emergency moderation is admin-only.
-                </p>
-              </div>
-            </div>
-
-            <div className={styles.stats}>
-              <div>
-                <span>Tracked Holders</span>
-                <strong>{formatNumber(aggregateHolderCount)}</strong>
-              </div>
-
-              <div>
-                <span>Assets</span>
-                <strong>{formatNumber(assetCount)}</strong>
-              </div>
-
-              <div>
-                <span>Deployments</span>
-                <strong>{formatNumber(deploymentCount)}</strong>
-              </div>
-
-              <div>
-                <span>Chains</span>
-                <strong>{formatNumber(chainCount)}</strong>
-              </div>
-            </div>
-          </header>
-
           <div className={styles.wallRegion}>
-            <section className={styles.marketStrip}>
-              <div className={styles.marketCopy}>
-                <p>Island Bodega</p>
-                <strong>
-                  Browse the full market here, or use Quick Add below to publish
-                  straight from inside this bungalow.
-                </strong>
-              </div>
-              <button
-                type="button"
-                className={styles.marketButton}
-                onClick={() =>
+            <Suspense
+              fallback={
+                <BungalowEntryTransition
+                  name={bungalow?.name ?? ""}
+                  imageUrl={bungalow?.image_url ?? undefined}
+                />
+              }
+            >
+              <BungalowScene
+                chain={chain}
+                ca={ca}
+                ownerAddress={bungalow.current_owner}
+                adminAddress={adminAddress}
+                title={displayName}
+                symbol={
+                  displaySymbol ?? activeAsset.symbol ?? bungalow.symbol ?? null
+                }
+                imageUrl={headerImage}
+                description={bungalow.description}
+                visibleChains={visibleChains}
+                initialBodegaItem={pendingBodegaItem}
+                onInitialBodegaItemConsumed={() => {
+                  navigate(`${location.pathname}${location.search}`, {
+                    replace: true,
+                    state: null,
+                  });
+                }}
+                onOpenBodega={() =>
                   navigate("/bodega", {
                     state: {
                       preselectedBungalow: currentBodegaTarget,
                     },
                   })
                 }
-              >
-                Shop the Bodega
-              </button>
-            </section>
-
-            <Wall
-              items={items}
-              isLoading={itemsLoading}
-              onAdd={handleOpenAddModal}
-            />
+              />
+            </Suspense>
           </div>
         </section>
 
@@ -511,17 +551,6 @@ export default function BungalowPage() {
           </div>
         </div>
       </div>
-
-      <AddItemModal
-        chain={chain}
-        ca={ca}
-        open={isAddOpen}
-        symbol={activeAsset.symbol ?? bungalow.symbol ?? ""}
-        onClose={() => setIsAddOpen(false)}
-        onCreated={() => {
-          void refetch();
-        }}
-      />
     </div>
   );
 }

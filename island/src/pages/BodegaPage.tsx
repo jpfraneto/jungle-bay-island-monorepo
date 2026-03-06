@@ -251,7 +251,7 @@ export default function BodegaPage() {
 
   const selectionNote = publicDirectoryError
     ? `Bungalow list is unavailable right now: ${publicDirectoryError}`
-    : "Choose any community bungalow on the island.";
+    : "Choose any community bungalow on the island. You will pick the exact room spot there before paying.";
   const submitSelectionNote = publicDirectoryError
     ? `Bungalow list is unavailable right now: ${publicDirectoryError}`
     : "Choose the bungalow this came from, or leave it blank. Quick Add inside a bungalow uses this same inventory automatically.";

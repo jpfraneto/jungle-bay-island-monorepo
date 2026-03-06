@@ -45,9 +45,6 @@ homeTeamRoute.get("/home-team", async (c) => {
     FROM ${db(CONFIG.SCHEMA)}.bungalows b
     LEFT JOIN ${db(CONFIG.SCHEMA)}.token_registry tr
       ON tr.token_address = b.token_address AND tr.chain = b.chain
-    WHERE COALESCE(b.is_claimed, FALSE) = TRUE
-       OR b.verified_admin IS NOT NULL
-       OR b.current_owner IS NOT NULL
     ORDER BY COALESCE(tr.holder_count, b.holder_count, 0) DESC, COALESCE(b.name, tr.name, b.symbol, tr.symbol, b.token_address) ASC
   `;
 

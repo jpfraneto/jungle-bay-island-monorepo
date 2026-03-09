@@ -233,7 +233,9 @@ export default function TransactionWalletSelector({
             alignContent: "center",
           }}
         >
-          <strong>{truncateAddress(selectorValue || activeWalletAddress)}</strong>
+          <strong>
+            {truncateAddress(selectorValue || activeWalletAddress)}
+          </strong>
           <span style={{ fontSize: 12, color: "rgba(247,239,214,0.66)" }}>
             {displayedWalletLinked ? "Linked wallet" : "Current wallet"}
           </span>

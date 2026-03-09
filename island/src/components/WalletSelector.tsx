@@ -181,14 +181,16 @@ export default function WalletSelector({
       ) : (
         <div className={styles.walletDisplay}>
           <strong>{truncateAddress(displayedWalletAddress)}</strong>
-          <span>{displayedWalletLinked ? "Linked wallet" : "Current wallet"}</span>
+          <span>
+            {displayedWalletLinked ? "Linked wallet" : "Current wallet"}
+          </span>
         </div>
       )}
 
       {loadError ? <p className={styles.error}>{loadError}</p> : null}
       {hasUnavailableLinkedWallets ? (
         <p className={styles.warning}>
-          Only wallets currently connected in Privy can sign here.
+          Only wallets currently connected in Privy can pay here.
         </p>
       ) : null}
       {activeWalletNotLinked ? (

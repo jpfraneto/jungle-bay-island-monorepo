@@ -179,7 +179,9 @@ function getPlacementRecoveryKey(input: {
   return `jbi:bodega-placement:${input.chain}:${input.ca}:${input.itemId}:${input.slotId}`;
 }
 
-function readPlacementRecoveryState(key: string): PlacementRecoveryState | null {
+function readPlacementRecoveryState(
+  key: string,
+): PlacementRecoveryState | null {
   if (typeof window === "undefined") {
     return null;
   }
@@ -577,23 +579,6 @@ export default function BodegaPlacementModal({
           </div>
         </div>
 
-        <div
-          style={{
-            borderRadius: 12,
-            border: "1px solid rgba(255,255,255,0.08)",
-            background: "rgba(0,0,0,0.18)",
-            padding: "12px 14px",
-            color: "rgba(247,239,214,0.84)",
-            fontSize: 13,
-            lineHeight: 1.5,
-          }}
-        >
-          You need to pay <strong>{formatJbmAmount(item.price_in_jbm)}</strong>{" "}
-          jungle bay memes to add this into the <strong>{bungalowName}</strong>{" "}
-          collage. The room will auto-place it on the right wall or floor
-          surface for you.
-        </div>
-
         {lockedPayer ? (
           <div
             style={{
@@ -606,7 +591,7 @@ export default function BodegaPlacementModal({
             }}
           >
             <span style={{ fontSize: 13, color: "rgba(247,239,214,0.72)" }}>
-              Sign with
+              Pay with
             </span>
             <strong style={{ fontSize: 14, color: "#f7efd6" }}>
               {lockedPayer}

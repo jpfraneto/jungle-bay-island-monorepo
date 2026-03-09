@@ -14,10 +14,10 @@ REQUIRED_FRONTEND_VARS := VITE_TREASURY_ADDRESS VITE_CLAIM_CONTRACT_ADDRESS VITE
 
 help:
 	@echo "Targets:"
-	@echo "  make deploy            Build frontend, push to GitHub, sync Railway env, deploy Railway"
+	@echo "  make deploy            Build frontend, push to GitHub, sync Railway env, deploy Railway, wait for active success"
 	@echo "  make build-frontend    Build island assets into backend/public/island"
 	@echo "  make sync-railway-env  Sync required env vars from local env files to Railway"
-	@echo "  make railway-deploy    Deploy current repo state to Railway"
+	@echo "  make railway-deploy    Deploy current repo state to Railway and wait for success"
 	@echo ""
 	@echo "Optional vars:"
 	@echo "  DEPLOY_MSG='your commit message'"
@@ -89,6 +89,27 @@ sync-railway-env:
 	echo "Synced JBM_TOKEN_ADDRESS"
 
 railway-deploy:
-	@railway up --service "$(RAILWAY_SERVICE)" --environment "$(RAILWAY_ENV)" --ci
+	@set -euo pipefail; \
+		started_at="$$(date -u +"%Y-%m-%dT%H:%M:%SZ")"; \
+		started_epoch="$$(date +%s)"; \
+		echo "Uploading to Railway..."; \
+		railway up --service "$(RAILWAY_SERVICE)" --environment "$(RAILWAY_ENV)" --ci; \
+		echo "Waiting for Railway to promote the new deployment..."; \
+		deadline="$$((started_epoch + 600))"; \
+		while [ "$$(date +%s)" -lt "$$deadline" ]; do \
+		deployment_json="$$(railway deployment list --service "$(RAILWAY_SERVICE)" --environment "$(RAILWAY_ENV)" --limit 10 --json)"; \
+		status="$$(printf '%s' "$$deployment_json" | node -e 'let s=""; process.stdin.on("data",(d)=>s+=d); process.stdin.on("end",()=>{ const startedAt = Date.parse(process.argv[1]); const deployments = JSON.parse(s); const latest = deployments.find((deployment) => Date.parse(deployment.createdAt) >= startedAt); process.stdout.write(latest?.status ?? ""); });' "$$started_at")"; \
+		if [ "$$status" = "SUCCESS" ]; then \
+			echo "Railway deployment is active."; \
+			exit 0; \
+		fi; \
+		if [ -n "$$status" ] && [ "$$status" != "BUILDING" ] && [ "$$status" != "DEPLOYING" ] && [ "$$status" != "INITIALIZING" ]; then \
+			echo "Railway deployment did not become active. Latest status: $$status"; \
+			exit 1; \
+		fi; \
+		sleep 5; \
+	done; \
+	echo "Timed out waiting for Railway deployment to become active."; \
+	exit 1
 
 deploy: check-tools build-frontend git-upload sync-railway-env railway-deploy

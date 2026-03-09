@@ -43,6 +43,12 @@ export default function ChangelogPage() {
             activity for that bungalow.
           </li>
           <li>
+            Bungalow entry now stays in one progress-driven loading state, room
+            pieces place into an auto-arranged collage instead of a fragile
+            fixed slot count, and the in-room presentation was enlarged and
+            cleaned up so the bungalow reads more like a shippable space.
+          </li>
+          <li>
             Daily island rewards no longer recalculate when the signing wallet
             changes, already-claimed states hide redundant wallet controls, and
             claim buttons now name the exact wallet being used.

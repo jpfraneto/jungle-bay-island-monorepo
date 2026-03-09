@@ -44,6 +44,8 @@ interface SceneConfig {
   slots: SlotConfig[]
 }
 
+type WallSurface = 'back' | 'left' | 'right'
+
 const sceneRoute = new Hono<AppEnv>()
 
 const ASSET_CATALOG = [
@@ -167,6 +169,176 @@ function createDefaultScene(chain: 'base' | 'ethereum', ca: string): SceneConfig
   }
 }
 
+function parseVec3(value: unknown): [number, number, number] | null {
+  if (!Array.isArray(value) || value.length !== 3) {
+    return null
+  }
+
+  const entries = value.map((entry) => Number(entry))
+  if (entries.some((entry) => !Number.isFinite(entry))) {
+    return null
+  }
+
+  return [entries[0], entries[1], entries[2]]
+}
+
+function normalizeSavedSlot(rawSlot: unknown): SlotConfig | null {
+  if (!rawSlot || typeof rawSlot !== 'object') {
+    return null
+  }
+
+  const candidate = rawSlot as Partial<SlotConfig>
+  const slotId = typeof candidate.slotId === 'string' ? candidate.slotId.trim() : ''
+  const slotType =
+    candidate.slotType === 'wall-frame' ||
+    candidate.slotType === 'shelf' ||
+    candidate.slotType === 'portal' ||
+    candidate.slotType === 'floor' ||
+    candidate.slotType === 'link'
+      ? candidate.slotType
+      : null
+  const position = parseVec3(candidate.position)
+  const rotation = parseVec3(candidate.rotation)
+
+  if (!slotId || !slotType || !position || !rotation) {
+    return null
+  }
+
+  const decoration =
+    candidate.decoration && typeof candidate.decoration === 'object'
+      ? (candidate.decoration as DecorationConfig)
+      : undefined
+  const filled =
+    typeof candidate.filled === 'boolean'
+      ? candidate.filled
+      : Boolean(decoration)
+
+  return {
+    slotId,
+    slotType,
+    position,
+    rotation,
+    filled,
+    decoration,
+  }
+}
+
+function isWallDecorationType(type: DecorationType): boolean {
+  return (
+    type === 'image' ||
+    type === 'website-link' ||
+    type === 'social-link'
+  )
+}
+
+function isFloorDecorationType(type: DecorationType): boolean {
+  return type === 'decoration' || type === 'furniture'
+}
+
+function getNextAutoSlotNumber(scene: SceneConfig, prefix: string): number {
+  const matching = scene.slots
+    .map((slot) => {
+      const match = slot.slotId.match(new RegExp(`^${prefix}-(\\d+)$`))
+      return match ? Number(match[1]) : 0
+    })
+    .filter((value) => Number.isFinite(value))
+
+  return (matching.length > 0 ? Math.max(...matching) : 0) + 1
+}
+
+function createAutoWallSlot(scene: SceneConfig): SlotConfig {
+  const surfaces: WallSurface[] = ['back', 'back', 'left', 'right', 'back', 'left', 'right']
+  const backXPositions = [-2.65, -1.65, -0.65, 0.4, 1.45, 2.45]
+  const sideZPositions = [-2.4, -1.4, -0.4, 0.6, 1.6, 2.6]
+  const yPositions = [1.35, 2.05, 2.75, 3.45]
+  const occupied = scene.slots.filter(
+    (slot) => slot.filled && slot.decoration && isWallDecorationType(slot.decoration.type),
+  ).length
+  const surface = surfaces[occupied % surfaces.length]
+  const surfaceIndex = Math.floor(occupied / surfaces.length)
+  const column = surfaceIndex % backXPositions.length
+  const row = Math.floor(surfaceIndex / backXPositions.length) % yPositions.length
+  const tilt = ((occupied % 5) - 2) * 0.04
+
+  if (surface === 'back') {
+    return {
+      slotId: `auto-wall-${getNextAutoSlotNumber(scene, 'auto-wall')}`,
+      slotType: 'wall-frame',
+      position: [backXPositions[column], yPositions[row], -2.96],
+      rotation: [0, 0, tilt],
+      filled: false,
+    }
+  }
+
+  const isLeft = surface === 'left'
+  return {
+    slotId: `auto-wall-${getNextAutoSlotNumber(scene, 'auto-wall')}`,
+    slotType: 'wall-frame',
+    position: [isLeft ? -3.52 : 3.52, yPositions[row], sideZPositions[column]],
+    rotation: [0, isLeft ? Math.PI / 2 : -Math.PI / 2, tilt],
+    filled: false,
+  }
+}
+
+function createAutoFloorSlot(scene: SceneConfig): SlotConfig {
+  const rings = [1.1, 1.6, 2.15, 2.75]
+  const angles = [28, 62, 104, 142, 196, 234, 286, 328]
+  const occupied = scene.slots.filter(
+    (slot) => slot.filled && slot.decoration && isFloorDecorationType(slot.decoration.type),
+  ).length
+  const ring = rings[Math.floor(occupied / angles.length) % rings.length]
+  const angleDeg = angles[occupied % angles.length] + ((occupied % 3) - 1) * 5
+  const angle = (angleDeg * Math.PI) / 180
+
+  return {
+    slotId: `auto-floor-${getNextAutoSlotNumber(scene, 'auto-floor')}`,
+    slotType: 'floor',
+    position: [
+      Number((Math.cos(angle) * ring).toFixed(3)),
+      0.02,
+      Number((Math.sin(angle) * ring).toFixed(3)),
+    ],
+    rotation: [-Math.PI / 2, 0, 0],
+    filled: false,
+  }
+}
+
+function createAutoPortalSlot(scene: SceneConfig): SlotConfig {
+  const positions: Array<{ position: [number, number, number]; rotation: [number, number, number] }> = [
+    { position: [-3.48, 1.45, -1.15], rotation: [0, Math.PI / 2, 0] },
+    { position: [3.48, 1.45, -1.15], rotation: [0, -Math.PI / 2, 0] },
+    { position: [-3.48, 1.45, 1.05], rotation: [0, Math.PI / 2, 0] },
+    { position: [3.48, 1.45, 1.05], rotation: [0, -Math.PI / 2, 0] },
+  ]
+  const occupied = scene.slots.filter(
+    (slot) => slot.filled && slot.decoration?.type === 'portal',
+  ).length
+  const chosen = positions[occupied % positions.length]
+
+  return {
+    slotId: `auto-portal-${getNextAutoSlotNumber(scene, 'auto-portal')}`,
+    slotType: 'portal',
+    position: chosen.position,
+    rotation: chosen.rotation,
+    filled: false,
+  }
+}
+
+function createAutoPlacementSlot(
+  scene: SceneConfig,
+  decorationType: DecorationType,
+): SlotConfig {
+  if (decorationType === 'portal') {
+    return createAutoPortalSlot(scene)
+  }
+
+  if (isFloorDecorationType(decorationType)) {
+    return createAutoFloorSlot(scene)
+  }
+
+  return createAutoWallSlot(scene)
+}
+
 function coerceSceneValue(raw: unknown): Partial<SceneConfig> | null {
   if (!raw) return null
 
@@ -195,39 +367,44 @@ function normalizeScene(raw: unknown, fallback: SceneConfig): SceneConfig {
   if (!value) return fallback
   const rawSlots = Array.isArray(value.slots) ? value.slots : []
   const savedSlots = new Map<string, Partial<SlotConfig>>()
+  const fallbackSlotIds = new Set(fallback.slots.map((slot) => slot.slotId))
+  const customSlots: SlotConfig[] = []
 
   for (const rawSlot of rawSlots) {
-    if (!rawSlot || typeof rawSlot !== 'object') continue
-    const slotId =
-      typeof (rawSlot as { slotId?: unknown }).slotId === 'string'
-        ? ((rawSlot as { slotId: string }).slotId)
-        : ''
-    if (!slotId) continue
-    savedSlots.set(slotId, rawSlot as Partial<SlotConfig>)
+    const normalized = normalizeSavedSlot(rawSlot)
+    if (!normalized) continue
+    if (fallbackSlotIds.has(normalized.slotId)) {
+      savedSlots.set(normalized.slotId, normalized)
+      continue
+    }
+    customSlots.push(normalized)
   }
 
   return {
     version: '1.0',
     bungalowId: typeof value.bungalowId === 'string' ? value.bungalowId : fallback.bungalowId,
-    slots: fallback.slots.map((slot) => {
-      const saved = savedSlots.get(slot.slotId)
-      if (!saved) {
-        return slot
-      }
+    slots: [
+      ...fallback.slots.map((slot) => {
+        const saved = savedSlots.get(slot.slotId)
+        if (!saved) {
+          return slot
+        }
 
-      const decoration =
-        saved.decoration && typeof saved.decoration === 'object'
-          ? (saved.decoration as DecorationConfig)
-          : undefined
-      const filled =
-        typeof saved.filled === 'boolean' ? saved.filled : Boolean(decoration)
+        const decoration =
+          saved.decoration && typeof saved.decoration === 'object'
+            ? (saved.decoration as DecorationConfig)
+            : undefined
+        const filled =
+          typeof saved.filled === 'boolean' ? saved.filled : Boolean(decoration)
 
-      return {
-        ...slot,
-        filled,
-        decoration,
-      }
-    }),
+        return {
+          ...slot,
+          filled,
+          decoration,
+        }
+      }),
+      ...customSlots,
+    ],
   }
 }
 
@@ -375,7 +552,6 @@ sceneRoute.put('/bungalow/:chain/:ca/scene', requirePrivyAuth, async (c) => {
 
   const existing = await getBungalowSceneConfig(chain, ca)
   const baseline = normalizeScene(existing?.scene_config, createDefaultScene(chain, ca))
-  ensureSlot(baseline, slotId)
 
   const now = new Date().toISOString()
 
@@ -390,10 +566,21 @@ sceneRoute.put('/bungalow/:chain/:ca/scene', requirePrivyAuth, async (c) => {
     jbmBurned: Number(body.decoration.jbmBurned ?? 0),
   }
 
+  let resolvedSlotId = slotId
+  let updatedSlots = [...baseline.slots]
+
+  if (slotId === 'auto') {
+    const nextSlot = createAutoPlacementSlot(baseline, decoration.type)
+    updatedSlots = [...updatedSlots, nextSlot]
+    resolvedSlotId = nextSlot.slotId
+  } else {
+    ensureSlot(baseline, slotId)
+  }
+
   const updatedScene: SceneConfig = {
     ...baseline,
-    slots: baseline.slots.map((slot) => {
-      if (slot.slotId !== slotId) return slot
+    slots: updatedSlots.map((slot) => {
+      if (slot.slotId !== resolvedSlotId) return slot
       return {
         ...slot,
         filled: true,

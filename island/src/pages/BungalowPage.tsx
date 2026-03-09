@@ -212,19 +212,90 @@ function compactLoadingLabel(value: string | null | undefined): string {
 function BungalowLoadingState({
   name,
   imageUrl,
+  progress,
+  status,
+  embedded = false,
 }: {
   name: string;
   imageUrl?: string;
+  progress: number;
+  status: string;
+  embedded?: boolean;
 }) {
+  const panel = (
+    <div
+      style={{
+        width: "100%",
+        minHeight: embedded ? "100%" : "calc(100vh - 36px)",
+        display: "grid",
+        alignContent: "center",
+        justifyItems: "center",
+        gap: 18,
+      }}
+    >
+      <BungalowEntryTransition name={name} imageUrl={imageUrl} />
+      <div
+        style={{
+          width: "min(360px, calc(100vw - 64px))",
+          display: "grid",
+          gap: 10,
+        }}
+      >
+        <div
+          style={{
+            height: 10,
+            borderRadius: 999,
+            background: "rgba(255,255,255,0.08)",
+            overflow: "hidden",
+            border: "1px solid rgba(255,255,255,0.08)",
+          }}
+        >
+          <div
+            style={{
+              width: `${Math.max(8, Math.min(100, Math.round(progress * 100)))}%`,
+              height: "100%",
+              borderRadius: 999,
+              background:
+                "linear-gradient(90deg, rgba(222,189,117,0.72), rgba(120,255,196,0.9))",
+              boxShadow: "0 0 18px rgba(120,255,196,0.26)",
+              transition: "width 220ms ease",
+            }}
+          />
+        </div>
+        <div
+          style={{
+            textAlign: "center",
+            color: "rgba(244,234,209,0.72)",
+            fontSize: 12,
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+          }}
+        >
+          {status}
+        </div>
+      </div>
+    </div>
+  );
+
+  if (embedded) {
+    return (
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          zIndex: 8,
+          background: "rgba(6, 10, 6, 0.94)",
+          backdropFilter: "blur(6px)",
+        }}
+      >
+        {panel}
+      </div>
+    );
+  }
+
   return (
     <div className={styles.page}>
-      <div className={styles.content}>
-        <section className={styles.mainColumn}>
-          <div className={styles.wallRegion}>
-            <BungalowEntryTransition name={name} imageUrl={imageUrl} />
-          </div>
-        </section>
-      </div>
+      {panel}
     </div>
   );
 }
@@ -273,16 +344,60 @@ export default function BungalowPage() {
     chain || undefined,
     ca || undefined,
   );
+  const [sceneModuleReady, setSceneModuleReady] = useState(false);
+  const [sceneReady, setSceneReady] = useState(false);
   const loadingName = compactLoadingLabel(
     routeIdentifier ?? bungalow?.canonical_project?.symbol ?? bungalow?.symbol ?? ca,
   );
+
+  useEffect(() => {
+    let active = true;
+
+    void import("../components/BungalowScene").then(() => {
+      if (active) {
+        setSceneModuleReady(true);
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    setSceneReady(false);
+  }, [chain, ca]);
+
+  const loadingProgress = !hasDirectRoute && resolveLoading
+    ? 0.28
+    : !chain || !ca
+      ? 0.38
+      : isLoading
+        ? 0.64
+        : !sceneModuleReady
+          ? 0.82
+          : 0.94;
+  const loadingStatus = !hasDirectRoute && resolveLoading
+    ? "Resolving bungalow route"
+    : !chain || !ca || isLoading
+      ? "Fetching bungalow data"
+      : !sceneModuleReady
+        ? "Preparing the room"
+        : "Finishing bungalow render";
 
   if (!hasDirectRoute && !routeIdentifier) {
     return <div className={styles.page}>Invalid bungalow route</div>;
   }
 
   if (!hasDirectRoute && resolveLoading) {
-    return <BungalowLoadingState name={loadingName} />;
+    return (
+      <BungalowLoadingState
+        name={loadingName}
+        imageUrl={bungalow?.image_url ?? undefined}
+        progress={loadingProgress}
+        status={loadingStatus}
+      />
+    );
   }
 
   if (!hasDirectRoute && resolveError) {
@@ -306,6 +421,8 @@ export default function BungalowPage() {
       <BungalowLoadingState
         name={loadingName}
         imageUrl={bungalow?.image_url ?? undefined}
+        progress={loadingProgress}
+        status={loadingStatus}
       />
     );
   }
@@ -367,10 +484,7 @@ export default function BungalowPage() {
           <div className={styles.wallRegion}>
             <Suspense
               fallback={
-                <BungalowEntryTransition
-                  name={bungalow?.name ?? ""}
-                  imageUrl={bungalow?.image_url ?? undefined}
-                />
+                null
               }
             >
               <BungalowScene
@@ -392,6 +506,7 @@ export default function BungalowPage() {
                     state: null,
                   });
                 }}
+                onSceneReadyChange={setSceneReady}
                 onOpenBodega={() =>
                   navigate("/bodega", {
                     state: {
@@ -401,6 +516,15 @@ export default function BungalowPage() {
                 }
               />
             </Suspense>
+            {!sceneReady ? (
+              <BungalowLoadingState
+                name={displayName}
+                imageUrl={headerImage}
+                progress={0.96}
+                status="Loading bungalow scene"
+                embedded
+              />
+            ) : null}
           </div>
         </section>
 

@@ -43,6 +43,7 @@ interface BungalowSceneProps {
   onOpenBodega: () => void;
   initialBodegaItem?: BodegaCatalogItem | null;
   onInitialBodegaItemConsumed?: () => void;
+  onSceneReadyChange?: (ready: boolean) => void;
 }
 
 type SelectableSlotType = SlotConfig["slotType"];
@@ -135,40 +136,6 @@ function getCompatibleSlotTypes(
   }
 
   return ["wall-frame"];
-}
-
-function describePlacementSpots(
-  slotTypes: SelectableSlotType[] | null,
-): string {
-  if (!slotTypes || slotTypes.length === 0) {
-    return "placement spot";
-  }
-
-  if (slotTypes.length === 1) {
-    if (slotTypes[0] === "wall-frame") return "wall spot";
-    if (slotTypes[0] === "floor") return "floor spot";
-    if (slotTypes[0] === "shelf") return "shelf spot";
-    if (slotTypes[0] === "portal") return "portal spot";
-    if (slotTypes[0] === "link") return "link spot";
-  }
-
-  if (slotTypes.includes("shelf") && slotTypes.includes("floor")) {
-    return "floor or shelf spot";
-  }
-
-  return "placement spot";
-}
-
-function formatPlacementSpotCount(
-  count: number,
-  slotTypes: SelectableSlotType[] | null,
-): string {
-  if (!slotTypes || slotTypes.length === 0) {
-    return `${count} open room spot${count === 1 ? "" : "s"} total`;
-  }
-
-  const label = describePlacementSpots(slotTypes);
-  return `${count} open ${label}${count === 1 ? "" : "s"}`;
 }
 
 async function readResponseMessage(response: Response): Promise<string> {
@@ -287,52 +254,52 @@ function RoomShell({ floorTexture }: { floorTexture: Texture | null }) {
   }> = [
     {
       key: "back",
-      position: [0, 3, -5.7],
+      position: [0, 3.3, -6.25],
       rotation: [0, 0, 0],
-      width: 7.2,
-      color: "#eadcc6",
+      width: 8.8,
+      color: "#eadfc7",
     },
     {
       key: "back-left",
-      position: [-4.7, 3, -4.7],
+      position: [-5.75, 3.3, -5.02],
       rotation: [0, Math.PI / 4, 0],
-      width: 4.2,
-      color: "#e3d5bc",
+      width: 5.1,
+      color: "#e3d7bd",
     },
     {
       key: "left",
-      position: [-6.65, 3, 0],
+      position: [-8.15, 3.3, 0],
       rotation: [0, Math.PI / 2, 0],
-      width: 7.1,
-      color: "#dccdb1",
+      width: 8.2,
+      color: "#ddd0b3",
     },
     {
       key: "front-left",
-      position: [-4.7, 3, 4.7],
+      position: [-5.75, 3.3, 5.02],
       rotation: [0, (3 * Math.PI) / 4, 0],
-      width: 4.2,
-      color: "#d7c7a8",
+      width: 5.1,
+      color: "#d8c8a8",
     },
     {
       key: "back-right",
-      position: [4.7, 3, -4.7],
+      position: [5.75, 3.3, -5.02],
       rotation: [0, -Math.PI / 4, 0],
-      width: 4.2,
-      color: "#e3d5bc",
+      width: 5.1,
+      color: "#e3d7bd",
     },
     {
       key: "right",
-      position: [6.65, 3, 0],
+      position: [8.15, 3.3, 0],
       rotation: [0, -Math.PI / 2, 0],
-      width: 7.1,
-      color: "#dccdb1",
+      width: 8.2,
+      color: "#ddd0b3",
     },
     {
       key: "front-right",
-      position: [4.7, 3, 4.7],
+      position: [5.75, 3.3, 5.02],
       rotation: [0, (-3 * Math.PI) / 4, 0],
-      width: 4.2,
-      color: "#d7c7a8",
+      width: 5.1,
+      color: "#d8c8a8",
     },
   ];
 
@@ -345,12 +312,12 @@ function RoomShell({ floorTexture }: { floorTexture: Texture | null }) {
           rotation={segment.rotation}
         >
           <planeGeometry args={[segment.width, 6]} />
-          <meshLambertMaterial color={segment.color} side={DoubleSide} />
+        <meshLambertMaterial color={segment.color} side={DoubleSide} />
         </mesh>
       ))}
 
       <mesh position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <circleGeometry args={[8.6, 8]} />
+        <circleGeometry args={[10.15, 8]} />
         <meshLambertMaterial
           color="#8B6914"
           map={floorTexture ?? undefined}
@@ -358,44 +325,56 @@ function RoomShell({ floorTexture }: { floorTexture: Texture | null }) {
         />
       </mesh>
 
+      <mesh position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[9.75, 10.18, 8]} />
+        <meshLambertMaterial color="#2a1709" side={DoubleSide} />
+      </mesh>
+
       <mesh position={[0, 6, 0]} rotation={[Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[8.6, 8]} />
+        <circleGeometry args={[10.5, 8]} />
         <meshLambertMaterial color="#6b4c1a" side={DoubleSide} />
       </mesh>
 
+      <mesh position={[0, 6.95, 0]}>
+        <cylinderGeometry args={[8.95, 10.8, 0.44, 8]} />
+        <meshLambertMaterial color="#220f05" />
+      </mesh>
+
       {[
-        [-3.55, 3, -8.15],
-        [3.55, 3, -8.15],
-        [-8.15, 3, -3.55],
-        [-8.15, 3, 3.55],
-        [8.15, 3, -3.55],
-        [8.15, 3, 3.55],
-        [-3.55, 3, 8.15],
-        [3.55, 3, 8.15],
+        [-4.15, 3.3, -9.1],
+        [4.15, 3.3, -9.1],
+        [-9.1, 3.3, -4.15],
+        [-9.1, 3.3, 4.15],
+        [9.1, 3.3, -4.15],
+        [9.1, 3.3, 4.15],
+        [-4.15, 3.3, 9.1],
+        [4.15, 3.3, 9.1],
       ].map((position, index) => (
         <WallBeam
           key={`corner-post-${index}`}
           position={position as [number, number, number]}
-          args={[0.16, 6.04, 0.16]}
+          args={[0.26, 6.64, 0.26]}
+          color="#2b1408"
         />
       ))}
 
-      <WallBeam position={[0, 5.92, -5.94]} args={[7.32, 0.16, 0.16]} />
-      <WallBeam position={[0, 0.08, -5.94]} args={[7.32, 0.16, 0.16]} />
+      <WallBeam position={[0, 6.42, -6.52]} args={[8.92, 0.2, 0.2]} color="#2a1507" />
+      <WallBeam position={[0, 0.16, -6.52]} args={[8.92, 0.2, 0.2]} color="#7d5b26" />
 
       {[
-        { key: "beam-left-back", position: [-4.7, 5.92, -4.7] as [number, number, number], rotation: [0, Math.PI / 4, 0] as [number, number, number] },
-        { key: "beam-left-side", position: [-6.65, 5.92, 0] as [number, number, number], rotation: [0, Math.PI / 2, 0] as [number, number, number] },
-        { key: "beam-left-front", position: [-4.7, 5.92, 4.7] as [number, number, number], rotation: [0, (3 * Math.PI) / 4, 0] as [number, number, number] },
-        { key: "beam-right-back", position: [4.7, 5.92, -4.7] as [number, number, number], rotation: [0, -Math.PI / 4, 0] as [number, number, number] },
-        { key: "beam-right-side", position: [6.65, 5.92, 0] as [number, number, number], rotation: [0, -Math.PI / 2, 0] as [number, number, number] },
-        { key: "beam-right-front", position: [4.7, 5.92, 4.7] as [number, number, number], rotation: [0, (-3 * Math.PI) / 4, 0] as [number, number, number] },
+        { key: "beam-left-back", position: [-5.75, 6.42, -5.02] as [number, number, number], rotation: [0, Math.PI / 4, 0] as [number, number, number] },
+        { key: "beam-left-side", position: [-8.15, 6.42, 0] as [number, number, number], rotation: [0, Math.PI / 2, 0] as [number, number, number] },
+        { key: "beam-left-front", position: [-5.75, 6.42, 5.02] as [number, number, number], rotation: [0, (3 * Math.PI) / 4, 0] as [number, number, number] },
+        { key: "beam-right-back", position: [5.75, 6.42, -5.02] as [number, number, number], rotation: [0, -Math.PI / 4, 0] as [number, number, number] },
+        { key: "beam-right-side", position: [8.15, 6.42, 0] as [number, number, number], rotation: [0, -Math.PI / 2, 0] as [number, number, number] },
+        { key: "beam-right-front", position: [5.75, 6.42, 5.02] as [number, number, number], rotation: [0, (-3 * Math.PI) / 4, 0] as [number, number, number] },
       ].map((beam) => (
         <WallBeam
           key={beam.key}
           position={beam.position}
-          args={[4.34, 0.12, 0.18]}
+          args={[5.2, 0.14, 0.24]}
           rotation={beam.rotation}
+          color="#2a1507"
         />
       ))}
     </>
@@ -476,23 +455,29 @@ function FloorIdentityRug({
   isMobile: boolean;
 }) {
   return (
-    <group position={[0, 0.06, 2.55]} rotation={[-Math.PI / 2, 0, 0]}>
+    <group position={[0, 0.06, 1.45]} rotation={[-Math.PI / 2, 0, 0]}>
       <mesh receiveShadow>
-        <planeGeometry args={[4.5, 3.4]} />
-        <meshLambertMaterial color="#d6b874" />
+        <planeGeometry args={[3.95, 3.05]} />
+        <meshLambertMaterial color="#d6b874" side={DoubleSide} />
       </mesh>
       <mesh position={[0, 0, 0.02]} receiveShadow>
-        <planeGeometry args={[4.18, 3.08]} />
-        <meshLambertMaterial color="#2c190a" />
+        <planeGeometry args={[3.62, 2.72]} />
+        <meshLambertMaterial color="#2c190a" side={DoubleSide} />
       </mesh>
-      <Html transform position={[0, 0.08, 0.03]} style={{ pointerEvents: "none" }}>
+      <Html
+        transform
+        occlude
+        zIndexRange={[1, 0]}
+        position={[0, 0.05, 0.03]}
+        style={{ pointerEvents: "none" }}
+      >
         <div
           style={{
-            width: isMobile ? 220 : 280,
-            height: isMobile ? 158 : 196,
-            borderRadius: 16,
+            width: isMobile ? 176 : 232,
+            height: isMobile ? 132 : 172,
+            borderRadius: 14,
             overflow: "hidden",
-            boxShadow: "0 18px 36px rgba(0,0,0,0.28)",
+            boxShadow: "0 16px 28px rgba(0,0,0,0.24)",
             border: "1px solid rgba(255,255,255,0.12)",
           }}
         >
@@ -510,12 +495,12 @@ function FloorIdentityRug({
         </div>
       </Html>
       <Text
-        position={[0, -1.95, 0.04]}
-        fontSize={0.34}
+        position={[0, -1.72, 0.04]}
+        fontSize={0.28}
         color="#f8efd7"
         anchorX="center"
         anchorY="middle"
-        maxWidth={4.2}
+        maxWidth={3.6}
       >
         {title}
       </Text>
@@ -534,7 +519,7 @@ function CommunityWallDisplay({
   useCursor(hovered, "pointer", "auto");
 
   return (
-    <group position={[0, 2.95, -5.76]}>
+    <group position={[0, 3.1, -6.28]}>
       <mesh
         onClick={(event) => {
           event.stopPropagation();
@@ -546,36 +531,36 @@ function CommunityWallDisplay({
         }}
         onPointerOut={() => setHovered(false)}
       >
-        <planeGeometry args={[4.1, 3.2]} />
+        <planeGeometry args={[5.25, 3.65]} />
         <meshLambertMaterial color={hovered ? "#6d4d1a" : "#573a14"} />
       </mesh>
       <mesh position={[0, 0, 0.02]}>
-        <planeGeometry args={[3.7, 2.82]} />
+        <planeGeometry args={[4.78, 3.18]} />
         <meshLambertMaterial color="#1f1811" opacity={0.88} transparent />
       </mesh>
       <Text
-        position={[0, 0.86, 0.04]}
-        fontSize={0.24}
+        position={[0, 1.02, 0.04]}
+        fontSize={0.28}
         color="#f4e3bb"
         anchorX="center"
         anchorY="middle"
-        maxWidth={3.2}
+        maxWidth={4.4}
       >
         Community Wall
       </Text>
       <Text
-        position={[0, 0.2, 0.04]}
-        fontSize={0.15}
+        position={[0, 0.22, 0.04]}
+        fontSize={0.16}
         color="#d8c79f"
         anchorX="center"
         anchorY="middle"
-        maxWidth={3.1}
+        maxWidth={4.05}
       >
         Click to zoom in, write, and read what people are doing in {title}
       </Text>
       <Text
-        position={[0, -0.92, 0.04]}
-        fontSize={0.18}
+        position={[0, -1.08, 0.04]}
+        fontSize={0.2}
         color={hovered ? "#ffe3a3" : "#d7b36a"}
         anchorX="center"
         anchorY="middle"
@@ -1475,55 +1460,54 @@ function RoomScene({
 
   return (
     <>
-      <ambientLight intensity={0.35} color="#ffe4b5" />
+      <ambientLight intensity={0.52} color="#ffe5c0" />
       <pointLight
-        position={[0, 5.5, -2]}
-        intensity={1.8}
-        color="#ffd580"
-        distance={18}
+        position={[0, 6.1, -1.5]}
+        intensity={2.1}
+        color="#ffd89b"
+        distance={22}
       />
       <pointLight
-        position={[-7, 3.5, -2]}
-        intensity={0.9}
+        position={[-8.2, 4.4, -1.6]}
+        intensity={1.1}
         color="#ffaa44"
-        distance={10}
+        distance={14}
       />
       <pointLight
-        position={[7, 3.5, -2]}
-        intensity={0.9}
+        position={[8.2, 4.4, -1.6]}
+        intensity={1.1}
         color="#ffaa44"
-        distance={10}
+        distance={14}
       />
       <pointLight
-        position={[0, 3, -5.5]}
-        intensity={0.7}
+        position={[0, 3.4, -6.1]}
+        intensity={0.86}
         color="#ffe8c0"
-        distance={8}
+        distance={10}
       />
       <pointLight
-        position={[0, 0.5, 4]}
-        intensity={0.4}
-        color="#88ffaa"
-        distance={12}
+        position={[0, 1.1, 5.4]}
+        intensity={0.55}
+        color="#89d39c"
+        distance={16}
       />
 
       <RoomShell floorTexture={floorTexture} />
       <FloorIdentityRug title={title} imageUrl={imageUrl} isMobile={isMobile} />
       <CommunityWallDisplay title={title} onOpen={onOpenWall} />
-      <Bench position={[-4.7, 0, 4.2]} />
-      <Bench position={[4.7, 0, 4.2]} />
-      <mesh position={[-3.2, 3, 5.3]}>
+      <Bench position={[-5.8, 0, 5.1]} />
+      <Bench position={[5.8, 0, 5.1]} />
+      <mesh position={[-3.9, 3.4, 6.05]}>
         <cylinderGeometry args={[0.15, 0.2, 6, 8]} />
         <meshLambertMaterial color="#5c3d1e" />
       </mesh>
-      <mesh position={[3.2, 3, 5.3]}>
+      <mesh position={[3.9, 3.4, 6.05]}>
         <cylinderGeometry args={[0.15, 0.2, 6, 8]} />
         <meshLambertMaterial color="#5c3d1e" />
       </mesh>
-      <Planter position={[-6.1, 0, 2.8]} />
-      <Planter position={[6.1, 0, 2.8]} />
+      <Planter position={[-7.25, 0, 3.8]} />
+      <Planter position={[7.25, 0, 3.8]} />
 
-      {loading ? <SceneOverlay label="Loading room..." /> : null}
       {error ? <SceneOverlay label={`Room failed to load: ${error}`} /> : null}
       {!loading && !error && !scene ? (
         <SceneOverlay label="Room unavailable" />
@@ -1543,15 +1527,15 @@ function RoomScene({
         : null}
 
       <OrbitControls
-        target={[0, 2.55, -0.2]}
-        minDistance={4}
-        maxDistance={13}
-        minPolarAngle={Math.PI / 8}
-        maxPolarAngle={Math.PI / 1.85}
+        target={[0, 2.95, -0.75]}
+        minDistance={4.8}
+        maxDistance={12.4}
+        minPolarAngle={Math.PI / 7}
+        maxPolarAngle={Math.PI / 2.05}
         enablePan
-        panSpeed={0.6}
+        panSpeed={0.52}
         enableDamping
-        dampingFactor={0.1}
+        dampingFactor={0.12}
       />
     </>
   );
@@ -1571,7 +1555,7 @@ function BungalowSceneFallback({
   return (
     <div
       style={{
-        height: isMobile ? 400 : 580,
+        height: isMobile ? 460 : 700,
         borderRadius: 12,
         background:
           "linear-gradient(180deg, rgba(36,20,8,0.96), rgba(16,10,4,0.98))",
@@ -1647,6 +1631,7 @@ export default function BungalowScene({
   imageUrl,
   initialBodegaItem = null,
   onInitialBodegaItemConsumed,
+  onSceneReadyChange,
 }: BungalowSceneProps) {
   const isMobile = useIsMobile(768);
   const navigate = useNavigate();
@@ -1675,12 +1660,6 @@ export default function BungalowScene({
     adminAddress?.toLowerCase() === walletAddress?.toLowerCase();
   const canPlaceBodegaItems = true;
   const compatibleSlotTypes = getCompatibleSlotTypes(selectedBodegaItem);
-  const openPlacementSpotCount =
-    scene?.slots.filter(
-      (slot) =>
-        !slot.filled &&
-        (!compatibleSlotTypes || compatibleSlotTypes.includes(slot.slotType)),
-    ).length ?? 0;
   const roomImageUrl = imageUrl || getTokenImageUrl(null, ca, symbol ?? title);
 
   const loadWallFeed = useCallback(async () => {
@@ -1715,10 +1694,14 @@ export default function BungalowScene({
 
     initialBodegaItemAppliedRef.current = true;
     setShowBodegaModal(false);
-    setSelectedBodegaSlotId(null);
+    setSelectedBodegaSlotId("auto");
     setSelectedBodegaItem(initialBodegaItem);
     onInitialBodegaItemConsumed?.();
   }, [initialBodegaItem, onInitialBodegaItemConsumed]);
+
+  useEffect(() => {
+    onSceneReadyChange?.(!loading);
+  }, [loading, onSceneReadyChange]);
 
   useEffect(() => {
     if (!wallOpen) {
@@ -1836,7 +1819,7 @@ export default function BungalowScene({
       <div
         style={{
           width: "100%",
-          height: isMobile ? 400 : 580,
+          height: isMobile ? 460 : 700,
           borderRadius: 12,
           overflow: "hidden",
           position: "relative",
@@ -1952,10 +1935,10 @@ export default function BungalowScene({
             width: "100%",
             height: "100%",
           }}
-          camera={{ position: [0, 4, 10], fov: 62 }}
+          camera={{ position: [0, 3.5, 8.9], fov: 56 }}
         >
           <color attach="background" args={["#1a0f05"]} />
-          <Suspense fallback={<SceneOverlay label="Loading room..." />}>
+          <Suspense fallback={null}>
             <RoomScene
               scene={scene}
               loading={loading}
@@ -2017,72 +2000,9 @@ export default function BungalowScene({
           }}
         >
           {loading
-            ? "Syncing room..."
-            : formatPlacementSpotCount(
-                openPlacementSpotCount,
-                compatibleSlotTypes,
-              )}
+            ? "Preparing bungalow..."
+            : "Collage walls auto-arrange new pieces"}
         </div>
-
-        {selectedBodegaItem && !selectedBodegaSlotId ? (
-          <div
-            style={{
-              position: "absolute",
-              left: 12,
-              right: 12,
-              bottom: 52,
-              zIndex: 3,
-              display: "flex",
-              justifyContent: "center",
-              pointerEvents: "none",
-            }}
-          >
-            <div
-              style={{
-                pointerEvents: "auto",
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                padding: "10px 12px",
-                borderRadius: 14,
-                border: "1px solid rgba(255,255,255,0.1)",
-                background: "rgba(10,16,10,0.78)",
-                backdropFilter: "blur(12px)",
-                color: "#f7efd6",
-                fontSize: 12,
-                lineHeight: 1.4,
-                flexWrap: "wrap",
-                justifyContent: "center",
-              }}
-            >
-              <span>
-                Placing <strong>{selectedBodegaItem.title}</strong>. Click an
-                open{" "}
-                <strong>{describePlacementSpots(compatibleSlotTypes)}</strong>{" "}
-                in this room.
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedBodegaItem(null);
-                  setSelectedBodegaSlotId(null);
-                }}
-                style={{
-                  minHeight: 30,
-                  padding: "0 12px",
-                  borderRadius: 999,
-                  border: "1px solid rgba(255,255,255,0.14)",
-                  background: "rgba(255,255,255,0.05)",
-                  color: "white",
-                  cursor: "pointer",
-                  font: "inherit",
-                }}
-              >
-                Cancel placement
-              </button>
-            </div>
-          </div>
-        ) : null}
       </div>
 
       {activeSlotId ? (
@@ -2107,7 +2027,7 @@ export default function BungalowScene({
           canSelectItems={canPlaceBodegaItems}
           onSelectItem={(item) => {
             setSelectedBodegaItem(item);
-            setSelectedBodegaSlotId(null);
+            setSelectedBodegaSlotId("auto");
             setShowBodegaModal(false);
           }}
           onClose={() => setShowBodegaModal(false)}
@@ -2121,7 +2041,10 @@ export default function BungalowScene({
           bungalowName={title}
           chain={chain}
           ca={ca}
-          onClose={() => setSelectedBodegaSlotId(null)}
+          onClose={() => {
+            setSelectedBodegaSlotId(null);
+            setSelectedBodegaItem(null);
+          }}
           onPlace={updateSlot}
           onPlaced={() => {
             setSelectedBodegaSlotId(null);

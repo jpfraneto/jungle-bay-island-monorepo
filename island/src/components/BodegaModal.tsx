@@ -190,7 +190,7 @@ export default function BodegaModal({
           }}
         >
           {canSelectItems
-            ? "Pick a Bodega item, then click an open placement spot in the room."
+            ? "Pick a Bodega item and the bungalow will auto-arrange it onto the room collage."
             : "Only the bungalow steward can place Bodega items inside this room."}
         </div>
 

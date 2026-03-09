@@ -44,6 +44,7 @@ function asString(value: unknown): string {
 }
 
 function inferSlotType(slotId: string): string {
+  if (slotId === "auto") return "Auto collage";
   if (slotId.includes("wall-frame")) return "Wall frame";
   if (slotId.includes("portal")) return "Portal";
   if (slotId.includes("shelf")) return "Shelf";
@@ -488,9 +489,9 @@ export default function BodegaPlacementModal({
           }}
         >
           You need to pay <strong>{formatJbmAmount(item.price_in_jbm)}</strong>{" "}
-          jungle bay memes to place this in the{" "}
-          <strong>{inferSlotType(slotId).toLowerCase()}</strong> slot inside{" "}
-          <strong>{bungalowName}</strong>.
+          jungle bay memes to add this into the <strong>{bungalowName}</strong>{" "}
+          collage. The room will auto-place it on the right wall or floor
+          surface for you.
         </div>
 
         <TransactionWalletSelector

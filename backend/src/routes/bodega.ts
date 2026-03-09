@@ -10,6 +10,7 @@ import {
   createBodegaInstall,
   createBonusHeatEvent,
   createCatalogItem,
+  getBodegaInstallByTxHash,
   getBodegaInstallsByBungalow,
   getAggregatedUserByWallets,
   getCatalogItem,
@@ -997,14 +998,9 @@ bodegaRoute.post('/install', requirePrivyAuth, async (c) => {
     throw new ApiError(400, 'insufficient_jbm_amount', 'jbm_amount must match or exceed the catalog item price')
   }
 
-  const duplicateRows = await db<Array<{ id: number }>>`
-    SELECT id
-    FROM ${db(CONFIG.SCHEMA)}.bodega_installs
-    WHERE tx_hash = ${txHash}
-    LIMIT 1
-  `
-  if (duplicateRows.length > 0) {
-    throw new ApiError(409, 'duplicate_tx_hash', 'tx_hash has already been used')
+  const existingInstall = await getBodegaInstallByTxHash(txHash)
+  if (existingInstall) {
+    return c.json({ install: existingInstall })
   }
 
   const install = await createBodegaInstall({

@@ -2,11 +2,12 @@ import type { JWK, JWTPayload, KeyLike } from 'jose'
 import { createRemoteJWKSet, decodeProtectedHeader, importJWK, importSPKI, jwtVerify } from 'jose'
 import type { MiddlewareHandler } from 'hono'
 import { CONFIG, normalizeAddress } from '../config'
-import { getAgentByKeyHash } from '../db/queries'
+import { getAgentByKeyHash, getUserWallets } from '../db/queries'
 import type { AppEnv } from '../types'
 import { ApiError } from '../services/errors'
 import { logInfo, logWarn } from '../services/logger'
 import { getPrivyLinkedAccounts } from '../services/privyClaims'
+import { fetchPrivyUserLinkedAccounts } from '../services/privyServer'
 
 type VerificationKey = KeyLike | Uint8Array
 
@@ -132,18 +133,28 @@ async function tryAgentAuth(c: any): Promise<boolean> {
   return true
 }
 
-function walletFromClaims(payload: JWTPayload): string | null {
-  const directAddress = typeof payload.wallet_address === 'string'
-    ? payload.wallet_address
-    : typeof payload.address === 'string'
-      ? payload.address
-      : null
+function extractPrivyUserId(payload: JWTPayload): string | null {
+  const value = typeof payload.sub === 'string' ? payload.sub.trim() : ''
+  return value || null
+}
 
-  if (directAddress) {
-    return normalizeAddress(directAddress)
+function normalizeWalletValue(value: string, chainHint?: string): string | null {
+  const normalizedHint = chainHint?.trim().toLowerCase() ?? ''
+
+  if (
+    normalizedHint.includes('solana')
+    || normalizedHint.includes('ed25519')
+    || (!value.trim().startsWith('0x') && normalizedHint.includes('sol'))
+  ) {
+    return normalizeAddress(value, 'solana')
   }
 
-  const linkedAccounts = getPrivyLinkedAccounts(payload)
+  return normalizeAddress(value) ?? normalizeAddress(value, 'solana')
+}
+
+function extractWalletsFromLinkedAccounts(linkedAccounts: Array<Record<string, unknown>>): string[] {
+  const wallets: string[] = []
+
   for (const account of linkedAccounts) {
     const candidate = account as Record<string, unknown>
     if (
@@ -154,11 +165,84 @@ function walletFromClaims(payload: JWTPayload): string | null {
       continue
     }
     if (typeof candidate.address !== 'string') continue
-    const wallet = normalizeAddress(candidate.address)
-    if (wallet) return wallet
+
+    const wallet = normalizeWalletValue(
+      candidate.address,
+      typeof candidate.chain_type === 'string' ? candidate.chain_type : undefined,
+    )
+    if (wallet) {
+      wallets.push(wallet)
+    }
   }
 
-  return null
+  return wallets
+}
+
+function dedupeWallets(wallets: Array<string | null | undefined>): string[] {
+  const seen = new Set<string>()
+  const deduped: string[] = []
+
+  for (const wallet of wallets) {
+    if (!wallet || seen.has(wallet)) {
+      continue
+    }
+    seen.add(wallet)
+    deduped.push(wallet)
+  }
+
+  return deduped
+}
+
+function walletsFromClaims(payload: JWTPayload): string[] {
+  const directAddress = typeof payload.wallet_address === 'string'
+    ? payload.wallet_address
+    : typeof payload.address === 'string'
+      ? payload.address
+      : null
+  const directWallet = directAddress ? normalizeWalletValue(directAddress) : null
+
+  return dedupeWallets([
+    directWallet,
+    ...extractWalletsFromLinkedAccounts(getPrivyLinkedAccounts(payload)),
+  ])
+}
+
+function walletFromClaims(payload: JWTPayload): string | null {
+  return walletsFromClaims(payload)[0] ?? null
+}
+
+async function resolvePrivyAuthContext(payload: JWTPayload): Promise<{
+  walletAddress: string | null
+  walletAddresses: string[]
+  privyUserId: string | null
+}> {
+  const privyUserId = extractPrivyUserId(payload)
+  const claimWallets = walletsFromClaims(payload)
+  const storedWallets = privyUserId
+    ? (await getUserWallets(privyUserId))
+      .map((row) => normalizeAddress(row.address) ?? normalizeAddress(row.address, 'solana'))
+      .filter((wallet): wallet is string => Boolean(wallet))
+    : []
+
+  let remoteWallets: string[] = []
+  if (privyUserId && claimWallets.length === 0 && storedWallets.length === 0) {
+    const linkedAccounts = await fetchPrivyUserLinkedAccounts(privyUserId)
+    if (linkedAccounts) {
+      remoteWallets = extractWalletsFromLinkedAccounts(linkedAccounts)
+    }
+  }
+
+  const walletAddresses = dedupeWallets([
+    ...storedWallets,
+    ...claimWallets,
+    ...remoteWallets,
+  ])
+
+  return {
+    walletAddress: walletAddresses[0] ?? walletFromClaims(payload),
+    walletAddresses,
+    privyUserId,
+  }
 }
 
 export async function verifyPrivyToken(token: string): Promise<{ walletAddress: string | null; payload: JWTPayload }> {
@@ -276,11 +360,18 @@ export const optionalWalletContext: MiddlewareHandler<AppEnv> = async (c, next) 
 
   if (token) {
     try {
-      const { walletAddress, payload } = await verifyPrivyToken(token)
-      if (walletAddress) {
-        c.set('walletAddress', walletAddress)
+      const verified = await verifyPrivyToken(token)
+      const resolved = await resolvePrivyAuthContext(verified.payload)
+      if (resolved.walletAddress) {
+        c.set('walletAddress', resolved.walletAddress)
       }
-      c.set('privyClaims', payload)
+      if (resolved.walletAddresses.length > 0) {
+        c.set('walletAddresses', resolved.walletAddresses)
+      }
+      if (resolved.privyUserId) {
+        c.set('privyUserId', resolved.privyUserId)
+      }
+      c.set('privyClaims', verified.payload)
     } catch {
       // Optional context should not fail public endpoints.
     }
@@ -326,11 +417,19 @@ export const requireWalletAuth: MiddlewareHandler<AppEnv> = async (c, next) => {
     )
   }
 
-  if (!verified.walletAddress) {
+  const resolved = await resolvePrivyAuthContext(verified.payload)
+
+  if (!resolved.walletAddress) {
     throw new ApiError(401, 'wallet_required', 'Privy token is missing a wallet account')
   }
 
-  c.set('walletAddress', verified.walletAddress)
+  c.set('walletAddress', resolved.walletAddress)
+  if (resolved.walletAddresses.length > 0) {
+    c.set('walletAddresses', resolved.walletAddresses)
+  }
+  if (resolved.privyUserId) {
+    c.set('privyUserId', resolved.privyUserId)
+  }
   c.set('privyClaims', verified.payload)
   await next()
 }
@@ -351,8 +450,16 @@ export const requirePrivyAuth: MiddlewareHandler<AppEnv> = async (c, next) => {
     throw new ApiError(401, 'invalid_token', 'Privy token verification failed')
   }
 
-  if (verified.walletAddress) {
-    c.set('walletAddress', verified.walletAddress)
+  const resolved = await resolvePrivyAuthContext(verified.payload)
+
+  if (resolved.walletAddress) {
+    c.set('walletAddress', resolved.walletAddress)
+  }
+  if (resolved.walletAddresses.length > 0) {
+    c.set('walletAddresses', resolved.walletAddresses)
+  }
+  if (resolved.privyUserId) {
+    c.set('privyUserId', resolved.privyUserId)
   }
   c.set('privyClaims', verified.payload)
   await next()

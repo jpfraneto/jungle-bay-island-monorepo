@@ -2862,6 +2862,27 @@ export async function createBodegaInstall(data: {
   return rows[0]
 }
 
+export async function getBodegaInstallByTxHash(txHash: string): Promise<BodegaInstallRow | null> {
+  const rows = await db<BodegaInstallRow[]>`
+    SELECT
+      id,
+      catalog_item_id,
+      installed_to_token_address,
+      installed_to_chain,
+      installed_by_wallet,
+      tx_hash,
+      jbm_amount::text AS jbm_amount,
+      creator_credit_jbm::text AS creator_credit_jbm,
+      credit_claimed,
+      created_at::text AS created_at
+    FROM ${db(CONFIG.SCHEMA)}.bodega_installs
+    WHERE tx_hash = ${txHash}
+    LIMIT 1
+  `
+
+  return rows[0] ?? null
+}
+
 /**
  * Lists installs for one bungalow with embedded catalog metadata for the bungalow page.
  */

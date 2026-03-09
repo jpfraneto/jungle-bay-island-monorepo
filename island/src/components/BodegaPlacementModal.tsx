@@ -39,6 +39,11 @@ interface ConfirmedPayment {
   amount: string;
 }
 
+interface PlacementRecoveryState {
+  payment: ConfirmedPayment | null;
+  install: InstallRecord | null;
+}
+
 function asString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -165,6 +170,78 @@ function normalizeInstallRecord(input: unknown): InstallRecord | null {
   return { id };
 }
 
+function getPlacementRecoveryKey(input: {
+  chain: string;
+  ca: string;
+  itemId: number;
+  slotId: string;
+}): string {
+  return `jbi:bodega-placement:${input.chain}:${input.ca}:${input.itemId}:${input.slotId}`;
+}
+
+function readPlacementRecoveryState(key: string): PlacementRecoveryState | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(key);
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw) as {
+      payment?: unknown;
+      install?: unknown;
+    };
+
+    const payment =
+      parsed.payment && typeof parsed.payment === "object"
+        ? (parsed.payment as ConfirmedPayment)
+        : null;
+    const install = normalizeInstallRecord(parsed.install);
+
+    const normalizedPayment =
+      payment &&
+      typeof payment.txHash === "string" &&
+      typeof payment.payer === "string" &&
+      typeof payment.amount === "string"
+        ? payment
+        : null;
+    const normalizedInstall = normalizedPayment ? install : null;
+
+    if (!normalizedPayment && !normalizedInstall) {
+      return null;
+    }
+
+    return {
+      payment: normalizedPayment,
+      install: normalizedInstall,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writePlacementRecoveryState(
+  key: string,
+  state: PlacementRecoveryState,
+): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.sessionStorage.setItem(key, JSON.stringify(state));
+}
+
+function clearPlacementRecoveryState(key: string): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.sessionStorage.removeItem(key);
+}
+
 export default function BodegaPlacementModal({
   item,
   slotId,
@@ -195,15 +272,35 @@ export default function BodegaPlacementModal({
     useState<ConfirmedPayment | null>(null);
   const [confirmedInstall, setConfirmedInstall] =
     useState<InstallRecord | null>(null);
+  const recoveryKey = getPlacementRecoveryKey({
+    chain,
+    ca,
+    itemId: item.id,
+    slotId,
+  });
 
   useEffect(() => {
+    const recovered = readPlacementRecoveryState(recoveryKey);
+
     setStatus(null);
     setError(null);
     setShowWalletGate(false);
-    setSelectedWallet(walletAddress ?? "");
-    setConfirmedPayment(null);
-    setConfirmedInstall(null);
-  }, [item.id, slotId, walletAddress]);
+    setSelectedWallet(recovered?.payment?.payer ?? walletAddress ?? "");
+    setConfirmedPayment(recovered?.payment ?? null);
+    setConfirmedInstall(recovered?.install ?? null);
+  }, [item.id, recoveryKey, slotId, walletAddress]);
+
+  useEffect(() => {
+    if (!confirmedPayment && !confirmedInstall) {
+      clearPlacementRecoveryState(recoveryKey);
+      return;
+    }
+
+    writePlacementRecoveryState(recoveryKey, {
+      payment: confirmedPayment,
+      install: confirmedInstall,
+    });
+  }, [confirmedInstall, confirmedPayment, recoveryKey]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -234,6 +331,7 @@ export default function BodegaPlacementModal({
   const canRetryWithoutPaying = Boolean(confirmedPayment);
   const canRetryPlacementOnly = Boolean(confirmedInstall);
   const isProcessing = Boolean(status) || isTransferring;
+  const lockedPayer = confirmedPayment?.payer ?? null;
 
   const handleLinkWallet = async () => {
     try {
@@ -278,6 +376,7 @@ export default function BodegaPlacementModal({
           payer: transferResult.from,
           amount: item.price_in_jbm,
         };
+        setSelectedWallet(transferResult.from);
         setConfirmedPayment(payment);
       }
 
@@ -333,6 +432,7 @@ export default function BodegaPlacementModal({
         token,
       );
 
+      clearPlacementRecoveryState(recoveryKey);
       setConfirmedPayment(null);
       setConfirmedInstall(null);
       setStatus(null);
@@ -494,19 +594,44 @@ export default function BodegaPlacementModal({
           surface for you.
         </div>
 
-        <TransactionWalletSelector
-          label="Sign with"
-          value={selectedWallet}
-          onSelect={(nextAddress) => {
-            setSelectedWallet(nextAddress);
-            setError(null);
-            setShowWalletGate(false);
-          }}
-          onAddWallet={handleLinkWallet}
-          isAddingWallet={isLinkingWallet}
-          addWalletStatus={linkStatus}
-          addWalletError={linkError}
-        />
+        {lockedPayer ? (
+          <div
+            style={{
+              display: "grid",
+              gap: 6,
+              borderRadius: 12,
+              border: "1px solid rgba(255,255,255,0.08)",
+              background: "rgba(0,0,0,0.18)",
+              padding: "12px 14px",
+            }}
+          >
+            <span style={{ fontSize: 13, color: "rgba(247,239,214,0.72)" }}>
+              Sign with
+            </span>
+            <strong style={{ fontSize: 14, color: "#f7efd6" }}>
+              {lockedPayer}
+            </strong>
+            <span style={{ fontSize: 12, color: "rgba(247,239,214,0.72)" }}>
+              {canRetryPlacementOnly
+                ? "Install is already recorded. You can retry the bungalow placement without paying again."
+                : "Payment is already confirmed. Continuing will finish the install without another transfer."}
+            </span>
+          </div>
+        ) : (
+          <TransactionWalletSelector
+            label="Sign with"
+            value={selectedWallet}
+            onSelect={(nextAddress) => {
+              setSelectedWallet(nextAddress);
+              setError(null);
+              setShowWalletGate(false);
+            }}
+            onAddWallet={handleLinkWallet}
+            isAddingWallet={isLinkingWallet}
+            addWalletStatus={linkStatus}
+            addWalletError={linkError}
+          />
+        )}
 
         {showWalletGate ? (
           <div

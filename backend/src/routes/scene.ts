@@ -15,7 +15,8 @@ import type { AppEnv } from '../types'
 
 type SlotType = 'wall-frame' | 'shelf' | 'portal' | 'floor' | 'link'
 type DecorationType = 'image' | 'portal' | 'furniture' | 'social-link' | 'website-link' | 'decoration'
-type SceneChain = 'base' | 'ethereum'
+type SceneBungalowChain = 'base' | 'ethereum' | 'solana'
+type ScenePurchaseChain = 'base' | 'ethereum'
 
 interface DecorationConfig {
   type: DecorationType
@@ -142,7 +143,7 @@ function createSideWallFrameSlots(input: {
   )
 }
 
-function createDefaultScene(chain: 'base' | 'ethereum', ca: string): SceneConfig {
+function createDefaultScene(chain: SceneBungalowChain, ca: string): SceneConfig {
   return {
     version: '1.0',
     bungalowId: `${chain}:${ca}`,
@@ -475,14 +476,19 @@ function extractPrivyUserId(claims: Record<string, unknown> | undefined): string
   return privyUserId || null
 }
 
-function toSceneChain(input: string): SceneChain | null {
+function toSceneBungalowChain(input: string): SceneBungalowChain | null {
+  const chain = toSupportedChain(input)
+  return chain
+}
+
+function toScenePurchaseChain(input: string): ScenePurchaseChain | null {
   const chain = toSupportedChain(input)
   return chain === 'base' || chain === 'ethereum' ? chain : null
 }
 
 sceneRoute.get('/bungalow/:chain/:ca/scene', async (c) => {
-  const chain = toSceneChain(c.req.param('chain'))
-  const ca = normalizeAddress(c.req.param('ca'))
+  const chain = toSceneBungalowChain(c.req.param('chain'))
+  const ca = chain ? normalizeAddress(c.req.param('ca'), chain) : null
 
   if (!chain || !ca) {
     throw new ApiError(400, 'invalid_params', 'Invalid chain or contract address')
@@ -498,11 +504,11 @@ sceneRoute.get('/bungalow/:chain/:ca/scene', async (c) => {
 })
 
 sceneRoute.put('/bungalow/:chain/:ca/scene', requirePrivyAuth, async (c) => {
-  const chain = toSceneChain(c.req.param('chain'))
-  const ca = normalizeAddress(c.req.param('ca'))
+  const chain = toSceneBungalowChain(c.req.param('chain'))
+  const ca = chain ? normalizeAddress(c.req.param('ca'), chain) : null
   const wallet = c.get('walletAddress')
   const claims = c.get('privyClaims') as Record<string, unknown> | undefined
-  const privyUserId = extractPrivyUserId(claims)
+  const privyUserId = c.get('privyUserId') ?? extractPrivyUserId(claims)
 
   if (!chain || !ca || !privyUserId) {
     throw new ApiError(400, 'invalid_params', 'Invalid chain, contract address, or authenticated user')
@@ -528,18 +534,19 @@ sceneRoute.put('/bungalow/:chain/:ca/scene', requirePrivyAuth, async (c) => {
 
   const linkedWalletRows = await getUserWallets(privyUserId)
   const linkedWallets = linkedWalletRows
-    .map((row) => normalizeAddress(row.address))
+    .map((row) => normalizeAddress(row.address) ?? normalizeAddress(row.address, 'solana'))
     .filter((address): address is string => Boolean(address))
   const scopedWallets = [...new Set([
-    ...(wallet ? [wallet.toLowerCase()] : []),
-    ...linkedWallets.map((address) => address.toLowerCase()),
+    ...(wallet ? [wallet] : []),
+    ...linkedWallets,
   ])]
+  const scopedWalletKeys = new Set(scopedWallets.map((address) => address.toLowerCase()))
   const requestedPlacedBy =
     typeof body.decoration.placedBy === 'string'
-      ? normalizeAddress(body.decoration.placedBy)
+      ? normalizeAddress(body.decoration.placedBy) ?? normalizeAddress(body.decoration.placedBy, 'solana')
       : null
   const actorWallet =
-    (requestedPlacedBy && scopedWallets.includes(requestedPlacedBy.toLowerCase())
+    (requestedPlacedBy && scopedWalletKeys.has(requestedPlacedBy.toLowerCase())
       ? requestedPlacedBy
       : null) ??
     wallet ??
@@ -638,8 +645,8 @@ sceneRoute.post('/assets/purchase', requireWalletAuth, async (c) => {
   }
 
   const body = await c.req.json<{ chain?: unknown; ca?: unknown; slotId?: unknown; assetId?: unknown; txHash?: unknown }>()
-  const chain = typeof body.chain === 'string' ? toSceneChain(body.chain) : null
-  const ca = typeof body.ca === 'string' ? normalizeAddress(body.ca) : null
+  const chain = typeof body.chain === 'string' ? toScenePurchaseChain(body.chain) : null
+  const ca = chain && typeof body.ca === 'string' ? normalizeAddress(body.ca, chain) : null
   const slotId = typeof body.slotId === 'string' ? body.slotId.trim() : ''
   const assetId = typeof body.assetId === 'string' ? body.assetId.trim() : ''
   const txHash = typeof body.txHash === 'string' ? body.txHash.trim() : undefined

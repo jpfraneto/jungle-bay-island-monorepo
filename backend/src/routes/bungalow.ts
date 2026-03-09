@@ -20,6 +20,7 @@ import {
   getTokenHeatDistribution,
   getTokenHolders,
   getTokenRegistry,
+  getUserWallets,
   getViewerProfile,
   getWalletTokenBalanceRaw,
   getWalletTokenHeat,
@@ -1558,13 +1559,25 @@ bungalowRoute.post("/bungalow/:chain/:ca/bulletin", requireWalletAuth, async (c)
 
   const tokenAddress = normalizeAddress(c.req.param("ca"), chain);
   const wallet = c.get("walletAddress");
+  const walletAddressesFromContext = c.get("walletAddresses") ?? [];
+  const privyUserId = c.get("privyUserId") ?? null;
 
   if (!tokenAddress || !wallet) {
     throw new ApiError(400, "invalid_params", "Invalid chain or token address");
   }
 
-  // Require 10+ heat degrees on this token to post
-  const heatDegrees = await getWalletTokenHeat(tokenAddress, wallet) ?? 0;
+  const storedWallets = privyUserId
+    ? (await getUserWallets(privyUserId))
+        .map((entry) => normalizeAddress(entry.address) ?? normalizeAddress(entry.address, "solana"))
+        .filter((entry): entry is string => Boolean(entry))
+    : [];
+  const scopedWallets = [...new Set([wallet, ...walletAddressesFromContext, ...storedWallets])];
+  const scopedHeatRows = await getWalletTokenHeats(tokenAddress, scopedWallets);
+  const heatDegrees =
+    scopedHeatRows.reduce((sum, entry) => sum + entry.heat_degrees, 0) ||
+    (await getWalletTokenHeat(tokenAddress, wallet)) ||
+    0;
+
   if (heatDegrees < 10) {
     throw new ApiError(403, 'insufficient_heat', 'You need at least 10 heat degrees on this token to post');
   }

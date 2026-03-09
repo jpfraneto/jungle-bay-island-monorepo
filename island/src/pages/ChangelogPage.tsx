@@ -63,6 +63,13 @@ export default function ChangelogPage() {
             heat and JBAC shortcut balance more reliably, and project-wide
             favicon/share metadata now present the island identity more clearly.
           </li>
+          <li>
+            Privy-authenticated bungalow actions now resolve against the
+            user&apos;s linked-wallet identity more consistently, paid Bodega
+            installs can recover cleanly after a placement retry, and the old
+            direct slot editor was removed so bungalow additions come only from
+            the Bodega flow.
+          </li>
         </ul>
       </article>
 

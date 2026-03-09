@@ -2,7 +2,6 @@ import {
   Suspense,
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -14,15 +13,12 @@ import { useNavigate } from "react-router-dom";
 import {
   CanvasTexture,
   DoubleSide,
-  EdgesGeometry,
   Group,
-  PlaneGeometry,
   Texture,
 } from "three";
 import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
 import { useBungalowScene } from "../hooks/useBungalowScene";
 import type { SlotConfig } from "../types/scene";
-import AddToSlotModal from "./AddToSlotModal";
 import BodegaModal from "./BodegaModal";
 import BodegaPlacementModal from "./BodegaPlacementModal";
 import CanvasErrorBoundary from "./CanvasErrorBoundary";
@@ -46,7 +42,6 @@ interface BungalowSceneProps {
   onSceneReadyChange?: (ready: boolean) => void;
 }
 
-type SelectableSlotType = SlotConfig["slotType"];
 type WallFeedKind = "post" | "visit" | "add_art" | "add_build" | "add_item";
 
 interface WallFeedItem {
@@ -103,39 +98,6 @@ function formatPlacementAttribution(
   }
 
   return placedAt;
-}
-
-function getCompatibleSlotTypes(
-  item: BodegaCatalogItem | null,
-): SelectableSlotType[] | null {
-  if (!item) return null;
-
-  if (item.asset_type === "portal") {
-    return ["portal"];
-  }
-
-  if (
-    item.asset_type === "link" ||
-    item.asset_type === "game" ||
-    item.asset_type === "miniapp"
-  ) {
-    return ["wall-frame", "link"];
-  }
-
-  if (item.asset_type === "image" || item.asset_type === "frame") {
-    return ["wall-frame"];
-  }
-
-  if (item.asset_type === "decoration") {
-    const format =
-      typeof item.content.format === "string"
-        ? item.content.format.trim().toLowerCase()
-        : "";
-
-    return format === "image" ? ["wall-frame"] : ["shelf", "floor"];
-  }
-
-  return ["wall-frame"];
 }
 
 async function readResponseMessage(response: Response): Promise<string> {
@@ -609,55 +571,6 @@ function Bench({ position }: { position: [number, number, number] }) {
   );
 }
 
-function EmptyOwnerSlot({ onClick }: { onClick: () => void }) {
-  const [hovered, setHovered] = useState(false);
-  const planeGeometry = useMemo(() => new PlaneGeometry(1.2, 1.2), []);
-  const edgesGeometry = useMemo(
-    () => new EdgesGeometry(planeGeometry),
-    [planeGeometry],
-  );
-
-  useCursor(hovered, "pointer", "auto");
-
-  useEffect(
-    () => () => {
-      planeGeometry.dispose();
-      edgesGeometry.dispose();
-    },
-    [edgesGeometry, planeGeometry],
-  );
-
-  return (
-    <group>
-      <mesh
-        geometry={planeGeometry}
-        onClick={(event) => {
-          event.stopPropagation();
-          onClick();
-        }}
-        onPointerOver={(event) => {
-          event.stopPropagation();
-          setHovered(true);
-        }}
-        onPointerOut={() => setHovered(false)}
-      >
-        <meshBasicMaterial
-          color="#fff2c4"
-          opacity={hovered ? 0.2 : 0.08}
-          transparent
-        />
-      </mesh>
-      <lineSegments geometry={edgesGeometry}>
-        <lineBasicMaterial
-          color="#ffe1a3"
-          opacity={hovered ? 0.46 : 0.26}
-          transparent
-        />
-      </lineSegments>
-    </group>
-  );
-}
-
 function ImageDecoration({ slot }: { slot: SlotConfig }) {
   const imageUrl = slot.decoration?.imageUrl;
   const title = slot.decoration?.name ?? "Image";
@@ -952,23 +865,12 @@ function DecorationCube({ slot }: { slot: SlotConfig }) {
 
 function SlotObject({
   slot,
-  isOwner,
   isMobile,
-  onClickEmpty,
-  compatibleSlotTypes,
 }: {
   slot: SlotConfig;
-  isOwner: boolean;
   isMobile: boolean;
-  onClickEmpty: (slotId: string) => void;
-  compatibleSlotTypes: SelectableSlotType[] | null;
 }) {
   const decorationType = slot.decoration?.type;
-  const canShowEmptySlot =
-    !slot.filled &&
-    (compatibleSlotTypes
-      ? compatibleSlotTypes.includes(slot.slotType)
-      : isOwner);
   const scaledPosition: [number, number, number] = [
     slot.position[0] * 1.9,
     slot.position[1],
@@ -977,10 +879,6 @@ function SlotObject({
 
   return (
     <group position={scaledPosition} rotation={slot.rotation}>
-      {canShowEmptySlot ? (
-        <EmptyOwnerSlot onClick={() => onClickEmpty(slot.slotId)} />
-      ) : null}
-
       {slot.filled && decorationType === "image" ? (
         <ImageDecoration slot={slot} />
       ) : null}
@@ -1437,24 +1335,18 @@ function RoomScene({
   scene,
   loading,
   error,
-  isOwner,
   isMobile,
   title,
   imageUrl,
-  onClickEmpty,
   onOpenWall,
-  compatibleSlotTypes,
 }: {
   scene: { slots: SlotConfig[] } | null;
   loading: boolean;
   error: string | null;
-  isOwner: boolean;
   isMobile: boolean;
   title: string;
   imageUrl: string | null;
-  onClickEmpty: (slotId: string) => void;
   onOpenWall: () => void;
-  compatibleSlotTypes: SelectableSlotType[] | null;
 }) {
   const floorTexture = useFloorTexture();
 
@@ -1518,10 +1410,7 @@ function RoomScene({
             <SlotObject
               key={slot.slotId}
               slot={slot}
-              isOwner={isOwner}
               isMobile={isMobile}
-              onClickEmpty={onClickEmpty}
-              compatibleSlotTypes={compatibleSlotTypes}
             />
           ))
         : null}
@@ -1642,7 +1531,6 @@ export default function BungalowScene({
     chain,
     ca,
   );
-  const [activeSlotId, setActiveSlotId] = useState<string | null>(null);
   const [showBodegaModal, setShowBodegaModal] = useState(false);
   const [selectedBodegaItem, setSelectedBodegaItem] =
     useState<BodegaCatalogItem | null>(null);
@@ -1655,11 +1543,7 @@ export default function BungalowScene({
   const [wallError, setWallError] = useState<string | null>(null);
   const [wallDraft, setWallDraft] = useState("");
   const [wallPosting, setWallPosting] = useState(false);
-  const isOwner =
-    ownerAddress?.toLowerCase() === walletAddress?.toLowerCase() ||
-    adminAddress?.toLowerCase() === walletAddress?.toLowerCase();
   const canPlaceBodegaItems = true;
-  const compatibleSlotTypes = getCompatibleSlotTypes(selectedBodegaItem);
   const roomImageUrl = imageUrl || getTokenImageUrl(null, ca, symbol ?? title);
 
   const loadWallFeed = useCallback(async () => {
@@ -1943,21 +1827,10 @@ export default function BungalowScene({
               scene={scene}
               loading={loading}
               error={error}
-              isOwner={Boolean(isOwner || selectedBodegaItem)}
               isMobile={isMobile}
               title={title}
               imageUrl={roomImageUrl}
-              compatibleSlotTypes={compatibleSlotTypes}
               onOpenWall={() => setWallOpen(true)}
-              onClickEmpty={(slotId) => {
-                if (selectedBodegaItem) {
-                  setSelectedBodegaSlotId(slotId);
-                  return;
-                }
-                if (isOwner) {
-                  setActiveSlotId(slotId);
-                }
-              }}
             />
           </Suspense>
         </Canvas>
@@ -2004,20 +1877,6 @@ export default function BungalowScene({
             : "Collage walls auto-arrange new pieces"}
         </div>
       </div>
-
-      {activeSlotId ? (
-        <AddToSlotModal
-          slotId={activeSlotId}
-          chain={chain}
-          ca={ca}
-          bungalowName={title}
-          onClose={() => setActiveSlotId(null)}
-          onSuccess={() => {
-            setActiveSlotId(null);
-            void refetch();
-          }}
-        />
-      ) : null}
 
       {showBodegaModal ? (
         <BodegaModal

@@ -137,7 +137,7 @@ export function renderUserPage(data: UserPageData): string {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='52' font-size='52'%3E%F0%9F%8F%9D%EF%B8%8F%3C/text%3E%3C/svg%3E" />
   <title>${pageTitle}</title>
   ${renderMiniappEmbed({ launchUrl: "https://memetics.lat/wallet/" + esc(data.wallet) })}
   <style>${USER_PAGE_CSS}</style>

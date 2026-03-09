@@ -122,10 +122,18 @@ function renderSpaShell(): string {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
-  <title>Jungle Bay Island</title>
-  <meta property="og:title" content="Jungle Bay Island" />
-  <meta property="og:description" content="Where meme culture finds a home" />
+  <title>Jungle Bay Island | Community bungalows for onchain projects</title>
+  <meta name="description" content="Open community bungalows for onchain projects, publish builds to the Bodega, curate rooms, and claim island rewards on Jungle Bay Island." />
+  <meta property="og:title" content="Jungle Bay Island | Community bungalows for onchain projects" />
+  <meta property="og:description" content="Open community bungalows for onchain projects, publish builds to the Bodega, curate rooms, and claim island rewards on Jungle Bay Island." />
+  <meta property="og:type" content="website" />
   <meta property="og:image" content="/og-image.png" />
+  <meta property="og:site_name" content="Jungle Bay Island" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Jungle Bay Island | Community bungalows for onchain projects" />
+  <meta name="twitter:description" content="Open community bungalows for onchain projects, publish builds to the Bodega, curate rooms, and claim island rewards on Jungle Bay Island." />
+  <meta name="twitter:image" content="/og-image.png" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='52' font-size='52'%3E%F0%9F%8F%9D%EF%B8%8F%3C/text%3E%3C/svg%3E" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <style>body{margin:0;background:#070f0a;}</style>

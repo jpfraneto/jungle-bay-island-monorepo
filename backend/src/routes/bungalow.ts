@@ -3,14 +3,17 @@ import {
   CONFIG,
   db,
   normalizeAddress,
+  publicClients,
   toSupportedChain,
   type SupportedChain,
 } from "../config";
 import {
+  createBungalowWallEvent,
   createBulletinPost,
   findTokenDeploymentsByAddress,
   getAggregatedUserByWallets,
   getBulletinPosts,
+  getBungalowWallFeed,
   getBungalow,
   getBungalowOwnerRecord,
   getIdentityClusterByWallet,
@@ -20,6 +23,7 @@ import {
   getViewerProfile,
   getWalletTokenBalanceRaw,
   getWalletTokenHeat,
+  getWalletTokenHeats,
   updateBungalowCuration,
 } from "../db/queries";
 import { optionalWalletContext, requireWalletAuth } from "../middleware/auth";
@@ -50,6 +54,15 @@ const bungalowRoute = new Hono<AppEnv>();
 bungalowRoute.use("/bungalow/*", optionalWalletContext);
 
 let communityConstructionTablesPromise: Promise<void> | null = null;
+const balanceOfReadAbi = [
+  {
+    inputs: [{ internalType: "address", name: "owner", type: "address" }],
+    name: "balanceOf",
+    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+] as const;
 
 function calculateTopHeatStats(values: number[]): {
   sample_size: number;
@@ -175,10 +188,47 @@ async function getIslandHeatSnapshot(wallet: string): Promise<{
   const evmWallets = identity?.evm_wallets ?? [];
   const aggregated = await getAggregatedUserByWallets(scopedWallets);
   const islandHeat = aggregated?.island_heat ?? 0;
-  const jbacBalance = await getWalletTokenBalanceRaw(
-    COMMUNITY_POLICY.jbac_shortcut_token_address,
-    evmWallets,
-  );
+  const uniqueEvmWallets = [...new Set(evmWallets.map((entry) => entry.toLowerCase()))]
+    .map((entry) => normalizeAddress(entry))
+    .filter((entry): entry is string => Boolean(entry));
+
+  let onchainBalance: bigint | null = null;
+  if (uniqueEvmWallets.length > 0) {
+    let hasSuccessfulRead = false;
+    const balances = await Promise.all(
+      uniqueEvmWallets.map(async (entry) => {
+        try {
+          const balance = await publicClients[
+            COMMUNITY_POLICY.jbac_shortcut_chain
+          ].readContract({
+            address:
+              COMMUNITY_POLICY.jbac_shortcut_token_address as `0x${string}`,
+            abi: balanceOfReadAbi,
+            functionName: "balanceOf",
+            args: [entry as `0x${string}`],
+          });
+          hasSuccessfulRead = true;
+          return BigInt(balance);
+        } catch {
+          return 0n;
+        }
+      }),
+    );
+
+    if (hasSuccessfulRead) {
+      onchainBalance = balances.reduce(
+        (sum, balance) => sum + balance,
+        0n,
+      );
+    }
+  }
+
+  const jbacBalance =
+    onchainBalance ??
+    (await getWalletTokenBalanceRaw(
+      COMMUNITY_POLICY.jbac_shortcut_token_address,
+      uniqueEvmWallets,
+    ));
 
   return {
     identityKey: identity?.identity_key ?? `wallet:${wallet}`,
@@ -684,7 +734,11 @@ bungalowRoute.get("/bungalow/:chain/:ca/qualification", async (c) => {
 
   const projectContext = await getCanonicalProjectContext(chain, tokenAddress);
   const supportDeployment = projectContext.primaryDeployment;
-  const viewerWallet = c.get("walletAddress") ?? null;
+  const rawViewerWallet = c.req.query("viewer_wallet");
+  const queryViewerWallet =
+    (rawViewerWallet ? normalizeAddress(rawViewerWallet) : null) ??
+    (rawViewerWallet ? normalizeAddress(rawViewerWallet, "solana") : null);
+  const viewerWallet = queryViewerWallet ?? c.get("walletAddress") ?? null;
   const [bungalow, tokenRegistry, fallbackMetadata, supportSnapshot, viewerSnapshot] =
     await Promise.all([
       getBungalow(supportDeployment.token_address, supportDeployment.chain),
@@ -1432,6 +1486,68 @@ bungalowRoute.get("/bungalow/:chain/:ca/bulletin", async (c) => {
     })),
     total: result.total,
   });
+});
+
+bungalowRoute.get("/bungalow/:chain/:ca/wall", async (c) => {
+  const chain = toSupportedChain(c.req.param("chain"));
+  if (!chain) {
+    throw new ApiError(400, "invalid_params", "Invalid chain");
+  }
+
+  const tokenAddress = normalizeAddress(c.req.param("ca"), chain);
+  if (!tokenAddress) {
+    throw new ApiError(400, "invalid_params", "Invalid token address");
+  }
+
+  const limit = Math.min(Number(c.req.query("limit")) || 30, 60);
+  const offset = Math.max(Number(c.req.query("offset")) || 0, 0);
+  const result = await getBungalowWallFeed(tokenAddress, chain, limit, offset);
+
+  return c.json({
+    items: result.items,
+    total: result.total,
+  });
+});
+
+bungalowRoute.post("/bungalow/:chain/:ca/visit", async (c) => {
+  const chain = toSupportedChain(c.req.param("chain"));
+  if (!chain) {
+    throw new ApiError(400, "invalid_params", "Invalid chain");
+  }
+
+  const tokenAddress = normalizeAddress(c.req.param("ca"), chain);
+  if (!tokenAddress) {
+    throw new ApiError(400, "invalid_params", "Invalid token address");
+  }
+
+  const wallet = c.get("walletAddress") ?? null;
+  let islandHeat = 0;
+  let tokenHeat = 0;
+
+  if (wallet) {
+    const identity = await getIdentityClusterByWallet(wallet);
+    const scopedWallets = identity?.wallets.map((entry) => entry.wallet) ?? [wallet];
+    const [aggregated, tokenHeats, fallbackProfile] = await Promise.all([
+      getAggregatedUserByWallets(scopedWallets),
+      getWalletTokenHeats(tokenAddress, scopedWallets),
+      getViewerProfile(wallet),
+    ]);
+
+    islandHeat = aggregated?.island_heat ?? fallbackProfile?.islandHeat ?? 0;
+    tokenHeat = tokenHeats.reduce((sum, entry) => sum + entry.heat_degrees, 0);
+  }
+
+  await createBungalowWallEvent({
+    tokenAddress,
+    chain,
+    wallet,
+    eventType: "visit",
+    detail: null,
+    islandHeat,
+    tokenHeat,
+  });
+
+  return c.json({ ok: true });
 });
 
 bungalowRoute.post("/bungalow/:chain/:ca/bulletin", requireWalletAuth, async (c) => {

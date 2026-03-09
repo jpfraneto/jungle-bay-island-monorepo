@@ -53,6 +53,18 @@ export interface BulletinPostRow {
   created_at: string
 }
 
+export interface BungalowWallEventRow {
+  id: number
+  token_address: string
+  chain: string
+  wallet: string | null
+  event_type: 'visit' | 'add_art' | 'add_build' | 'add_item'
+  detail: string | null
+  island_heat: string
+  token_heat: string
+  created_at: string
+}
+
 export interface TokenHolderRow {
   wallet: string
   heat_degrees: string

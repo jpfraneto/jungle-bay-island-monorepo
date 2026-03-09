@@ -1,11 +1,13 @@
 import {
   Suspense,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
   type CSSProperties,
 } from "react";
+import { usePrivy } from "@privy-io/react-auth";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { Html, OrbitControls, Text, useCursor } from "@react-three/drei";
 import { useNavigate } from "react-router-dom";
@@ -24,7 +26,6 @@ import AddToSlotModal from "./AddToSlotModal";
 import BodegaModal from "./BodegaModal";
 import BodegaPlacementModal from "./BodegaPlacementModal";
 import CanvasErrorBoundary from "./CanvasErrorBoundary";
-import { getChainLabel } from "../utils/chains";
 import { formatAddress, formatTimeAgo } from "../utils/formatters";
 import type { BodegaCatalogItem } from "../utils/bodega";
 import { getFallbackTokenImage, getTokenImageUrl } from "../utils/tokenImage";
@@ -45,6 +46,21 @@ interface BungalowSceneProps {
 }
 
 type SelectableSlotType = SlotConfig["slotType"];
+type WallFeedKind = "post" | "visit" | "add_art" | "add_build" | "add_item";
+
+interface WallFeedItem {
+  id: string;
+  kind: WallFeedKind;
+  wallet: string | null;
+  username: string | null;
+  pfp_url: string | null;
+  content: string | null;
+  image_url: string | null;
+  detail: string | null;
+  island_heat: number;
+  token_heat: number;
+  created_at: string;
+}
 
 function useIsMobile(maxWidth: number) {
   const [matches, setMatches] = useState(() => window.innerWidth < maxWidth);
@@ -56,13 +72,6 @@ function useIsMobile(maxWidth: number) {
   }, [maxWidth]);
 
   return matches;
-}
-
-function trimDescription(value: string | null | undefined): string | null {
-  if (!value) return null;
-  const trimmed = value.trim();
-  if (trimmed.length <= 128) return trimmed;
-  return `${trimmed.slice(0, 125).trimEnd()}...`;
 }
 
 function formatPlacementAttribution(
@@ -162,6 +171,35 @@ function formatPlacementSpotCount(
   return `${count} open ${label}${count === 1 ? "" : "s"}`;
 }
 
+async function readResponseMessage(response: Response): Promise<string> {
+  const fallback = `${response.status} ${response.statusText}`.trim();
+  const cloned = response.clone();
+
+  try {
+    const payload = (await cloned.json()) as {
+      error?: string;
+      message?: string;
+    };
+    if (typeof payload.message === "string" && payload.message.trim()) {
+      return payload.message.trim();
+    }
+    if (typeof payload.error === "string" && payload.error.trim()) {
+      return payload.error.trim();
+    }
+  } catch {
+    try {
+      const text = await response.text();
+      if (text.trim()) {
+        return text.trim();
+      }
+    } catch {
+      return fallback || "Request failed";
+    }
+  }
+
+  return fallback || "Request failed";
+}
+
 function useFloorTexture() {
   const [texture, setTexture] = useState<Texture | null>(null);
 
@@ -240,25 +278,79 @@ function WallBeam({
 }
 
 function RoomShell({ floorTexture }: { floorTexture: Texture | null }) {
+  const wallSegments: Array<{
+    key: string;
+    position: [number, number, number];
+    rotation: [number, number, number];
+    width: number;
+    color: string;
+  }> = [
+    {
+      key: "back",
+      position: [0, 3, -5.7],
+      rotation: [0, 0, 0],
+      width: 7.2,
+      color: "#eadcc6",
+    },
+    {
+      key: "back-left",
+      position: [-4.7, 3, -4.7],
+      rotation: [0, Math.PI / 4, 0],
+      width: 4.2,
+      color: "#e3d5bc",
+    },
+    {
+      key: "left",
+      position: [-6.65, 3, 0],
+      rotation: [0, Math.PI / 2, 0],
+      width: 7.1,
+      color: "#dccdb1",
+    },
+    {
+      key: "front-left",
+      position: [-4.7, 3, 4.7],
+      rotation: [0, (3 * Math.PI) / 4, 0],
+      width: 4.2,
+      color: "#d7c7a8",
+    },
+    {
+      key: "back-right",
+      position: [4.7, 3, -4.7],
+      rotation: [0, -Math.PI / 4, 0],
+      width: 4.2,
+      color: "#e3d5bc",
+    },
+    {
+      key: "right",
+      position: [6.65, 3, 0],
+      rotation: [0, -Math.PI / 2, 0],
+      width: 7.1,
+      color: "#dccdb1",
+    },
+    {
+      key: "front-right",
+      position: [4.7, 3, 4.7],
+      rotation: [0, (-3 * Math.PI) / 4, 0],
+      width: 4.2,
+      color: "#d7c7a8",
+    },
+  ];
+
   return (
     <>
-      <mesh position={[0, 3, -6]}>
-        <planeGeometry args={[16, 6]} />
-        <meshLambertMaterial color="#e8dcc8" side={DoubleSide} />
-      </mesh>
-
-      <mesh position={[-8, 3, 0]} rotation={[0, Math.PI / 2, 0]}>
-        <planeGeometry args={[12, 6]} />
-        <meshLambertMaterial color="#e0d4ba" side={DoubleSide} />
-      </mesh>
-
-      <mesh position={[8, 3, 0]} rotation={[0, -Math.PI / 2, 0]}>
-        <planeGeometry args={[12, 6]} />
-        <meshLambertMaterial color="#e0d4ba" side={DoubleSide} />
-      </mesh>
+      {wallSegments.map((segment) => (
+        <mesh
+          key={segment.key}
+          position={segment.position}
+          rotation={segment.rotation}
+        >
+          <planeGeometry args={[segment.width, 6]} />
+          <meshLambertMaterial color={segment.color} side={DoubleSide} />
+        </mesh>
+      ))}
 
       <mesh position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <planeGeometry args={[16, 12]} />
+        <circleGeometry args={[8.6, 8]} />
         <meshLambertMaterial
           color="#8B6914"
           map={floorTexture ?? undefined}
@@ -267,20 +359,43 @@ function RoomShell({ floorTexture }: { floorTexture: Texture | null }) {
       </mesh>
 
       <mesh position={[0, 6, 0]} rotation={[Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[16, 12]} />
+        <circleGeometry args={[8.6, 8]} />
         <meshLambertMaterial color="#6b4c1a" side={DoubleSide} />
       </mesh>
 
-      <WallBeam position={[-7.92, 3, -6.02]} args={[0.16, 6.04, 0.16]} />
-      <WallBeam position={[7.92, 3, -6.02]} args={[0.16, 6.04, 0.16]} />
-      <WallBeam position={[0, 5.92, -6.02]} args={[16.12, 0.16, 0.16]} />
-      <WallBeam position={[0, 0.08, -6.02]} args={[16.12, 0.16, 0.16]} />
-
-      {[-4, -1.5, 1, 3.5].map((z) => (
+      {[
+        [-3.55, 3, -8.15],
+        [3.55, 3, -8.15],
+        [-8.15, 3, -3.55],
+        [-8.15, 3, 3.55],
+        [8.15, 3, -3.55],
+        [8.15, 3, 3.55],
+        [-3.55, 3, 8.15],
+        [3.55, 3, 8.15],
+      ].map((position, index) => (
         <WallBeam
-          key={`ceiling-beam-${z}`}
-          position={[0, 5.72, z]}
-          args={[15.2, 0.12, 0.18]}
+          key={`corner-post-${index}`}
+          position={position as [number, number, number]}
+          args={[0.16, 6.04, 0.16]}
+        />
+      ))}
+
+      <WallBeam position={[0, 5.92, -5.94]} args={[7.32, 0.16, 0.16]} />
+      <WallBeam position={[0, 0.08, -5.94]} args={[7.32, 0.16, 0.16]} />
+
+      {[
+        { key: "beam-left-back", position: [-4.7, 5.92, -4.7] as [number, number, number], rotation: [0, Math.PI / 4, 0] as [number, number, number] },
+        { key: "beam-left-side", position: [-6.65, 5.92, 0] as [number, number, number], rotation: [0, Math.PI / 2, 0] as [number, number, number] },
+        { key: "beam-left-front", position: [-4.7, 5.92, 4.7] as [number, number, number], rotation: [0, (3 * Math.PI) / 4, 0] as [number, number, number] },
+        { key: "beam-right-back", position: [4.7, 5.92, -4.7] as [number, number, number], rotation: [0, -Math.PI / 4, 0] as [number, number, number] },
+        { key: "beam-right-side", position: [6.65, 5.92, 0] as [number, number, number], rotation: [0, -Math.PI / 2, 0] as [number, number, number] },
+        { key: "beam-right-front", position: [4.7, 5.92, 4.7] as [number, number, number], rotation: [0, (-3 * Math.PI) / 4, 0] as [number, number, number] },
+      ].map((beam) => (
+        <WallBeam
+          key={beam.key}
+          position={beam.position}
+          args={[4.34, 0.12, 0.18]}
+          rotation={beam.rotation}
         />
       ))}
     </>
@@ -351,50 +466,34 @@ function PlaceholderImage({
   );
 }
 
-function HeroDisplay({
+function FloorIdentityRug({
   title,
-  symbol,
   imageUrl,
-  description,
-  visibleChains,
   isMobile,
 }: {
   title: string;
-  symbol: string | null;
   imageUrl: string | null;
-  description: string | null;
-  visibleChains: string[];
   isMobile: boolean;
 }) {
-  const summary = trimDescription(description);
-  const cardWidth = isMobile ? 188 : 240;
-  const imageHeight = isMobile ? 118 : 144;
-
   return (
-    <group position={[0, 3, -5.92]}>
-      <mesh position={[0, 0, -0.06]}>
-        <boxGeometry args={[4.1, 3.08, 0.12]} />
-        <meshLambertMaterial color="#5c3d1e" />
+    <group position={[0, 0.06, 2.55]} rotation={[-Math.PI / 2, 0, 0]}>
+      <mesh receiveShadow>
+        <planeGeometry args={[4.5, 3.4]} />
+        <meshLambertMaterial color="#d6b874" />
       </mesh>
-
-      <Html
-        transform
-        occlude
-        zIndexRange={[6, 0]}
-        position={[0, 0, 0.05]}
-        style={{ pointerEvents: "none" }}
-      >
+      <mesh position={[0, 0, 0.02]} receiveShadow>
+        <planeGeometry args={[4.18, 3.08]} />
+        <meshLambertMaterial color="#2c190a" />
+      </mesh>
+      <Html transform position={[0, 0.08, 0.03]} style={{ pointerEvents: "none" }}>
         <div
           style={{
-            width: cardWidth,
-            padding: 10,
-            borderRadius: 14,
-            background: "rgba(15, 24, 19, 0.92)",
-            border: "1px solid rgba(255,255,255,0.14)",
-            color: "#f4ead1",
-            boxShadow: "0 18px 40px rgba(0,0,0,0.28)",
-            display: "grid",
-            gap: 8,
+            width: isMobile ? 220 : 280,
+            height: isMobile ? 158 : 196,
+            borderRadius: 16,
+            overflow: "hidden",
+            boxShadow: "0 18px 36px rgba(0,0,0,0.28)",
+            border: "1px solid rgba(255,255,255,0.12)",
           }}
         >
           <TokenImage
@@ -403,57 +502,20 @@ function HeroDisplay({
             fallbackSeed={title}
             style={{
               width: "100%",
-              height: imageHeight,
+              height: "100%",
               objectFit: "cover",
-              borderRadius: 10,
               display: "block",
             }}
           />
-
-          <div style={{ display: "grid", gap: 5 }}>
-            <strong style={{ fontSize: 14, lineHeight: 1.2 }}>
-              {symbol ? `${symbol} Bungalow` : title}
-            </strong>
-            <span
-              style={{
-                fontSize: 11,
-                lineHeight: 1.45,
-                color: "rgba(244,234,209,0.72)",
-              }}
-            >
-              {summary ??
-                "Community-curated project home on Jungle Bay Island."}
-            </span>
-          </div>
-
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {visibleChains.map((chain) => (
-              <span
-                key={chain}
-                style={{
-                  borderRadius: 999,
-                  padding: "4px 8px",
-                  background: "rgba(255,255,255,0.06)",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  fontSize: 10,
-                  letterSpacing: "0.08em",
-                  textTransform: "uppercase",
-                }}
-              >
-                {getChainLabel(chain)}
-              </span>
-            ))}
-          </div>
         </div>
       </Html>
-
       <Text
-        position={[0, 1.86, 0.08]}
-        fontSize={0.28}
+        position={[0, -1.95, 0.04]}
+        fontSize={0.34}
         color="#f8efd7"
         anchorX="center"
         anchorY="middle"
-        maxWidth={4.5}
+        maxWidth={4.2}
       >
         {title}
       </Text>
@@ -461,30 +523,65 @@ function HeroDisplay({
   );
 }
 
-function FloorMedallion({ symbol }: { symbol: string | null }) {
+function CommunityWallDisplay({
+  title,
+  onOpen,
+}: {
+  title: string;
+  onOpen: () => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  useCursor(hovered, "pointer", "auto");
+
   return (
-    <group position={[0, 0.02, 1.4]} rotation={[-Math.PI / 2, 0, 0]}>
-      <mesh>
-        <ringGeometry args={[1.45, 1.8, 64]} />
-        <meshLambertMaterial color="#d9bb70" />
+    <group position={[0, 2.95, -5.76]}>
+      <mesh
+        onClick={(event) => {
+          event.stopPropagation();
+          onOpen();
+        }}
+        onPointerOver={(event) => {
+          event.stopPropagation();
+          setHovered(true);
+        }}
+        onPointerOut={() => setHovered(false)}
+      >
+        <planeGeometry args={[4.1, 3.2]} />
+        <meshLambertMaterial color={hovered ? "#6d4d1a" : "#573a14"} />
       </mesh>
-      <mesh position={[0, 0, -0.01]}>
-        <circleGeometry args={[1.42, 64]} />
-        <meshLambertMaterial color="#624116" />
+      <mesh position={[0, 0, 0.02]}>
+        <planeGeometry args={[3.7, 2.82]} />
+        <meshLambertMaterial color="#1f1811" opacity={0.88} transparent />
       </mesh>
-      {symbol ? (
-        <Text
-          position={[0, 0, 0.02]}
-          rotation={[0, 0, 0]}
-          fontSize={0.5}
-          color="#f3dfb1"
-          anchorX="center"
-          anchorY="middle"
-          maxWidth={3.2}
-        >
-          {symbol}
-        </Text>
-      ) : null}
+      <Text
+        position={[0, 0.86, 0.04]}
+        fontSize={0.24}
+        color="#f4e3bb"
+        anchorX="center"
+        anchorY="middle"
+        maxWidth={3.2}
+      >
+        Community Wall
+      </Text>
+      <Text
+        position={[0, 0.2, 0.04]}
+        fontSize={0.15}
+        color="#d8c79f"
+        anchorX="center"
+        anchorY="middle"
+        maxWidth={3.1}
+      >
+        Click to zoom in, write, and read what people are doing in {title}
+      </Text>
+      <Text
+        position={[0, -0.92, 0.04]}
+        fontSize={0.18}
+        color={hovered ? "#ffe3a3" : "#d7b36a"}
+        anchorX="center"
+        anchorY="middle"
+      >
+        Open wall
+      </Text>
     </group>
   );
 }
@@ -918,6 +1015,439 @@ function SlotObject({
   );
 }
 
+function formatWallHeat(value: number): string | null {
+  if (!Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+
+  return Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1);
+}
+
+function getWallActorLabel(item: WallFeedItem): string {
+  if (item.username?.trim()) {
+    return `@${item.username.replace(/^@+/, "")}`;
+  }
+
+  if (item.wallet) {
+    return formatAddress(item.wallet);
+  }
+
+  return "ANON";
+}
+
+function getWallItemHeadline(item: WallFeedItem): string {
+  const actor = getWallActorLabel(item);
+
+  if (item.kind === "post") {
+    return actor;
+  }
+
+  if (item.kind === "visit") {
+    return `${actor} visited`;
+  }
+
+  if (item.kind === "add_art") {
+    return `${actor} added a piece of art`;
+  }
+
+  if (item.kind === "add_build") {
+    return `${actor} added a build`;
+  }
+
+  return `${actor} added ${item.detail?.trim() || "something"}`;
+}
+
+function WallActivityOverlay({
+  open,
+  isMobile,
+  title,
+  symbol,
+  items,
+  loading,
+  error,
+  draft,
+  onDraftChange,
+  onClose,
+  onPost,
+  posting,
+  authenticated,
+  onLogin,
+}: {
+  open: boolean;
+  isMobile: boolean;
+  title: string;
+  symbol: string | null;
+  items: WallFeedItem[];
+  loading: boolean;
+  error: string | null;
+  draft: string;
+  onDraftChange: (value: string) => void;
+  onClose: () => void;
+  onPost: () => void;
+  posting: boolean;
+  authenticated: boolean;
+  onLogin: () => void;
+}) {
+  if (!open) {
+    return null;
+  }
+
+  const bungalowHeatLabel = symbol?.trim() || title;
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        inset: 0,
+        zIndex: 12,
+        display: "grid",
+        placeItems: "center",
+        padding: isMobile ? 14 : 24,
+        background: "rgba(9, 10, 7, 0.62)",
+        backdropFilter: "blur(8px)",
+      }}
+    >
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 860,
+          maxHeight: "100%",
+          display: "grid",
+          gridTemplateRows: "auto auto minmax(0, 1fr)",
+          gap: 14,
+          padding: isMobile ? 16 : 22,
+          borderRadius: 24,
+          border: "1px solid rgba(233, 206, 141, 0.22)",
+          background:
+            "linear-gradient(180deg, rgba(67, 42, 16, 0.96), rgba(28, 20, 11, 0.98))",
+          boxShadow: "0 28px 80px rgba(0,0,0,0.4)",
+          color: "#f6ead1",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            gap: 12,
+          }}
+        >
+          <div style={{ display: "grid", gap: 6 }}>
+            <span
+              style={{
+                fontSize: 11,
+                letterSpacing: "0.14em",
+                textTransform: "uppercase",
+                color: "rgba(246,234,209,0.6)",
+              }}
+            >
+              Zoomed Wall
+            </span>
+            <h3 style={{ margin: 0, fontSize: isMobile ? 24 : 30 }}>
+              {title} community wall
+            </h3>
+            <p
+              style={{
+                margin: 0,
+                fontSize: 13,
+                lineHeight: 1.5,
+                color: "rgba(246,234,209,0.72)",
+              }}
+            >
+              People can leave a note here and the wall also tracks visits,
+              art, and builds tied to this bungalow.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              minWidth: 40,
+              height: 40,
+              borderRadius: 999,
+              border: "1px solid rgba(255,255,255,0.14)",
+              background: "rgba(255,255,255,0.06)",
+              color: "#f6ead1",
+              cursor: "pointer",
+              font: "inherit",
+              fontSize: 20,
+            }}
+            aria-label="Close wall"
+          >
+            ×
+          </button>
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gap: 10,
+            padding: isMobile ? 12 : 14,
+            borderRadius: 18,
+            background: "rgba(12, 13, 10, 0.4)",
+            border: "1px solid rgba(255,255,255,0.08)",
+          }}
+        >
+          <textarea
+            value={draft}
+            onChange={(event) => onDraftChange(event.target.value)}
+            rows={isMobile ? 3 : 4}
+            maxLength={280}
+            placeholder={`Write something on the ${title} wall...`}
+            style={{
+              width: "100%",
+              resize: "vertical",
+              borderRadius: 14,
+              border: "1px solid rgba(255,255,255,0.12)",
+              background: "rgba(0,0,0,0.18)",
+              color: "#f6ead1",
+              padding: "12px 14px",
+              font: "inherit",
+              lineHeight: 1.5,
+              boxSizing: "border-box",
+            }}
+          />
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 10,
+              flexWrap: "wrap",
+            }}
+          >
+            <span
+              style={{
+                fontSize: 12,
+                color: "rgba(246,234,209,0.66)",
+              }}
+            >
+              Need 10+ {bungalowHeatLabel} heat to write. Visits and installs
+              appear automatically.
+            </span>
+            {authenticated ? (
+              <button
+                type="button"
+                onClick={onPost}
+                disabled={posting || draft.trim().length === 0}
+                style={{
+                  minHeight: 40,
+                  padding: "0 16px",
+                  borderRadius: 999,
+                  border: "1px solid rgba(255,255,255,0.14)",
+                  background:
+                    posting || draft.trim().length === 0
+                      ? "rgba(255,255,255,0.08)"
+                      : "rgba(216, 179, 106, 0.92)",
+                  color:
+                    posting || draft.trim().length === 0 ? "#c4b597" : "#201508",
+                  cursor:
+                    posting || draft.trim().length === 0 ? "default" : "pointer",
+                  font: "inherit",
+                  fontWeight: 700,
+                }}
+              >
+                {posting ? "Posting..." : "Write on wall"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onLogin}
+                style={{
+                  minHeight: 40,
+                  padding: "0 16px",
+                  borderRadius: 999,
+                  border: "1px solid rgba(255,255,255,0.14)",
+                  background: "rgba(216, 179, 106, 0.92)",
+                  color: "#201508",
+                  cursor: "pointer",
+                  font: "inherit",
+                  fontWeight: 700,
+                }}
+              >
+                Connect wallet to write
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div
+          style={{
+            minHeight: 0,
+            overflowY: "auto",
+            display: "grid",
+            gap: 10,
+            paddingRight: 4,
+          }}
+        >
+          {loading ? (
+            <div
+              style={{
+                padding: 16,
+                borderRadius: 18,
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid rgba(255,255,255,0.08)",
+              }}
+            >
+              Loading wall...
+            </div>
+          ) : null}
+
+          {error ? (
+            <div
+              style={{
+                padding: 16,
+                borderRadius: 18,
+                background: "rgba(92, 24, 24, 0.32)",
+                border: "1px solid rgba(255,120,120,0.2)",
+                color: "#ffd7d7",
+              }}
+            >
+              {error}
+            </div>
+          ) : null}
+
+          {!loading && !error && items.length === 0 ? (
+            <div
+              style={{
+                padding: 16,
+                borderRadius: 18,
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid rgba(255,255,255,0.08)",
+                color: "rgba(246,234,209,0.72)",
+              }}
+            >
+              Nothing on this wall yet.
+            </div>
+          ) : null}
+
+          {!loading && !error
+            ? items.map((item) => {
+                const bungalowHeat = formatWallHeat(item.token_heat);
+                const islandHeat = formatWallHeat(item.island_heat);
+
+                return (
+                  <article
+                    key={item.id}
+                    style={{
+                      display: "grid",
+                      gap: 8,
+                      padding: isMobile ? 12 : 14,
+                      borderRadius: 18,
+                      background: "rgba(255,255,255,0.04)",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: 10,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <strong style={{ fontSize: 14, lineHeight: 1.4 }}>
+                        {getWallItemHeadline(item)}
+                      </strong>
+                      <span
+                        style={{
+                          fontSize: 11,
+                          color: "rgba(246,234,209,0.56)",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.08em",
+                        }}
+                      >
+                        {formatTimeAgo(item.created_at)}
+                      </span>
+                    </div>
+
+                    {item.kind === "post" && item.content ? (
+                      <p
+                        style={{
+                          margin: 0,
+                          fontSize: 14,
+                          lineHeight: 1.6,
+                          color: "#f6ead1",
+                        }}
+                      >
+                        {item.content}
+                      </p>
+                    ) : item.detail ? (
+                      <p
+                        style={{
+                          margin: 0,
+                          fontSize: 13,
+                          lineHeight: 1.5,
+                          color: "rgba(246,234,209,0.72)",
+                        }}
+                      >
+                        {item.detail}
+                      </p>
+                    ) : null}
+
+                    {item.kind === "post" && item.image_url ? (
+                      <img
+                        src={item.image_url}
+                        alt=""
+                        style={{
+                          width: "100%",
+                          maxHeight: 200,
+                          objectFit: "cover",
+                          borderRadius: 14,
+                          display: "block",
+                        }}
+                      />
+                    ) : null}
+
+                    {bungalowHeat || islandHeat ? (
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: 8,
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        {bungalowHeat ? (
+                          <span
+                            style={{
+                              padding: "5px 10px",
+                              borderRadius: 999,
+                              background: "rgba(216, 179, 106, 0.14)",
+                              border: "1px solid rgba(216, 179, 106, 0.16)",
+                              fontSize: 11,
+                              color: "#f2ddb0",
+                            }}
+                          >
+                            {bungalowHeatLabel} heat {bungalowHeat}
+                          </span>
+                        ) : null}
+                        {islandHeat ? (
+                          <span
+                            style={{
+                              padding: "5px 10px",
+                              borderRadius: 999,
+                              background: "rgba(255,255,255,0.05)",
+                              border: "1px solid rgba(255,255,255,0.1)",
+                              fontSize: 11,
+                              color: "#efe3c1",
+                            }}
+                          >
+                            Island heat {islandHeat}
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              })
+            : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function RoomScene({
   scene,
   loading,
@@ -925,11 +1455,9 @@ function RoomScene({
   isOwner,
   isMobile,
   title,
-  symbol,
   imageUrl,
-  description,
-  visibleChains,
   onClickEmpty,
+  onOpenWall,
   compatibleSlotTypes,
 }: {
   scene: { slots: SlotConfig[] } | null;
@@ -938,11 +1466,9 @@ function RoomScene({
   isOwner: boolean;
   isMobile: boolean;
   title: string;
-  symbol: string | null;
   imageUrl: string | null;
-  description: string | null;
-  visibleChains: string[];
   onClickEmpty: (slotId: string) => void;
+  onOpenWall: () => void;
   compatibleSlotTypes: SelectableSlotType[] | null;
 }) {
   const floorTexture = useFloorTexture();
@@ -982,27 +1508,20 @@ function RoomScene({
       />
 
       <RoomShell floorTexture={floorTexture} />
-      <FloorMedallion symbol={title} />
-      <HeroDisplay
-        title={title}
-        symbol={symbol}
-        imageUrl={imageUrl}
-        description={description}
-        visibleChains={visibleChains}
-        isMobile={isMobile}
-      />
-      <Bench position={[-5.2, 0, 3.3]} />
-      <Bench position={[5.2, 0, 3.3]} />
-      <mesh position={[-3, 3, 5.5]}>
+      <FloorIdentityRug title={title} imageUrl={imageUrl} isMobile={isMobile} />
+      <CommunityWallDisplay title={title} onOpen={onOpenWall} />
+      <Bench position={[-4.7, 0, 4.2]} />
+      <Bench position={[4.7, 0, 4.2]} />
+      <mesh position={[-3.2, 3, 5.3]}>
         <cylinderGeometry args={[0.15, 0.2, 6, 8]} />
         <meshLambertMaterial color="#5c3d1e" />
       </mesh>
-      <mesh position={[3, 3, 5.5]}>
+      <mesh position={[3.2, 3, 5.3]}>
         <cylinderGeometry args={[0.15, 0.2, 6, 8]} />
         <meshLambertMaterial color="#5c3d1e" />
       </mesh>
-      <Planter position={[-6.5, 0, 4]} />
-      <Planter position={[6.5, 0, 4]} />
+      <Planter position={[-6.1, 0, 2.8]} />
+      <Planter position={[6.1, 0, 2.8]} />
 
       {loading ? <SceneOverlay label="Loading room..." /> : null}
       {error ? <SceneOverlay label={`Room failed to load: ${error}`} /> : null}
@@ -1024,11 +1543,11 @@ function RoomScene({
         : null}
 
       <OrbitControls
-        target={[0, 2.5, 0]}
-        minDistance={3}
-        maxDistance={14}
+        target={[0, 2.55, -0.2]}
+        minDistance={4}
+        maxDistance={13}
         minPolarAngle={Math.PI / 8}
-        maxPolarAngle={Math.PI / 1.8}
+        maxPolarAngle={Math.PI / 1.85}
         enablePan
         panSpeed={0.6}
         enableDamping
@@ -1126,15 +1645,13 @@ export default function BungalowScene({
   title,
   symbol,
   imageUrl,
-  description,
-  visibleChains,
-  onOpenBodega: _onOpenBodega,
   initialBodegaItem = null,
   onInitialBodegaItemConsumed,
 }: BungalowSceneProps) {
   const isMobile = useIsMobile(768);
   const navigate = useNavigate();
   const initialBodegaItemAppliedRef = useRef(false);
+  const { authenticated, getAccessToken, login } = usePrivy();
   const { walletAddress } = usePrivyBaseWallet();
   const { scene, loading, error, updateSlot, refetch } = useBungalowScene(
     chain,
@@ -1147,6 +1664,12 @@ export default function BungalowScene({
   const [selectedBodegaSlotId, setSelectedBodegaSlotId] = useState<
     string | null
   >(null);
+  const [wallOpen, setWallOpen] = useState(false);
+  const [wallItems, setWallItems] = useState<WallFeedItem[]>([]);
+  const [wallLoading, setWallLoading] = useState(false);
+  const [wallError, setWallError] = useState<string | null>(null);
+  const [wallDraft, setWallDraft] = useState("");
+  const [wallPosting, setWallPosting] = useState(false);
   const isOwner =
     ownerAddress?.toLowerCase() === walletAddress?.toLowerCase() ||
     adminAddress?.toLowerCase() === walletAddress?.toLowerCase();
@@ -1160,6 +1683,31 @@ export default function BungalowScene({
     ).length ?? 0;
   const roomImageUrl = imageUrl || getTokenImageUrl(null, ca, symbol ?? title);
 
+  const loadWallFeed = useCallback(async () => {
+    setWallLoading(true);
+    setWallError(null);
+
+    try {
+      const response = await fetch(`/api/bungalow/${chain}/${ca}/wall?limit=40`, {
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        throw new Error(await readResponseMessage(response));
+      }
+
+      const data = (await response.json()) as { items?: WallFeedItem[] };
+      setWallItems(Array.isArray(data.items) ? data.items : []);
+    } catch (fetchError: unknown) {
+      setWallError(
+        fetchError instanceof Error
+          ? fetchError.message
+          : "Failed to load the bungalow wall",
+      );
+    } finally {
+      setWallLoading(false);
+    }
+  }, [ca, chain]);
+
   useEffect(() => {
     if (!initialBodegaItem || initialBodegaItemAppliedRef.current) {
       return;
@@ -1171,6 +1719,108 @@ export default function BungalowScene({
     setSelectedBodegaItem(initialBodegaItem);
     onInitialBodegaItemConsumed?.();
   }, [initialBodegaItem, onInitialBodegaItemConsumed]);
+
+  useEffect(() => {
+    if (!wallOpen) {
+      return;
+    }
+
+    void loadWallFeed();
+  }, [loadWallFeed, wallOpen]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function logVisit() {
+      const actorKey = walletAddress?.toLowerCase() ?? "anon";
+      const visitKey = `jbi:bungalow:visit:${chain}:${ca}:${actorKey}`;
+      if (window.sessionStorage.getItem(visitKey)) {
+        return;
+      }
+
+      const headers: Record<string, string> = {};
+      if (authenticated) {
+        try {
+          const token = await getAccessToken();
+          if (token) {
+            headers.Authorization = `Bearer ${token}`;
+          }
+        } catch {
+          // Public visit logging should not block room load.
+        }
+      }
+
+      try {
+        const response = await fetch(`/api/bungalow/${chain}/${ca}/visit`, {
+          method: "POST",
+          headers,
+          cache: "no-store",
+        });
+
+        if (response.ok && !cancelled) {
+          window.sessionStorage.setItem(visitKey, new Date().toISOString());
+        }
+      } catch {
+        // Ignore non-blocking visit logging failures.
+      }
+    }
+
+    void logVisit();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authenticated, ca, chain, getAccessToken, walletAddress]);
+
+  const handleWallPost = useCallback(async () => {
+    const content = wallDraft.trim();
+    if (!content) {
+      return;
+    }
+
+    if (!authenticated) {
+      login();
+      return;
+    }
+
+    setWallPosting(true);
+    setWallError(null);
+
+    try {
+      const token = await getAccessToken();
+      if (!token) {
+        throw new Error("Authentication token unavailable");
+      }
+
+      const response = await fetch(`/api/bungalow/${chain}/${ca}/bulletin`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ content }),
+      });
+
+      if (!response.ok) {
+        throw new Error(await readResponseMessage(response));
+      }
+
+      setWallDraft("");
+      await loadWallFeed();
+    } catch (postError: unknown) {
+      setWallError(
+        postError instanceof Error
+          ? postError.message
+          : "Failed to write on the wall",
+      );
+    } finally {
+      setWallPosting(false);
+    }
+  }, [authenticated, ca, chain, getAccessToken, loadWallFeed, login, wallDraft]);
 
   return (
     <CanvasErrorBoundary
@@ -1313,11 +1963,9 @@ export default function BungalowScene({
               isOwner={Boolean(isOwner || selectedBodegaItem)}
               isMobile={isMobile}
               title={title}
-              symbol={symbol}
               imageUrl={roomImageUrl}
-              description={description}
-              visibleChains={visibleChains}
               compatibleSlotTypes={compatibleSlotTypes}
+              onOpenWall={() => setWallOpen(true)}
               onClickEmpty={(slotId) => {
                 if (selectedBodegaItem) {
                   setSelectedBodegaSlotId(slotId);
@@ -1330,6 +1978,25 @@ export default function BungalowScene({
             />
           </Suspense>
         </Canvas>
+
+        <WallActivityOverlay
+          open={wallOpen}
+          isMobile={isMobile}
+          title={title}
+          symbol={symbol}
+          items={wallItems}
+          loading={wallLoading}
+          error={wallError}
+          draft={wallDraft}
+          onDraftChange={setWallDraft}
+          onClose={() => setWallOpen(false)}
+          onPost={() => {
+            void handleWallPost();
+          }}
+          posting={wallPosting}
+          authenticated={authenticated}
+          onLogin={() => login()}
+        />
 
         <div
           style={{

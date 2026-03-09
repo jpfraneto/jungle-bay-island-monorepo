@@ -37,6 +37,12 @@ export default function ChangelogPage() {
             the expanded placement grid automatically.
           </li>
           <li>
+            Bungalow interiors now use an octagonal room, the project identity
+            lives on the floor as a rug instead of a floating card, and a new
+            zoomable community wall mixes writing with visit, art, and build
+            activity for that bungalow.
+          </li>
+          <li>
             Daily island rewards no longer recalculate when the signing wallet
             changes, already-claimed states hide redundant wallet controls, and
             claim buttons now name the exact wallet being used.
@@ -45,6 +51,11 @@ export default function ChangelogPage() {
             Bodega miniapp submission was simplified into a Build flow: paste a
             link, let the app pull the preview metadata, and surface missing
             page tags when the destination is not set up cleanly yet.
+          </li>
+          <li>
+            New bungalow qualification now reads the viewer&apos;s linked-wallet
+            heat and JBAC shortcut balance more reliably, and project-wide
+            favicon/share metadata now present the island identity more clearly.
           </li>
         </ul>
       </article>

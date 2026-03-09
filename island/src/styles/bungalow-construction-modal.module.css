@@ -17,7 +17,11 @@
   border-radius: 28px;
   border: 1px solid rgba(232, 214, 167, 0.16);
   background:
-    radial-gradient(circle at top left, rgba(255, 204, 96, 0.12), transparent 40%),
+    radial-gradient(
+      circle at top left,
+      rgba(255, 204, 96, 0.12),
+      transparent 40%
+    ),
     linear-gradient(180deg, rgba(22, 35, 29, 0.98), rgba(11, 18, 15, 0.98));
   box-shadow: 0 28px 80px rgba(0, 0, 0, 0.42);
   color: #f6f0df;
@@ -197,13 +201,14 @@
 
 .primaryButton,
 .secondaryButton {
-  min-height: 48px;
   border-radius: 14px;
   border: 0;
   padding: 0 16px;
   font: inherit;
   cursor: pointer;
-  transition: transform 140ms ease, opacity 140ms ease;
+  transition:
+    transform 140ms ease,
+    opacity 140ms ease;
 }
 
 .primaryButton {

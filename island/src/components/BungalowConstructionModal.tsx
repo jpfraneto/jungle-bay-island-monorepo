@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { useNavigate } from "react-router-dom";
+import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
+import { useUserWalletLinks } from "../hooks/useUserWalletLinks";
 import { useJBMTransfer } from "../hooks/useJBMTransfer";
 import styles from "../styles/bungalow-construction-modal.module.css";
 
@@ -58,6 +60,8 @@ export default function BungalowConstructionModal({
 }: BungalowConstructionModalProps) {
   const navigate = useNavigate();
   const { authenticated, getAccessToken, login } = usePrivy();
+  const { walletAddress } = usePrivyBaseWallet();
+  const { wallets: linkedWalletRows } = useUserWalletLinks(authenticated);
   const { transfer, isTransferring } = useJBMTransfer();
 
   const [chain, setChain] = useState("base");
@@ -70,6 +74,7 @@ export default function BungalowConstructionModal({
   const [pendingTxHash, setPendingTxHash] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const viewerWallet = linkedWalletRows[0]?.address ?? walletAddress ?? "";
 
   useEffect(() => {
     if (!open) return;
@@ -121,9 +126,14 @@ export default function BungalowConstructionModal({
       }
 
       const response = await fetch(
-        `/api/bungalow/${encodeURIComponent(chain)}/${encodeURIComponent(trimmedCa)}/qualification`,
+        `/api/bungalow/${encodeURIComponent(chain)}/${encodeURIComponent(trimmedCa)}/qualification${
+          viewerWallet
+            ? `?viewer_wallet=${encodeURIComponent(viewerWallet)}`
+            : ""
+        }`,
         {
           headers,
+          cache: "no-store",
         },
       );
       const data = (await response.json().catch(() => null)) as
@@ -194,9 +204,7 @@ export default function BungalowConstructionModal({
       setStatus("Support recorded.");
     } catch (err) {
       setStatus(null);
-      setError(
-        err instanceof Error ? err.message : "Failed to submit support",
-      );
+      setError(err instanceof Error ? err.message : "Failed to submit support");
     } finally {
       setIsSubmittingSupport(false);
     }
@@ -245,15 +253,13 @@ export default function BungalowConstructionModal({
         },
       );
 
-      const data = (await response.json().catch(() => null)) as
-        | {
-            bungalow?: {
-              canonical_path?: string | null;
-              token_address?: string;
-            };
-            error?: string;
-          }
-        | null;
+      const data = (await response.json().catch(() => null)) as {
+        bungalow?: {
+          canonical_path?: string | null;
+          token_address?: string;
+        };
+        error?: string;
+      } | null;
 
       if (!response.ok) {
         throw new Error(
@@ -296,9 +302,16 @@ export default function BungalowConstructionModal({
             <p className={styles.kicker}>New Bungalow</p>
             <h3>Open a new community bungalow</h3>
             <p className={styles.summary}>
-              Bungalows are not owner-claimed destinations anymore. A contract
-              opens once the island sees enough heat, support, or JBAC signal,
-              then one qualified builder pays the construction fee.
+              You can open a bungalow on the island if you have enough heat,
+              support, or{" "}
+              <a
+                href="https://opensea.io/collection/junglebay"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Jungle Bay Apes
+              </a>
+              .
             </p>
           </div>
           <button
@@ -313,7 +326,10 @@ export default function BungalowConstructionModal({
         <section className={styles.formRow}>
           <label className={styles.field}>
             Chain
-            <select value={chain} onChange={(event) => setChain(event.target.value)}>
+            <select
+              value={chain}
+              onChange={(event) => setChain(event.target.value)}
+            >
               <option value="base">Base</option>
               <option value="ethereum">Ethereum</option>
               <option value="solana">Solana</option>
@@ -374,22 +390,27 @@ export default function BungalowConstructionModal({
                 <strong>
                   {qualification.viewer
                     ? qualification.viewer.island_heat.toFixed(1)
-                    : "Connect wallet"}
+                    : viewerWallet
+                      ? "Unavailable"
+                      : "Connect wallet"}
                 </strong>
               </div>
               <div className={styles.metricCard}>
                 <span>Your JBAC balance</span>
                 <strong>
-                  {qualification.viewer?.jbac_balance ??
-                    qualification.thresholds.jbac_shortcut_min_balance}
+                  {qualification.viewer
+                    ? qualification.viewer.jbac_balance
+                    : viewerWallet
+                      ? "Unavailable"
+                      : "Connect wallet"}
                 </strong>
               </div>
             </div>
 
             <div className={styles.rules}>
               <p>
-                One builder can open it at{" "}
-                {qualification.thresholds.single_builder_heat_min}+ heat.
+                One builder can open it if they have{" "}
+                {qualification.thresholds.single_builder_heat_min}+ island heat.
               </p>
               <p>
                 Or {qualification.thresholds.required_supporters} residents with{" "}
@@ -400,10 +421,6 @@ export default function BungalowConstructionModal({
                 Shortcut: hold{" "}
                 {qualification.thresholds.jbac_shortcut_min_balance}+ Jungle Bay
                 Apes.
-              </p>
-              <p>
-                Quick Add and Bodega publishing both require{" "}
-                {qualification.thresholds.submit_heat_min}+ island heat.
               </p>
             </div>
 
@@ -434,7 +451,7 @@ export default function BungalowConstructionModal({
                 className={styles.secondaryButton}
                 onClick={() => login()}
               >
-                Connect wallet to use your heat
+                Connect wallet to back or open this bungalow
               </button>
             ) : null}
 
@@ -463,7 +480,9 @@ export default function BungalowConstructionModal({
                 onClick={() => {
                   void handleConstruct();
                 }}
-                disabled={isConstructing || isSubmittingSupport || isTransferring}
+                disabled={
+                  isConstructing || isSubmittingSupport || isTransferring
+                }
               >
                 {isConstructing || isTransferring
                   ? "Processing..."

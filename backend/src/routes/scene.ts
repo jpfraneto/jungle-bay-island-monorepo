@@ -2,8 +2,11 @@ import { Hono } from 'hono'
 import { CONFIG, db, normalizeAddress, publicClients, toSupportedChain } from '../config'
 import {
   createAssetPurchase,
+  createBungalowWallEvent,
+  getAggregatedUserByWallets,
   getBungalowSceneConfig,
   getUserWallets,
+  getWalletTokenHeats,
   upsertBungalowSceneConfig,
 } from '../db/queries'
 import { requirePrivyAuth, requireWalletAuth } from '../middleware/auth'
@@ -404,6 +407,29 @@ sceneRoute.put('/bungalow/:chain/:ca/scene', requirePrivyAuth, async (c) => {
     contractAddress: ca,
     sceneConfig: updatedScene,
     updatedBy: actorWallet,
+  })
+
+  const [aggregatedUser, tokenHeats] = await Promise.all([
+    getAggregatedUserByWallets(scopedWallets),
+    getWalletTokenHeats(ca, scopedWallets),
+  ])
+  const wallEventType =
+    decoration.type === 'image'
+      ? 'add_art'
+      : decoration.type === 'website-link' ||
+          decoration.type === 'social-link' ||
+          decoration.type === 'portal'
+        ? 'add_build'
+        : 'add_item'
+
+  await createBungalowWallEvent({
+    tokenAddress: ca,
+    chain,
+    wallet: actorWallet,
+    eventType: wallEventType,
+    detail: decoration.name,
+    islandHeat: aggregatedUser?.island_heat ?? 0,
+    tokenHeat: tokenHeats.reduce((sum, entry) => sum + entry.heat_degrees, 0),
   })
 
   return c.json({

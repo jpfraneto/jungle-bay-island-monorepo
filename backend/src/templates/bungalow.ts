@@ -123,6 +123,9 @@ export function renderBungalow(data: BungalowPageData): string {
   const symbol = b?.symbol ?? data.fallbackSymbol ?? "";
   const imageUrl = b?.image_url ?? data.fallbackImage ?? null;
   const isClaimed = b?.is_claimed ?? false;
+  const pageDescription = esc(
+    b?.description ?? `${name} community bungalow on Jungle Bay Island.`,
+  );
 
   const displayTitle = `${esc(name)}${symbol ? ` ($${esc(symbol)})` : ""}`;
   const pageTitle = symbol
@@ -173,11 +176,17 @@ export function renderBungalow(data: BungalowPageData): string {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='52' font-size='52'%3E%F0%9F%8F%9D%EF%B8%8F%3C/text%3E%3C/svg%3E" />
   <title>${pageTitle}</title>
+  <meta name="description" content="${pageDescription}" />
   <meta property="og:title" content="${pageTitle}" />
+  <meta property="og:description" content="${pageDescription}" />
   <meta property="og:type" content="website" />
   ${imageUrl ? `<meta property="og:image" content="${esc(imageUrl)}" />` : ""}
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="${pageTitle}" />
+  <meta name="twitter:description" content="${pageDescription}" />
+  ${imageUrl ? `<meta name="twitter:image" content="${esc(imageUrl)}" />` : ""}
   ${renderMiniappEmbed({
     imageUrl: `https://memetics.lat/api/og-image/${data.chain}/${data.tokenAddress}`,
     buttonTitle: symbol ? `View $${symbol}` : "View Token",

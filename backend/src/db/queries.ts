@@ -7,6 +7,7 @@ import type {
   BodegaInstallRow,
   BonusHeatEventRow,
   BungalowSceneRow,
+  BungalowWallEventRow,
   BungalowWidgetInstallRow,
   BulletinPostRow,
   BungalowRow,
@@ -1676,6 +1677,276 @@ export async function createBulletinPost(input: {
     RETURNING id, token_address, chain, wallet, content, image_url, created_at::text AS created_at
   `
   return rows[0]
+}
+
+let bungalowWallTablesPromise: Promise<void> | null = null
+
+async function ensureBungalowWallTables(): Promise<void> {
+  if (!bungalowWallTablesPromise) {
+    bungalowWallTablesPromise = (async () => {
+      await db`
+        CREATE TABLE IF NOT EXISTS ${db(CONFIG.SCHEMA)}.bungalow_wall_events (
+          id BIGSERIAL PRIMARY KEY,
+          token_address TEXT NOT NULL,
+          chain TEXT NOT NULL,
+          wallet TEXT,
+          event_type TEXT NOT NULL CHECK (
+            event_type IN ('visit', 'add_art', 'add_build', 'add_item')
+          ),
+          detail TEXT,
+          island_heat NUMERIC NOT NULL DEFAULT 0,
+          token_heat NUMERIC NOT NULL DEFAULT 0,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `
+
+      await db`
+        CREATE INDEX IF NOT EXISTS idx_bungalow_wall_events_token
+        ON ${db(CONFIG.SCHEMA)}.bungalow_wall_events (chain, token_address, created_at DESC)
+      `
+    })()
+  }
+
+  await bungalowWallTablesPromise
+}
+
+async function getWallIdentityMeta(wallet: string): Promise<{
+  username: string | null
+  pfp_url: string | null
+}> {
+  const rows = await db<Array<{ username: string | null; pfp_url: string | null }>>`
+    SELECT
+      COALESCE(u.x_username, wfp.username) AS username,
+      wfp.pfp_url
+    FROM (SELECT ${wallet}::text AS wallet) AS input
+    LEFT JOIN ${db(CONFIG.SCHEMA)}.wallet_farcaster_profiles wfp
+      ON LOWER(wfp.wallet) = LOWER(input.wallet)
+    LEFT JOIN ${db(CONFIG.SCHEMA)}.user_wallets uw
+      ON LOWER(uw.address) = LOWER(input.wallet)
+    LEFT JOIN ${db(CONFIG.SCHEMA)}.users u
+      ON u.privy_user_id = uw.privy_user_id
+    LIMIT 1
+  `
+
+  return {
+    username: rows[0]?.username ?? null,
+    pfp_url: rows[0]?.pfp_url ?? null,
+  }
+}
+
+export async function createBungalowWallEvent(input: {
+  tokenAddress: string
+  chain: string
+  wallet: string | null
+  eventType: 'visit' | 'add_art' | 'add_build' | 'add_item'
+  detail: string | null
+  islandHeat: number
+  tokenHeat: number
+}): Promise<BungalowWallEventRow> {
+  await ensureBungalowWallTables()
+
+  const rows = await db<BungalowWallEventRow[]>`
+    INSERT INTO ${db(CONFIG.SCHEMA)}.bungalow_wall_events (
+      token_address,
+      chain,
+      wallet,
+      event_type,
+      detail,
+      island_heat,
+      token_heat
+    )
+    VALUES (
+      ${input.tokenAddress},
+      ${input.chain},
+      ${input.wallet},
+      ${input.eventType},
+      ${input.detail},
+      ${input.islandHeat},
+      ${input.tokenHeat}
+    )
+    RETURNING
+      id,
+      token_address,
+      chain,
+      wallet,
+      event_type,
+      detail,
+      island_heat::text AS island_heat,
+      token_heat::text AS token_heat,
+      created_at::text AS created_at
+  `
+
+  return rows[0]
+}
+
+export interface BungalowWallFeedItem {
+  id: string
+  kind: 'post' | 'visit' | 'add_art' | 'add_build' | 'add_item'
+  wallet: string | null
+  username: string | null
+  pfp_url: string | null
+  content: string | null
+  image_url: string | null
+  detail: string | null
+  island_heat: number
+  token_heat: number
+  created_at: string
+}
+
+export async function getBungalowWallFeed(
+  tokenAddress: string,
+  chain: string,
+  limit: number,
+  offset: number,
+): Promise<{ items: BungalowWallFeedItem[]; total: number }> {
+  await ensureBungalowWallTables()
+
+  const fetchLimit = Math.min(limit + offset, 100)
+  const [eventRows, eventCountRows, postRows, postCountRows] = await Promise.all([
+    db<Array<{
+      id: number
+      wallet: string | null
+      event_type: 'visit' | 'add_art' | 'add_build' | 'add_item'
+      detail: string | null
+      island_heat: string
+      token_heat: string
+      created_at: string
+    }>>`
+      SELECT
+        id,
+        wallet,
+        event_type,
+        detail,
+        island_heat::text AS island_heat,
+        token_heat::text AS token_heat,
+        created_at::text AS created_at
+      FROM ${db(CONFIG.SCHEMA)}.bungalow_wall_events
+      WHERE token_address = ${tokenAddress}
+        AND chain = ${chain}
+      ORDER BY created_at DESC
+      LIMIT ${fetchLimit}
+    `,
+    db<Array<{ cnt: string }>>`
+      SELECT COUNT(*)::text AS cnt
+      FROM ${db(CONFIG.SCHEMA)}.bungalow_wall_events
+      WHERE token_address = ${tokenAddress}
+        AND chain = ${chain}
+    `,
+    db<Array<{
+      id: number
+      wallet: string
+      content: string
+      image_url: string | null
+      created_at: string
+    }>>`
+      SELECT
+        id,
+        wallet,
+        content,
+        image_url,
+        created_at::text AS created_at
+      FROM ${db(CONFIG.SCHEMA)}.bulletin_posts
+      WHERE token_address = ${tokenAddress}
+        AND chain = ${chain}
+      ORDER BY created_at DESC
+      LIMIT ${fetchLimit}
+    `,
+    db<Array<{ cnt: string }>>`
+      SELECT COUNT(*)::text AS cnt
+      FROM ${db(CONFIG.SCHEMA)}.bulletin_posts
+      WHERE token_address = ${tokenAddress}
+        AND chain = ${chain}
+    `,
+  ])
+
+  const combined = [
+    ...eventRows.map((row) => ({
+      source: 'event' as const,
+      created_at: row.created_at,
+      row,
+      wallet: row.wallet,
+    })),
+    ...postRows.map((row) => ({
+      source: 'post' as const,
+      created_at: row.created_at,
+      row,
+      wallet: row.wallet,
+    })),
+  ].sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at))
+
+  const page = combined.slice(offset, offset + limit)
+  const wallets = [...new Set(
+    page
+      .map((entry) => entry.wallet)
+      .filter((entry): entry is string => typeof entry === 'string' && entry.length > 0),
+  )]
+
+  const walletMeta = new Map<string, {
+    username: string | null
+    pfp_url: string | null
+    island_heat: number
+    token_heat: number
+  }>()
+
+  await Promise.all(
+    wallets.map(async (wallet) => {
+      const [display, identity, fallbackProfile] = await Promise.all([
+        getWallIdentityMeta(wallet),
+        getIdentityClusterByWallet(wallet),
+        getViewerProfile(wallet),
+      ])
+      const scopedWallets = identity?.wallets.map((entry) => entry.wallet) ?? [wallet]
+      const [aggregated, tokenHeats] = await Promise.all([
+        getAggregatedUserByWallets(scopedWallets),
+        getWalletTokenHeats(tokenAddress, scopedWallets),
+      ])
+
+      walletMeta.set(wallet, {
+        username: display.username,
+        pfp_url: display.pfp_url,
+        island_heat: aggregated?.island_heat ?? fallbackProfile?.islandHeat ?? 0,
+        token_heat: tokenHeats.reduce((sum, entry) => sum + entry.heat_degrees, 0),
+      })
+    }),
+  )
+
+  return {
+    items: page.map((entry) => {
+      const meta = entry.wallet ? walletMeta.get(entry.wallet) : null
+      if (entry.source === 'post') {
+        return {
+          id: `post:${entry.row.id}`,
+          kind: 'post',
+          wallet: entry.row.wallet,
+          username: meta?.username ?? null,
+          pfp_url: meta?.pfp_url ?? null,
+          content: entry.row.content,
+          image_url: entry.row.image_url,
+          detail: null,
+          island_heat: meta?.island_heat ?? 0,
+          token_heat: meta?.token_heat ?? 0,
+          created_at: entry.row.created_at,
+        } satisfies BungalowWallFeedItem
+      }
+
+      return {
+        id: `event:${entry.row.id}`,
+        kind: entry.row.event_type,
+        wallet: entry.row.wallet,
+        username: meta?.username ?? null,
+        pfp_url: meta?.pfp_url ?? null,
+        content: null,
+        image_url: null,
+        detail: entry.row.detail,
+        island_heat: Number(entry.row.island_heat ?? 0),
+        token_heat: Number(entry.row.token_heat ?? 0),
+        created_at: entry.row.created_at,
+      } satisfies BungalowWallFeedItem
+    }),
+    total:
+      Number(eventCountRows[0]?.cnt ?? 0) +
+      Number(postCountRows[0]?.cnt ?? 0),
+  }
 }
 
 export interface GlobalFeedPost {

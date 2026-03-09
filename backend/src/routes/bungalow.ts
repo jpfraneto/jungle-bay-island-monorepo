@@ -26,8 +26,11 @@ import {
   getWalletTokenHeat,
   getWalletTokenHeats,
   updateBungalowCuration,
+  upsertUser,
+  upsertUserWalletLinks,
 } from "../db/queries";
 import { optionalWalletContext, requireWalletAuth } from "../middleware/auth";
+import { getPrivyLinkedAccounts } from "../services/privyClaims";
 import { clearCache, getCached, setCached } from "../services/cache";
 import {
   COMMUNITY_POLICY,
@@ -53,6 +56,40 @@ import type { AppEnv } from "../types";
 const bungalowRoute = new Hono<AppEnv>();
 
 bungalowRoute.use("/bungalow/*", optionalWalletContext);
+
+function extractXUsernameFromClaims(claims: Record<string, unknown>): string | null {
+  const linkedAccounts = getPrivyLinkedAccounts(claims);
+  for (const account of linkedAccounts) {
+    const candidate = account as Record<string, unknown>;
+    const type = typeof candidate.type === "string" ? candidate.type : "";
+    if (type === "twitter_oauth" || type === "twitter") {
+      const raw =
+        typeof candidate.username === "string"
+          ? candidate.username
+          : typeof candidate.screen_name === "string"
+            ? candidate.screen_name
+            : "";
+      const clean = raw.trim().replace(/^@+/, "");
+      if (clean) return `@${clean}`;
+    }
+  }
+  return null;
+}
+
+function persistActorIdentity(
+  wallet: string,
+  privyUserId: string,
+  privyClaims: Record<string, unknown> | undefined,
+): void {
+  const xUsername = privyClaims ? extractXUsernameFromClaims(privyClaims) : null;
+  const walletKind: "privy_siwe" | "privy_siws" = normalizeAddress(wallet)
+    ? "privy_siwe"
+    : "privy_siws";
+  void upsertUserWalletLinks(privyUserId, wallet, walletKind).catch(() => {});
+  if (xUsername) {
+    void upsertUser(privyUserId, { x_username: xUsername }).catch(() => {});
+  }
+}
 
 let communityConstructionTablesPromise: Promise<void> | null = null;
 const balanceOfReadAbi = [
@@ -1522,6 +1559,7 @@ bungalowRoute.post("/bungalow/:chain/:ca/visit", async (c) => {
   }
 
   const wallet = c.get("walletAddress") ?? null;
+  const privyUserId = c.get("privyUserId") ?? null;
   let islandHeat = 0;
   let tokenHeat = 0;
 
@@ -1536,6 +1574,14 @@ bungalowRoute.post("/bungalow/:chain/:ca/visit", async (c) => {
 
     islandHeat = aggregated?.island_heat ?? fallbackProfile?.islandHeat ?? 0;
     tokenHeat = tokenHeats.reduce((sum, entry) => sum + entry.heat_degrees, 0);
+
+    if (privyUserId) {
+      persistActorIdentity(
+        wallet,
+        privyUserId,
+        c.get("privyClaims") as Record<string, unknown> | undefined,
+      );
+    }
   }
 
   await createBungalowWallEvent({
@@ -1564,6 +1610,14 @@ bungalowRoute.post("/bungalow/:chain/:ca/bulletin", requireWalletAuth, async (c)
 
   if (!tokenAddress || !wallet) {
     throw new ApiError(400, "invalid_params", "Invalid chain or token address");
+  }
+
+  if (privyUserId) {
+    persistActorIdentity(
+      wallet,
+      privyUserId,
+      c.get("privyClaims") as Record<string, unknown> | undefined,
+    );
   }
 
   const storedWallets = privyUserId

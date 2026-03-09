@@ -103,19 +103,58 @@ const ASSET_CATALOG = [
   },
 ] as const
 
+function createBackWallFrameSlots(): SlotConfig[] {
+  const xPositions = [-2.8, -1.55, 1.55, 2.8]
+  const yPositions = [1.65, 3.1]
+
+  return yPositions.flatMap((y, rowIndex) =>
+    xPositions.map((x, columnIndex) => ({
+      slotId: `back-wall-frame-${rowIndex + 1}-${columnIndex + 1}`,
+      slotType: 'wall-frame' as const,
+      position: [x, y, -2.94] as [number, number, number],
+      rotation: [0, 0, 0] as [number, number, number],
+      filled: false,
+    })),
+  )
+}
+
+function createSideWallFrameSlots(input: {
+  prefix: 'left' | 'right'
+  x: number
+  rotationY: number
+}): SlotConfig[] {
+  const zPositions = [-1.8, 0, 1.8]
+  const yPositions = [1.8, 3.2]
+
+  return yPositions.flatMap((y, rowIndex) =>
+    zPositions.map((z, columnIndex) => ({
+      slotId: `${input.prefix}-wall-frame-${rowIndex + 1}-${columnIndex + 1}`,
+      slotType: 'wall-frame' as const,
+      position: [input.x, y, z] as [number, number, number],
+      rotation: [0, input.rotationY, 0] as [number, number, number],
+      filled: false,
+    })),
+  )
+}
+
 function createDefaultScene(chain: 'base' | 'ethereum', ca: string): SceneConfig {
   return {
     version: '1.0',
     bungalowId: `${chain}:${ca}`,
     slots: [
-      { slotId: 'back-wall-frame-1', slotType: 'wall-frame', position: [-2, 2, -2.94], rotation: [0, 0, 0], filled: false },
-      { slotId: 'back-wall-frame-2', slotType: 'wall-frame', position: [0, 2, -2.94], rotation: [0, 0, 0], filled: false },
-      { slotId: 'back-wall-frame-3', slotType: 'wall-frame', position: [2, 2, -2.94], rotation: [0, 0, 0], filled: false },
-      { slotId: 'left-wall-frame-1', slotType: 'wall-frame', position: [-3.94, 2, -1.2], rotation: [0, Math.PI / 2, 0], filled: false },
-      { slotId: 'left-wall-frame-2', slotType: 'wall-frame', position: [-3.94, 2, 1.2], rotation: [0, Math.PI / 2, 0], filled: false },
-      { slotId: 'right-wall-frame-1', slotType: 'wall-frame', position: [3.94, 2, -1.2], rotation: [0, -Math.PI / 2, 0], filled: false },
-      { slotId: 'right-wall-frame-2', slotType: 'wall-frame', position: [3.94, 2, 1.2], rotation: [0, -Math.PI / 2, 0], filled: false },
-      { slotId: 'right-shelf-1', slotType: 'shelf', position: [3.7, 1.2, 0.2], rotation: [0, -Math.PI / 2, 0], filled: false },
+      ...createBackWallFrameSlots(),
+      ...createSideWallFrameSlots({
+        prefix: 'left',
+        x: -3.94,
+        rotationY: Math.PI / 2,
+      }),
+      ...createSideWallFrameSlots({
+        prefix: 'right',
+        x: 3.94,
+        rotationY: -Math.PI / 2,
+      }),
+      { slotId: 'right-shelf-1', slotType: 'shelf', position: [3.7, 1.2, -0.8], rotation: [0, -Math.PI / 2, 0], filled: false },
+      { slotId: 'right-shelf-2', slotType: 'shelf', position: [3.7, 1.2, 0.9], rotation: [0, -Math.PI / 2, 0], filled: false },
       { slotId: 'left-portal-1', slotType: 'portal', position: [-3.72, 1.5, 0], rotation: [0, Math.PI / 2, 0], filled: false },
       { slotId: 'floor-1', slotType: 'floor', position: [-1.7, 0.02, -0.4], rotation: [-Math.PI / 2, 0, 0], filled: false },
       { slotId: 'floor-2', slotType: 'floor', position: [1.7, 0.02, -0.2], rotation: [-Math.PI / 2, 0, 0], filled: false },
@@ -151,12 +190,41 @@ function coerceSceneValue(raw: unknown): Partial<SceneConfig> | null {
 function normalizeScene(raw: unknown, fallback: SceneConfig): SceneConfig {
   const value = coerceSceneValue(raw)
   if (!value) return fallback
-  const slots = Array.isArray(value.slots) ? value.slots : fallback.slots
+  const rawSlots = Array.isArray(value.slots) ? value.slots : []
+  const savedSlots = new Map<string, Partial<SlotConfig>>()
+
+  for (const rawSlot of rawSlots) {
+    if (!rawSlot || typeof rawSlot !== 'object') continue
+    const slotId =
+      typeof (rawSlot as { slotId?: unknown }).slotId === 'string'
+        ? ((rawSlot as { slotId: string }).slotId)
+        : ''
+    if (!slotId) continue
+    savedSlots.set(slotId, rawSlot as Partial<SlotConfig>)
+  }
 
   return {
     version: '1.0',
     bungalowId: typeof value.bungalowId === 'string' ? value.bungalowId : fallback.bungalowId,
-    slots: slots as SlotConfig[],
+    slots: fallback.slots.map((slot) => {
+      const saved = savedSlots.get(slot.slotId)
+      if (!saved) {
+        return slot
+      }
+
+      const decoration =
+        saved.decoration && typeof saved.decoration === 'object'
+          ? (saved.decoration as DecorationConfig)
+          : undefined
+      const filled =
+        typeof saved.filled === 'boolean' ? saved.filled : Boolean(decoration)
+
+      return {
+        ...slot,
+        filled,
+        decoration,
+      }
+    }),
   }
 }
 

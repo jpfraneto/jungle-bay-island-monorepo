@@ -46,13 +46,15 @@ export function formatTimeAgo(input: string | null | undefined): string {
 
 export function formatJbmAmount(value: string | number): string {
   const numeric = typeof value === "string" ? Number(value) : value;
-  if (!Number.isFinite(numeric)) return `${value} JBM`;
+  if (!Number.isFinite(numeric)) return `${value} jungle bay memes`;
 
-  if (numeric >= 1_000_000) return `${(numeric / 1_000_000).toFixed(0)}M JBM`;
-  if (numeric >= 1_000) return `${(numeric / 1_000).toFixed(0)}k JBM`;
-  return `${numeric} JBM`;
+  if (numeric >= 1_000_000)
+    return `${(numeric / 1_000_000).toFixed(0)}M jungle bay memes`;
+  if (numeric >= 1_000)
+    return `${(numeric / 1_000).toFixed(0)}k jungle bay memes`;
+  return `${numeric} jungle bay memes`;
 }
 
 export function formatJbmCount(value: string | number): string {
-  return formatJbmAmount(value).replace(/ JBM$/, "");
+  return formatJbmAmount(value).replace(/ jungle bay memes$/, "");
 }

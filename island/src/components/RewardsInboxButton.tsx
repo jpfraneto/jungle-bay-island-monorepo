@@ -14,7 +14,7 @@ import {
   isHexSignature,
   isHexBytes32,
 } from "../utils/claimEscrow";
-import { formatJbmCount } from "../utils/formatters";
+import { formatAddress, formatJbmCount } from "../utils/formatters";
 import styles from "../styles/rewards-inbox.module.css";
 
 const CLAIMED_REWARDS_CACHE_PREFIX = "jbi:rewards:claimed-period-total:v1";
@@ -183,12 +183,14 @@ export default function RewardsInboxButton() {
     status: linkStatus,
     error: linkError,
   } = useSiweWalletLink();
+  const claimLookupWallet =
+    linkedWalletRows[0]?.address ?? walletAddress ?? undefined;
   const {
     claims,
     isLoading,
     error: loadError,
     refetch,
-  } = useWalletClaims(walletAddress ?? undefined);
+  } = useWalletClaims(claimLookupWallet);
 
   const [open, setOpen] = useState(false);
   const [isClaiming, setIsClaiming] = useState(false);
@@ -276,6 +278,11 @@ export default function RewardsInboxButton() {
     : !isLoading && claims
       ? formatJbmCount(claims.total_claimable_jbm)
       : "—";
+  const selectedClaimWallet =
+    selectedPayoutWallet || walletAddress || claims?.payout_wallet || "";
+  const selectedClaimWalletLabel = selectedClaimWallet
+    ? formatAddress(selectedClaimWallet)
+    : null;
 
   useEffect(() => {
     if (!open || !hasClaimedToday) return;
@@ -538,8 +545,14 @@ export default function RewardsInboxButton() {
               </button>
             </header>
 
-            <WalletSelector onSelect={setSelectedPayoutWallet} />
-            {showWalletGate || linkedWalletRows.length === 0 ? (
+            {!hasClaimedToday ? (
+              <WalletSelector
+                value={selectedPayoutWallet}
+                onSelect={setSelectedPayoutWallet}
+              />
+            ) : null}
+            {!hasClaimedToday &&
+            (showWalletGate || linkedWalletRows.length === 0) ? (
               <div className={styles.error}>
                 <strong>You need a linked wallet to continue.</strong>
                 <button
@@ -647,11 +660,13 @@ export default function RewardsInboxButton() {
                     ? "Claimed today ✓"
                     : isLoading
                       ? "Loading rewards..."
-                      : `Claim ${claims ? formatJbmCount(claims.total_claimable_jbm) : "0"} jungle bay memes`}
+                      : `Claim ${claims ? formatJbmCount(claims.total_claimable_jbm) : "0"} jungle bay memes${
+                          selectedClaimWalletLabel
+                            ? ` with ${selectedClaimWalletLabel}`
+                            : ""
+                        }`}
               </button>
-              {hasClaimedToday && countdown ? (
-                <div className={styles.status}>Claim again in {countdown}</div>
-              ) : null}
+
               {status ? <div className={styles.status}>{status}</div> : null}
               {error ? <div className={styles.error}>{error}</div> : null}
             </div>

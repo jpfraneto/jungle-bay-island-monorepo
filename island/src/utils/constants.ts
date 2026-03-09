@@ -11,7 +11,7 @@ export const ITEM_LABELS: Record<WallItemType, string> = {
   frame: "Post",
   link: "Link",
   image: "Image",
-  portal: "Miniapp",
+  portal: "Portal",
 };
 
 export const GLOW_COLORS = [

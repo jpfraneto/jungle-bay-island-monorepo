@@ -69,7 +69,7 @@ export default function WallItem({ item }: WallItemProps) {
                 : "🔗"}{" "}
             {title ||
               (item.item_type === "miniapp"
-                ? "Untitled miniapp"
+                ? "Untitled build"
                 : item.item_type === "game"
                   ? "Untitled game"
                   : "Untitled link")}

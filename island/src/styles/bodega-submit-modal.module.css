@@ -178,6 +178,71 @@
   line-height: 1.35;
 }
 
+.metadataCard {
+  display: grid;
+  gap: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(121, 181, 138, 0.14);
+  background: rgba(9, 20, 14, 0.56);
+  padding: 10px;
+  font-size: 12px;
+}
+
+.metadataGrid {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.metadataPreview,
+.metadataPlaceholder {
+  width: 100%;
+  min-height: 90px;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.metadataPreview {
+  display: block;
+  object-fit: cover;
+  background: rgba(4, 11, 7, 0.74);
+}
+
+.metadataPlaceholder {
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 10px;
+  box-sizing: border-box;
+  background: rgba(4, 11, 7, 0.74);
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+.metadataContent {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.metadataContent strong {
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.metadataContent p,
+.metadataNote,
+.metadataWarning {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.metadataWarning {
+  color: #f0d7a6;
+}
+
 .lockedField span {
   color: var(--text-muted);
 }
@@ -295,6 +360,10 @@
 
 @media (max-width: 760px) {
   .formGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .metadataGrid {
     grid-template-columns: 1fr;
   }
 

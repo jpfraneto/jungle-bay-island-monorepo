@@ -96,87 +96,6 @@ function getVerifiedAdminAddress(bungalow: BungalowDetails): string | null {
     : null;
 }
 
-function BungalowSkeleton() {
-  return (
-    <div className={styles.page}>
-      <div className={styles.content}>
-        <section className={styles.mainColumn}>
-          <div className={styles.skeletonHeaderCard}>
-            <div className={styles.headerTop}>
-              <div
-                className={`${styles.skeletonBlock} ${styles.skeletonTokenImage}`}
-              />
-
-              <div className={styles.skeletonHeaderText}>
-                <div
-                  className={`${styles.skeletonBlock} ${styles.skeletonTitle}`}
-                />
-                <div
-                  className={`${styles.skeletonBlock} ${styles.skeletonBadge}`}
-                />
-              </div>
-            </div>
-
-            <div className={styles.stats}>
-              {Array.from({ length: 4 }).map((_, idx) => (
-                <div
-                  key={`stats-skeleton-${idx}`}
-                  className={styles.skeletonStatCard}
-                >
-                  <div
-                    className={`${styles.skeletonBlock} ${styles.skeletonLabel}`}
-                  />
-                  <div
-                    className={`${styles.skeletonBlock} ${styles.skeletonValue}`}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className={styles.skeletonWallCard}>
-            <div
-              className={`${styles.skeletonBlock} ${styles.skeletonWallHeader}`}
-            />
-            <div className={styles.skeletonWallGrid}>
-              {Array.from({ length: 4 }).map((_, idx) => (
-                <div
-                  key={`wall-skeleton-${idx}`}
-                  className={styles.skeletonWallItem}
-                >
-                  <div
-                    className={`${styles.skeletonBlock} ${styles.skeletonWallLineLong}`}
-                  />
-                  <div
-                    className={`${styles.skeletonBlock} ${styles.skeletonWallLineShort}`}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <div className={styles.sideColumn}>
-          <div className={styles.skeletonClaimCard}>
-            <div
-              className={`${styles.skeletonBlock} ${styles.skeletonClaimTitle}`}
-            />
-            <div
-              className={`${styles.skeletonBlock} ${styles.skeletonClaimMetric}`}
-            />
-            <div
-              className={`${styles.skeletonBlock} ${styles.skeletonClaimMetric}`}
-            />
-            <div
-              className={`${styles.skeletonBlock} ${styles.skeletonClaimButton}`}
-            />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function BungalowEntryTransition({
   name,
   imageUrl,
@@ -281,6 +200,35 @@ function BungalowEntryTransition({
   );
 }
 
+function compactLoadingLabel(value: string | null | undefined): string {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed) return "bungalow";
+  if (/^0x[a-f0-9]{40}$/i.test(trimmed)) {
+    return `${trimmed.slice(0, 6)}...${trimmed.slice(-4)}`;
+  }
+  return trimmed.replace(/[-_]+/g, " ");
+}
+
+function BungalowLoadingState({
+  name,
+  imageUrl,
+}: {
+  name: string;
+  imageUrl?: string;
+}) {
+  return (
+    <div className={styles.page}>
+      <div className={styles.content}>
+        <section className={styles.mainColumn}>
+          <div className={styles.wallRegion}>
+            <BungalowEntryTransition name={name} imageUrl={imageUrl} />
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
 interface BungalowPageLocationState {
   pendingBodegaItem?: unknown;
 }
@@ -325,13 +273,16 @@ export default function BungalowPage() {
     chain || undefined,
     ca || undefined,
   );
+  const loadingName = compactLoadingLabel(
+    routeIdentifier ?? bungalow?.canonical_project?.symbol ?? bungalow?.symbol ?? ca,
+  );
 
   if (!hasDirectRoute && !routeIdentifier) {
     return <div className={styles.page}>Invalid bungalow route</div>;
   }
 
   if (!hasDirectRoute && resolveLoading) {
-    return <BungalowSkeleton />;
+    return <BungalowLoadingState name={loadingName} />;
   }
 
   if (!hasDirectRoute && resolveError) {
@@ -351,7 +302,12 @@ export default function BungalowPage() {
   }
 
   if (!chain || !ca || isLoading) {
-    return <BungalowSkeleton />;
+    return (
+      <BungalowLoadingState
+        name={loadingName}
+        imageUrl={bungalow?.image_url ?? undefined}
+      />
+    );
   }
 
   if (error || !bungalow) {

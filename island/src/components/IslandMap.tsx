@@ -117,11 +117,6 @@ function hashToUnit(seed: string): number {
   return (hash >>> 0) / 4294967295;
 }
 
-function formatCount(value: number | null | undefined): string {
-  if (!value || value <= 0) return "New";
-  return new Intl.NumberFormat().format(value);
-}
-
 function TokenAvatar({
   bungalow,
   size,
@@ -382,27 +377,26 @@ function BungalowMarker({
   compact,
   selected,
   onSelect,
+  onEnter,
 }: {
   node: PositionedBungalow;
   compact: boolean;
   selected: boolean;
   onSelect: (node: PositionedBungalow) => void;
+  onEnter: (node: PositionedBungalow) => void;
 }) {
+  const label = node.bungalow.symbol ?? node.bungalow.name ?? "Bungalow";
+
   return (
     <Html position={[0, 3.35, 0]} center style={{ pointerEvents: "auto" }}>
-      <button
-        type="button"
-        onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          onSelect(node);
-        }}
+      <div
         style={{
           display: "flex",
           alignItems: "center",
-          gap: compact ? 0 : 10,
+          gap: selected ? 8 : compact ? 0 : 10,
           minHeight: 44,
-          padding: compact ? 4 : "7px 10px 7px 7px",
+          padding:
+            compact && !selected ? 4 : compact ? "6px 8px 6px 6px" : "7px 10px 7px 7px",
           borderRadius: 999,
           border: selected
             ? "1px solid rgba(255, 211, 122, 0.82)"
@@ -418,33 +412,77 @@ function BungalowMarker({
           backdropFilter: "blur(10px)",
         }}
       >
-        <TokenAvatar
-          bungalow={node.bungalow}
-          size={compact ? 38 : 46}
-          radius={999}
-        />
-        {!compact ? (
-          <span
-            style={{
-              display: "grid",
-              justifyItems: "start",
-              gap: 2,
-              minWidth: 0,
-              textAlign: "left",
-            }}
-          >
-            <strong
+        <button
+          type="button"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onSelect(node);
+          }}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: compact && !selected ? 0 : 10,
+            border: 0,
+            background: "transparent",
+            color: "inherit",
+            cursor: "pointer",
+            padding: 0,
+            font: "inherit",
+          }}
+        >
+          <TokenAvatar
+            bungalow={node.bungalow}
+            size={compact ? 38 : 46}
+            radius={999}
+          />
+          {!compact || selected ? (
+            <span
               style={{
-                fontSize: 12,
-                lineHeight: 1.15,
-                whiteSpace: "nowrap",
+                display: "grid",
+                justifyItems: "start",
+                gap: 2,
+                minWidth: 0,
+                textAlign: "left",
               }}
             >
-              {node.bungalow.symbol ?? node.bungalow.name ?? "Bungalow"}
-            </strong>
-          </span>
+              <strong
+                style={{
+                  fontSize: 12,
+                  lineHeight: 1.15,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {label}
+              </strong>
+            </span>
+          ) : null}
+        </button>
+
+        {selected ? (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onEnter(node);
+            }}
+            style={{
+              minHeight: 32,
+              padding: "0 12px",
+              borderRadius: 999,
+              border: 0,
+              background: "linear-gradient(135deg, #ffd37a, #f8bf57)",
+              color: "#241b08",
+              font: "inherit",
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            Enter
+          </button>
         ) : null}
-      </button>
+      </div>
     </Html>
   );
 }
@@ -454,11 +492,13 @@ function BungalowHut({
   compactMarker,
   selected,
   onSelect,
+  onEnter,
 }: {
   node: PositionedBungalow;
   compactMarker: boolean;
   selected: boolean;
   onSelect: (node: PositionedBungalow) => void;
+  onEnter: (node: PositionedBungalow) => void;
 }) {
   const glowColor = GLOW_COLORS[node.index % GLOW_COLORS.length];
 
@@ -528,6 +568,7 @@ function BungalowHut({
           compact={compactMarker}
           selected={selected}
           onSelect={onSelect}
+          onEnter={onEnter}
         />
       </group>
     </group>
@@ -579,6 +620,7 @@ function IslandScene({
   compactMarker,
   selectedKey,
   onSelect,
+  onEnter,
   motion,
   onMotionSettled,
 }: {
@@ -589,6 +631,7 @@ function IslandScene({
   compactMarker: boolean;
   selectedKey: string | null;
   onSelect: (node: PositionedBungalow) => void;
+  onEnter: (node: PositionedBungalow) => void;
   motion: CameraMotion | null;
   onMotionSettled: () => void;
 }) {
@@ -629,6 +672,7 @@ function IslandScene({
                 compactMarker={compactMarker}
                 selected={selectedKey === nodeKey}
                 onSelect={onSelect}
+                onEnter={onEnter}
               />
             );
           })
@@ -688,129 +732,6 @@ function WorldHud({
         Add a Bungalow
       </button>
     </>
-  );
-}
-
-function SelectionHud({
-  bungalow,
-  onEnter,
-  onClose,
-}: {
-  bungalow: HomeTeamBungalow;
-  onEnter: () => void;
-  onClose: () => void;
-}) {
-  const isMobile = useMediaWidth(768);
-
-  return (
-    <div
-      style={{
-        position: "absolute",
-        left: isMobile ? 12 : 18,
-        right: isMobile ? 12 : "auto",
-        bottom: isMobile ? 12 : 18,
-        zIndex: 4,
-        width: isMobile ? "auto" : 360,
-        padding: isMobile ? 14 : 16,
-        borderRadius: 20,
-        border: "1px solid rgba(255,255,255,0.12)",
-        background:
-          "linear-gradient(180deg, rgba(9, 17, 14, 0.95), rgba(11, 23, 18, 0.88))",
-        boxShadow: "0 22px 42px rgba(0,0,0,0.32)",
-        backdropFilter: "blur(16px)",
-        display: "grid",
-        gap: 14,
-      }}
-    >
-      <div
-        style={{ display: "flex", justifyContent: "space-between", gap: 12 }}
-      >
-        <div style={{ display: "flex", gap: 12, minWidth: 0 }}>
-          <TokenAvatar
-            bungalow={bungalow}
-            size={isMobile ? 54 : 60}
-            radius={18}
-          />
-          <div style={{ minWidth: 0 }}>
-            <p
-              style={{
-                margin: 0,
-                fontSize: 11,
-                letterSpacing: "0.1em",
-                textTransform: "uppercase",
-                color: "#96d4bf",
-              }}
-            >
-              Community Bungalow
-            </p>
-            <h2
-              style={{
-                margin: "4px 0 2px",
-                fontSize: 22,
-                lineHeight: 1.1,
-                color: "#f7efd6",
-              }}
-            >
-              {bungalow.name ?? bungalow.symbol ?? "Bungalow"}
-            </h2>
-            <p
-              style={{
-                margin: 0,
-                color: "rgba(247,239,214,0.66)",
-                fontSize: 13,
-              }}
-            >
-              {bungalow.symbol ?? "No ticker yet"} ·{" "}
-              {formatCount(bungalow.holder_count)} holders
-            </p>
-          </div>
-        </div>
-
-        <button
-          type="button"
-          onClick={onClose}
-          style={{
-            width: 34,
-            height: 34,
-            borderRadius: 999,
-            border: "1px solid rgba(255,255,255,0.12)",
-            background: "rgba(255,255,255,0.04)",
-            color: "#f7efd6",
-            cursor: "pointer",
-            font: "inherit",
-          }}
-        >
-          ×
-        </button>
-      </div>
-
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          flexWrap: "wrap",
-        }}
-      >
-        <button
-          type="button"
-          onClick={onEnter}
-          style={{
-            minHeight: 46,
-            padding: "0 18px",
-            border: 0,
-            borderRadius: 12,
-            background: "linear-gradient(135deg, #ffd37a, #f8bf57)",
-            color: "#241b08",
-            font: "inherit",
-            fontWeight: 700,
-            cursor: "pointer",
-          }}
-        >
-          Enter Bungalow
-        </button>
-      </div>
-    </div>
   );
 }
 
@@ -908,12 +829,6 @@ function IslandMap3D({
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [motion, setMotion] = useState<CameraMotion | null>(null);
 
-  const selectedNode =
-    nodes.find(
-      (node) =>
-        `${node.bungalow.chain}:${node.bungalow.token_address}` === selectedKey,
-    ) ?? null;
-
   const handleSelect = (node: PositionedBungalow) => {
     const nextKey = `${node.bungalow.chain}:${node.bungalow.token_address}`;
     setSelectedKey(nextKey);
@@ -966,6 +881,11 @@ function IslandMap3D({
             compactMarker={compactMarker}
             selectedKey={selectedKey}
             onSelect={handleSelect}
+            onEnter={(node) =>
+              navigate(
+                `/bungalow/${node.bungalow.canonical_slug ?? node.bungalow.token_address}`,
+              )
+            }
             motion={motion}
             onMotionSettled={() => setMotion(null)}
           />
@@ -989,19 +909,6 @@ function IslandMap3D({
         onOpenConstruction={onOpenConstruction}
         loading={isLoading}
       />
-
-      {selectedNode ? (
-        <SelectionHud
-          bungalow={selectedNode.bungalow}
-          onClose={resetView}
-          onEnter={() =>
-            navigate(
-              `/bungalow/${selectedNode.bungalow.canonical_slug ?? selectedNode.bungalow.token_address}`,
-            )
-          }
-        />
-      ) : null}
-
       <ControlsHint />
     </div>
   );
@@ -1025,11 +932,6 @@ function IslandMapFallback({
     }));
   }, [bungalows]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const selectedNode =
-    nodes.find(
-      (node) =>
-        `${node.bungalow.chain}:${node.bungalow.token_address}` === selectedKey,
-    ) ?? null;
 
   return (
     <section
@@ -1076,45 +978,99 @@ function IslandMapFallback({
 
       {nodes.map((node) => {
         const key = `${node.bungalow.chain}:${node.bungalow.token_address}`;
+        const selected = selectedKey === key;
         return (
-          <button
+          <div
             key={key}
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              setSelectedKey(key);
-            }}
             style={{
               position: "absolute",
               left: `${node.x}%`,
               top: `${node.y}%`,
               transform: "translate(-50%, -50%)",
-              minWidth: 44,
-              minHeight: 44,
-              borderRadius: 999,
-              border:
-                selectedKey === key
-                  ? "1px solid rgba(255, 211, 122, 0.82)"
-                  : "1px solid rgba(255,255,255,0.14)",
-              background:
-                selectedKey === key
-                  ? "rgba(18, 28, 18, 0.94)"
-                  : "rgba(10, 18, 14, 0.84)",
-              padding: isCompact ? 4 : "7px 10px 7px 7px",
               display: "flex",
               alignItems: "center",
-              gap: 10,
+              gap: selected ? 8 : isCompact ? 0 : 10,
+              minHeight: 44,
+              padding:
+                isCompact && !selected
+                  ? 4
+                  : isCompact
+                    ? "6px 8px 6px 6px"
+                    : "7px 10px 7px 7px",
+              borderRadius: 999,
+              border: selected
+                ? "1px solid rgba(255, 211, 122, 0.82)"
+                : "1px solid rgba(255,255,255,0.14)",
+              background: selected
+                ? "rgba(18, 28, 18, 0.94)"
+                : "rgba(10, 18, 14, 0.84)",
               color: "#f6eed7",
-              cursor: "pointer",
-              boxShadow: "0 12px 24px rgba(0,0,0,0.25)",
+              boxShadow: selected
+                ? "0 12px 26px rgba(0,0,0,0.42)"
+                : "0 12px 24px rgba(0,0,0,0.25)",
             }}
           >
-            <TokenAvatar
-              bungalow={node.bungalow}
-              size={isCompact ? 34 : 40}
-              radius={999}
-            />
-          </button>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                setSelectedKey(key);
+              }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: isCompact && !selected ? 0 : 10,
+                border: 0,
+                background: "transparent",
+                color: "inherit",
+                cursor: "pointer",
+                padding: 0,
+                font: "inherit",
+              }}
+            >
+              <TokenAvatar
+                bungalow={node.bungalow}
+                size={isCompact ? 34 : 40}
+                radius={999}
+              />
+              {!isCompact || selected ? (
+                <strong
+                  style={{
+                    fontSize: 12,
+                    lineHeight: 1.15,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {node.bungalow.symbol ?? node.bungalow.name ?? "Bungalow"}
+                </strong>
+              ) : null}
+            </button>
+
+            {selected ? (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  navigate(
+                    `/bungalow/${node.bungalow.canonical_slug ?? node.bungalow.token_address}`,
+                  );
+                }}
+                style={{
+                  minHeight: 32,
+                  padding: "0 12px",
+                  borderRadius: 999,
+                  border: 0,
+                  background: "linear-gradient(135deg, #ffd37a, #f8bf57)",
+                  color: "#241b08",
+                  font: "inherit",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                Enter
+              </button>
+            ) : null}
+          </div>
         );
       })}
 
@@ -1154,18 +1110,6 @@ function IslandMapFallback({
         >
           Failed to load community bungalows: {error}
         </div>
-      ) : null}
-
-      {selectedNode ? (
-        <SelectionHud
-          bungalow={selectedNode.bungalow}
-          onClose={() => setSelectedKey(null)}
-          onEnter={() =>
-            navigate(
-              `/bungalow/${selectedNode.bungalow.canonical_slug ?? selectedNode.bungalow.token_address}`,
-            )
-          }
-        />
       ) : null}
 
       <ControlsHint />

@@ -18,6 +18,39 @@ export default function ChangelogPage() {
 
       <article className={styles.entry}>
         <div className={styles.entryHeader}>
+          <span className={styles.date}>March 9, 2026</span>
+          <h2 className={styles.heading}>Map Entry, Reward Signing, and Build Submission Were Simplified</h2>
+        </div>
+        <p>
+          Several last-mile UX flows were tightened so the island reads more
+          clearly and asks less from people right before ship.
+        </p>
+        <ul className={styles.list}>
+          <li>
+            Entering a bungalow now happens directly from that bungalow&apos;s
+            floating marker on the island map, without a separate bottom-corner
+            selection card.
+          </li>
+          <li>
+            Room entry now shows only the entering transition, bungalow wall
+            layouts now open up across all walls, and old saved rooms inherit
+            the expanded placement grid automatically.
+          </li>
+          <li>
+            Daily island rewards no longer recalculate when the signing wallet
+            changes, already-claimed states hide redundant wallet controls, and
+            claim buttons now name the exact wallet being used.
+          </li>
+          <li>
+            Bodega miniapp submission was simplified into a Build flow: paste a
+            link, let the app pull the preview metadata, and surface missing
+            page tags when the destination is not set up cleanly yet.
+          </li>
+        </ul>
+      </article>
+
+      <article className={styles.entry}>
+        <div className={styles.entryHeader}>
           <span className={styles.date}>March 6, 2026</span>
           <h2 className={styles.heading}>Bodega Placement Now Chooses The Room Spot Before Payment</h2>
         </div>

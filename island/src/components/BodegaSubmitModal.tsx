@@ -47,6 +47,13 @@ type DraftFieldKey = "title" | "price" | "previewUrl" | "url";
 
 type DraftFieldErrors = Partial<Record<DraftFieldKey, string>>;
 
+interface BuildMetadata {
+  title: string;
+  description: string;
+  image: string;
+  missingFields: Array<"title" | "description" | "image">;
+}
+
 /**
  * Restores a pending publishing-fee payment so retries can survive refreshes.
  */
@@ -119,6 +126,19 @@ function isLikelyGlbUrl(value: string): boolean {
   }
 }
 
+function asString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function getBuildFallbackTitle(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname.replace(/^www\./i, "") || "Untitled Build";
+  } catch {
+    return "Untitled Build";
+  }
+}
+
 function getBungalowKey(bungalow: DirectoryBungalow): string {
   return `${bungalow.chain}:${bungalow.token_address}`;
 }
@@ -185,7 +205,7 @@ function validateDraft(input: {
 } {
   const fieldErrors: DraftFieldErrors = {};
 
-  if (!input.title.trim()) {
+  if (input.assetType !== "miniapp" && !input.title.trim()) {
     fieldErrors.title = "Give this listing a title.";
   }
 
@@ -210,7 +230,7 @@ function validateDraft(input: {
 
   if (input.assetType === "miniapp") {
     if (!isHttpUrl(input.url)) {
-      fieldErrors.url = "Miniapps need a valid http(s) URL.";
+      fieldErrors.url = "Builds need a valid http(s) URL.";
     }
   }
 
@@ -251,6 +271,11 @@ export default function BodegaSubmitModal({
   const [price, setPrice] = useState("50000");
   const [previewUrl, setPreviewUrl] = useState("");
   const [url, setUrl] = useState("");
+  const [buildMetadata, setBuildMetadata] = useState<BuildMetadata | null>(null);
+  const [isBuildMetadataLoading, setIsBuildMetadataLoading] = useState(false);
+  const [buildMetadataError, setBuildMetadataError] = useState<string | null>(
+    null,
+  );
   const [originKey, setOriginKey] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -285,6 +310,9 @@ export default function BodegaSubmitModal({
     setPrice("50000");
     setPreviewUrl("");
     setUrl("");
+    setBuildMetadata(null);
+    setIsBuildMetadataLoading(false);
+    setBuildMetadataError(null);
     const preferredKey = defaultOriginBungalow
       ? getBungalowKey(defaultOriginBungalow)
       : "";
@@ -323,6 +351,85 @@ export default function BodegaSubmitModal({
   useEffect(() => {
     writePendingSubmissionPayment(pendingPayment);
   }, [pendingPayment]);
+
+  useEffect(() => {
+    if (!open || listingType !== "miniapp") {
+      setBuildMetadata(null);
+      setIsBuildMetadataLoading(false);
+      setBuildMetadataError(null);
+      return;
+    }
+
+    const trimmedUrl = url.trim();
+    if (!trimmedUrl) {
+      setBuildMetadata(null);
+      setIsBuildMetadataLoading(false);
+      setBuildMetadataError(null);
+      return;
+    }
+
+    if (!isHttpUrl(trimmedUrl)) {
+      setBuildMetadata(null);
+      setIsBuildMetadataLoading(false);
+      setBuildMetadataError(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => {
+      setIsBuildMetadataLoading(true);
+      setBuildMetadataError(null);
+
+      void (async () => {
+        try {
+          const response = await fetch(`/api/og?url=${encodeURIComponent(trimmedUrl)}`, {
+            cache: "no-store",
+            signal: controller.signal,
+          });
+          const data = (await response.json().catch(() => null)) as
+            | { title?: unknown; description?: unknown; image?: unknown }
+            | null;
+
+          if (controller.signal.aborted) return;
+
+          const remoteTitle = asString(data?.title);
+          const remoteDescription = asString(data?.description);
+          const remoteImage = asString(data?.image);
+
+          setBuildMetadata({
+            title: remoteTitle || getBuildFallbackTitle(trimmedUrl),
+            description: remoteDescription,
+            image: remoteImage,
+            missingFields: [
+              ...(remoteTitle ? [] : (["title"] as const)),
+              ...(remoteDescription ? [] : (["description"] as const)),
+              ...(remoteImage ? [] : (["image"] as const)),
+            ],
+          });
+        } catch {
+          if (controller.signal.aborted) return;
+          setBuildMetadata({
+            title: getBuildFallbackTitle(trimmedUrl),
+            description: "",
+            image: "",
+            missingFields: ["title", "description", "image"],
+          });
+          setBuildMetadataError(
+            "Could not read metadata from that link. You can still submit it, but it will preview better once the site exposes title, description, and image tags.",
+          );
+        } finally {
+          if (!controller.signal.aborted) {
+            setIsBuildMetadataLoading(false);
+          }
+        }
+      })();
+    }, 250);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeout);
+    };
+  }, [listingType, open, url]);
 
   const clearFieldError = (field: DraftFieldKey) => {
     setFieldErrors((current) => {
@@ -374,7 +481,26 @@ export default function BodegaSubmitModal({
   const creatorWallet = selectedPayWallet || walletAddress || "";
   const assetType: BodegaAssetType =
     listingType === "art" ? "decoration" : "miniapp";
-  const listingTitle = listingType === "art" ? "Art" : "Miniapp";
+  const isBuildListing = assetType === "miniapp";
+  const listingTitle = listingType === "art" ? "Art" : "Build";
+  const resolvedTitle = isBuildListing
+    ? buildMetadata?.title || getBuildFallbackTitle(url.trim())
+    : title.trim();
+  const resolvedDescription = isBuildListing
+    ? buildMetadata?.description || ""
+    : description.trim();
+  const resolvedPreviewUrl = isBuildListing
+    ? buildMetadata?.image || ""
+    : previewUrl.trim();
+  const buildMissingMetadataDetails =
+    buildMetadata?.missingFields
+      .map((field) => {
+        if (field === "title") return "title (`og:title` or `<title>`)";
+        if (field === "description")
+          return "description (`og:description` or `meta description`)";
+        return "image (`og:image` or `twitter:image`)";
+      })
+      .join(", ") ?? "";
 
   const selectedOrigin =
     originKey.length > 0
@@ -392,9 +518,9 @@ export default function BodegaSubmitModal({
     const content = buildContentPayload({
       assetType,
       artFormat,
-      title,
-      description,
-      previewUrl,
+      title: resolvedTitle,
+      description: resolvedDescription,
+      previewUrl: resolvedPreviewUrl,
       url,
     });
 
@@ -405,11 +531,10 @@ export default function BodegaSubmitModal({
       origin_bungalow_token_address: selectedOrigin?.token_address ?? null,
       origin_bungalow_chain: selectedOrigin?.chain ?? null,
       asset_type: assetType,
-      title: title.trim() || `Untitled ${listingTitle}`,
-      description: description.trim() || null,
+      title: resolvedTitle || `Untitled ${listingTitle}`,
+      description: resolvedDescription || null,
       content,
-      preview_url:
-        assetType === "decoration" ? previewUrl.trim() || null : null,
+      preview_url: resolvedPreviewUrl || null,
       price_in_jbm: price.trim() || "0",
       install_count: 0,
       active: true,
@@ -420,13 +545,16 @@ export default function BodegaSubmitModal({
   }, [
     assetType,
     artFormat,
+    buildMetadata?.description,
+    buildMetadata?.image,
+    buildMetadata?.title,
     creatorWallet,
-    description,
     listingTitle,
-    previewUrl,
     price,
+    resolvedDescription,
+    resolvedPreviewUrl,
+    resolvedTitle,
     selectedOrigin,
-    title,
     url,
   ]);
   const draftFingerprint = useMemo(
@@ -434,21 +562,21 @@ export default function BodegaSubmitModal({
       JSON.stringify({
         listingType,
         artFormat,
-        title: title.trim(),
-        description: description.trim(),
+        title: resolvedTitle,
+        description: resolvedDescription,
         price: price.trim(),
-        previewUrl: previewUrl.trim(),
+        previewUrl: resolvedPreviewUrl,
         url: url.trim(),
         originKey,
       }),
     [
       artFormat,
-      description,
       listingType,
       originKey,
-      previewUrl,
       price,
-      title,
+      resolvedDescription,
+      resolvedPreviewUrl,
+      resolvedTitle,
       url,
     ],
   );
@@ -573,8 +701,8 @@ export default function BodegaSubmitModal({
         body: JSON.stringify({
           creator_wallet: confirmedPayment.payer,
           asset_type: assetType,
-          title: title.trim(),
-          description: description.trim() || undefined,
+          title: resolvedTitle,
+          description: resolvedDescription || undefined,
           content: draftItem.content,
           preview_url: draftItem.preview_url ?? undefined,
           price_in_jbm: asPositiveNumber(price),
@@ -682,7 +810,11 @@ export default function BodegaSubmitModal({
           <span className={step >= 3 ? styles.stepActive : ""}>3. Preview</span>
         </div>
 
-        <WalletSelector label="Pay with" onSelect={setSelectedPayWallet} />
+        <WalletSelector
+          label="Sign with"
+          value={selectedPayWallet}
+          onSelect={setSelectedPayWallet}
+        />
         {showWalletGate || linkedWalletRows.length === 0 ? (
           <div className={styles.error}>
             <strong>You need a linked wallet to continue.</strong>
@@ -741,7 +873,9 @@ export default function BodegaSubmitModal({
                 Back to listing
               </button>
             </div>
-            {shareStatus ? <div className={styles.status}>{shareStatus}</div> : null}
+            {shareStatus ? (
+              <div className={styles.status}>{shareStatus}</div>
+            ) : null}
           </section>
         ) : null}
 
@@ -770,49 +904,47 @@ export default function BodegaSubmitModal({
               <span className={styles.typeIcon}>
                 {getBodegaAssetIcon("miniapp")}
               </span>
-              <strong>Miniapp</strong>
-              <small>Tools, links, and lightweight games.</small>
+              <strong>Build</strong>
+              <small>
+                Paste a link and let the Bodega pull the metadata automatically.
+              </small>
             </button>
           </section>
         ) : null}
 
         {!submittedItem && step === 2 ? (
           <section className={styles.formGrid}>
-            <label className={styles.field}>
-              Title
-              <input
-                ref={titleInputRef}
-                value={title}
-                onChange={(event) => {
-                  setTitle(event.target.value);
-                  clearFieldError("title");
-                }}
-                placeholder={`${listingTitle} title`}
-                aria-invalid={Boolean(fieldErrors.title)}
-              />
-              {fieldErrors.title ? (
-                <span className={styles.fieldErrorText}>
-                  {fieldErrors.title}
-                </span>
-              ) : null}
-            </label>
-
-            <label className={styles.field}>
-              Description
-              <textarea
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
-                rows={3}
-                placeholder={
-                  listingType === "art"
-                    ? "Tell people what this adds to a bungalow."
-                    : "Explain what this miniapp helps people do."
-                }
-              />
-            </label>
-
             {assetType === "decoration" ? (
               <>
+                <label className={styles.field}>
+                  Title
+                  <input
+                    ref={titleInputRef}
+                    value={title}
+                    onChange={(event) => {
+                      setTitle(event.target.value);
+                      clearFieldError("title");
+                    }}
+                    placeholder={`${listingTitle} title`}
+                    aria-invalid={Boolean(fieldErrors.title)}
+                  />
+                  {fieldErrors.title ? (
+                    <span className={styles.fieldErrorText}>
+                      {fieldErrors.title}
+                    </span>
+                  ) : null}
+                </label>
+
+                <label className={styles.field}>
+                  Description
+                  <textarea
+                    value={description}
+                    onChange={(event) => setDescription(event.target.value)}
+                    rows={3}
+                    placeholder="Tell people what this adds to a bungalow."
+                  />
+                </label>
+
                 <label className={styles.field}>
                   Art format
                   <select
@@ -882,27 +1014,74 @@ export default function BodegaSubmitModal({
             ) : null}
 
             {assetType === "miniapp" ? (
-              <label className={styles.field}>
-                Miniapp URL
-                <input
-                  ref={urlInputRef}
-                  value={url}
-                  onChange={(event) => {
-                    setUrl(event.target.value);
-                    clearFieldError("url");
-                  }}
-                  placeholder="https://..."
-                  aria-invalid={Boolean(fieldErrors.url)}
-                />
-                {fieldErrors.url ? (
-                  <span className={styles.fieldErrorText}>
-                    {fieldErrors.url}
-                  </span>
+              <>
+                <label className={styles.field}>
+                  Build URL
+                  <input
+                    ref={urlInputRef}
+                    value={url}
+                    onChange={(event) => {
+                      setUrl(event.target.value);
+                      clearFieldError("url");
+                    }}
+                    placeholder="https://..."
+                    aria-invalid={Boolean(fieldErrors.url)}
+                  />
+                  {fieldErrors.url ? (
+                    <span className={styles.fieldErrorText}>
+                      {fieldErrors.url}
+                    </span>
+                  ) : null}
+                  <small>
+                    Paste the public link. The Bodega will fill in the title,
+                    description, and preview image from that page.
+                  </small>
+                </label>
+
+                {isHttpUrl(url.trim()) ? (
+                  <div className={styles.metadataCard}>
+                    <strong>Detected preview</strong>
+                    {isBuildMetadataLoading ? (
+                      <span className={styles.metadataNote}>
+                        Reading metadata from that link...
+                      </span>
+                    ) : (
+                      <div className={styles.metadataGrid}>
+                        {resolvedPreviewUrl ? (
+                          <img
+                            src={resolvedPreviewUrl}
+                            alt={resolvedTitle || "Build preview"}
+                            className={styles.metadataPreview}
+                          />
+                        ) : (
+                          <div className={styles.metadataPlaceholder}>
+                            No preview image found yet
+                          </div>
+                        )}
+                        <div className={styles.metadataContent}>
+                          <strong>{resolvedTitle || "Untitled Build"}</strong>
+                          <p>
+                            {resolvedDescription ||
+                              "No description was found on this page yet."}
+                          </p>
+                          {buildMetadataError ? (
+                            <span className={styles.metadataWarning}>
+                              {buildMetadataError}
+                            </span>
+                          ) : null}
+                          {buildMetadata?.missingFields.length ? (
+                            <span className={styles.metadataWarning}>
+                              Missing metadata: {buildMissingMetadataDetails}.
+                              Add those tags on the linked page so this build
+                              previews cleanly in the Bodega.
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 ) : null}
-                <small>
-                  Links, tools, embeds, and tiny games all publish as miniapps.
-                </small>
-              </label>
+              </>
             ) : null}
 
             <label className={styles.field}>

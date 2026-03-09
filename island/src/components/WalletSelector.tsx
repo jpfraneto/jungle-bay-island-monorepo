@@ -6,6 +6,7 @@ import styles from "../styles/wallet-selector.module.css";
 
 interface WalletSelectorProps {
   onSelect: (address: string) => void;
+  value?: string | null;
   label?: string;
   onAddWallet?: () => void | Promise<void>;
   isAddingWallet?: boolean;
@@ -20,7 +21,8 @@ function truncateAddress(address: string): string {
 
 export default function WalletSelector({
   onSelect,
-  label = "Pay with",
+  value = null,
+  label = "Sign with",
   onAddWallet,
   isAddingWallet = false,
   addWalletStatus = null,
@@ -42,6 +44,14 @@ export default function WalletSelector({
   const options = linkedWallets;
 
   const activeWalletAddress = walletAddress ?? "";
+  const preferredWalletAddress = value?.trim() || "";
+  const displayedWalletAddress =
+    preferredWalletAddress || activeWalletAddress || options[0] || "";
+  const selectorValue = options.some(
+    (address) => address.toLowerCase() === displayedWalletAddress.toLowerCase(),
+  )
+    ? displayedWalletAddress
+    : (options[0] ?? "");
 
   const activeWalletLinked =
     Boolean(activeWalletAddress) &&
@@ -49,9 +59,17 @@ export default function WalletSelector({
       (linkedWallet) =>
         linkedWallet.toLowerCase() === activeWalletAddress.toLowerCase(),
     );
+  const displayedWalletLinked =
+    Boolean(displayedWalletAddress) &&
+    linkedWallets.some(
+      (linkedWallet) =>
+        linkedWallet.toLowerCase() === displayedWalletAddress.toLowerCase(),
+    );
   const activeWalletNotLinked =
-    Boolean(activeWalletAddress) && !activeWalletLinked;
-  const showSelector = activeWalletLinked && options.length > 1;
+    Boolean(activeWalletAddress) &&
+    !activeWalletLinked &&
+    !displayedWalletLinked;
+  const showSelector = options.length > 1;
 
   if (!authenticated) {
     return (
@@ -101,7 +119,7 @@ export default function WalletSelector({
       {showSelector ? (
         <select
           className={styles.selector}
-          value={activeWalletAddress}
+          value={selectorValue}
           onChange={(event) => {
             const nextAddress = event.target.value;
             try {
@@ -125,8 +143,8 @@ export default function WalletSelector({
         </select>
       ) : (
         <div className={styles.walletDisplay}>
-          <strong>{truncateAddress(activeWalletAddress)}</strong>
-          <span>{activeWalletLinked ? "Linked wallet" : "Current wallet"}</span>
+          <strong>{truncateAddress(displayedWalletAddress)}</strong>
+          <span>{displayedWalletLinked ? "Linked wallet" : "Current wallet"}</span>
         </div>
       )}
 

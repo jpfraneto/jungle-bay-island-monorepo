@@ -1,529 +1,529 @@
 {
-  "_Address-BjZb-TIL-CUaA-wVO.js": {
-    "file": "assets/Address-BjZb-TIL-CUaA-wVO.js",
+  "_Address-BjZb-TIL-Bu6eEFrD.js": {
+    "file": "assets/Address-BjZb-TIL-Bu6eEFrD.js",
     "name": "Address-BjZb-TIL",
     "imports": [
       "index.html",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_check-BPM-pONt.js",
-      "_copy-CuK8iXj8.js"
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_check-CaX9dEME.js",
+      "_copy-C55C3k8T.js"
     ]
   },
-  "_ArrowsRightLeftIcon-DioepqF0.js": {
-    "file": "assets/ArrowsRightLeftIcon-DioepqF0.js",
+  "_ArrowsRightLeftIcon-hyTn4ALo.js": {
+    "file": "assets/ArrowsRightLeftIcon-hyTn4ALo.js",
     "name": "ArrowsRightLeftIcon",
     "imports": [
       "index.html"
     ]
   },
-  "_BridgeNetworkSelectionView-CaDh-Zck-B-Y8Ku-w.js": {
-    "file": "assets/BridgeNetworkSelectionView-CaDh-Zck-B-Y8Ku-w.js",
+  "_BridgeNetworkSelectionView-CaDh-Zck-CloXYgeY.js": {
+    "file": "assets/BridgeNetworkSelectionView-CaDh-Zck-CloXYgeY.js",
     "name": "BridgeNetworkSelectionView-CaDh-Zck",
     "imports": [
       "index.html",
-      "_getErc20Balance-DA4dGV9O-2vZGKVIn.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Layouts-BlFm53ED-BwtVJHVg.js",
-      "_FundWalletMethodHeader-Cfci4-83-CbGxLmI6.js",
-      "_Value-tcJV9e0L-DIexT38e.js",
-      "_ErrorMessage-D8VaAP5m-CSRfkILK.js",
-      "_Subtitle-CV-2yKE4-3n7wOBX9.js",
-      "_Title-BnzYV3Is-BUerzvzw.js",
-      "_WalletIcon-DhKJR8EC.js",
+      "_getErc20Balance-DA4dGV9O-DhN8eKTM.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Layouts-BlFm53ED-Bhj8Zq_D.js",
+      "_FundWalletMethodHeader-Cfci4-83-DvDfYdnZ.js",
+      "_Value-tcJV9e0L-Bv6aRaog.js",
+      "_ErrorMessage-D8VaAP5m-DxjeKNSn.js",
+      "_Subtitle-CV-2yKE4-KF2mgmQn.js",
+      "_Title-BnzYV3Is-C_zr4qem.js",
+      "_WalletIcon-CRl1ZDF4.js",
       "_getChainName-DjpPdUSc-c2urPd0g.js",
-      "_Chip-D2-wZOHJ-L9zdFfDD.js",
-      "_TransferOrBridgeLoadingScreen-DcCdHB-g-DxLDv_kV.js",
-      "_shared-FM0rljBt-Bvcdp-Bb.js",
-      "_ChevronDownIcon-CEQ-6sNt.js",
+      "_Chip-D2-wZOHJ-DhVq9pPJ.js",
+      "_TransferOrBridgeLoadingScreen-DcCdHB-g-T0KQYrh-.js",
+      "_shared-FM0rljBt-B7vv_loM.js",
+      "_ChevronDownIcon-C8wpkRBF.js",
       "_formatErc20TokenAmount-BuPk9xcy-CkAr4Oc0.js",
-      "_ethers-D1WT71Ay-DvAUZlyq.js",
-      "_styles-BmZHuqSX-Bx5Gn5ub.js",
-      "_formatters-CDGePEdL.js"
+      "_ethers-D1WT71Ay-BQ6rOR95.js",
+      "_styles-BmZHuqSX-BkKUMJkf.js",
+      "_formatters-DlHjBI8i.js"
     ]
   },
-  "_CanvasErrorBoundary-C5zoARHR.js": {
-    "file": "assets/CanvasErrorBoundary-C5zoARHR.js",
+  "_CanvasErrorBoundary-DUSpp6eE.js": {
+    "file": "assets/CanvasErrorBoundary-DUSpp6eE.js",
     "name": "CanvasErrorBoundary",
     "imports": [
       "index.html"
     ]
   },
-  "_CheckCircleIcon-B_3MoKfc.js": {
-    "file": "assets/CheckCircleIcon-B_3MoKfc.js",
+  "_CheckCircleIcon-BBRajA6y.js": {
+    "file": "assets/CheckCircleIcon-BBRajA6y.js",
     "name": "CheckCircleIcon",
     "imports": [
       "index.html"
     ]
   },
-  "_CheckCircleIcon-lXFuoXR1.js": {
-    "file": "assets/CheckCircleIcon-lXFuoXR1.js",
+  "_CheckCircleIcon-DFLJpeQM.js": {
+    "file": "assets/CheckCircleIcon-DFLJpeQM.js",
     "name": "CheckCircleIcon",
     "imports": [
       "index.html"
     ]
   },
-  "_Checkbox-BhNoOKjX-BjgJNC5a.js": {
-    "file": "assets/Checkbox-BhNoOKjX-BjgJNC5a.js",
+  "_Checkbox-BhNoOKjX-YK9XAkD3.js": {
+    "file": "assets/Checkbox-BhNoOKjX-YK9XAkD3.js",
     "name": "Checkbox-BhNoOKjX",
     "imports": [
       "index.html"
     ]
   },
-  "_ChevronDownIcon-CEQ-6sNt.js": {
-    "file": "assets/ChevronDownIcon-CEQ-6sNt.js",
+  "_ChevronDownIcon-C8wpkRBF.js": {
+    "file": "assets/ChevronDownIcon-C8wpkRBF.js",
     "name": "ChevronDownIcon",
     "imports": [
       "index.html"
     ]
   },
-  "_Chip-D2-wZOHJ-L9zdFfDD.js": {
-    "file": "assets/Chip-D2-wZOHJ-L9zdFfDD.js",
+  "_Chip-D2-wZOHJ-DhVq9pPJ.js": {
+    "file": "assets/Chip-D2-wZOHJ-DhVq9pPJ.js",
     "name": "Chip-D2-wZOHJ",
     "imports": [
       "index.html",
-      "_LoadingSkeleton-U6-3yFwI-DYng621o.js"
+      "_LoadingSkeleton-U6-3yFwI-D7PbqT2S.js"
     ]
   },
-  "_ConnectEmailForm-0GOHNayM-BOvjjVli.js": {
-    "file": "assets/ConnectEmailForm-0GOHNayM-BOvjjVli.js",
+  "_ConnectEmailForm-0GOHNayM-C9Cs0x9p.js": {
+    "file": "assets/ConnectEmailForm-0GOHNayM-C9Cs0x9p.js",
     "name": "ConnectEmailForm-0GOHNayM",
     "imports": [
       "index.html",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Chip-D2-wZOHJ-L9zdFfDD.js",
-      "_EmailInputForm-Dgoii4vf-mLIatGND.js",
-      "_ErrorMessage-D8VaAP5m-CSRfkILK.js",
-      "_mail-nIfCO6of.js"
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Chip-D2-wZOHJ-DhVq9pPJ.js",
+      "_EmailInputForm-Dgoii4vf-DwDfmkEh.js",
+      "_ErrorMessage-D8VaAP5m-DxjeKNSn.js",
+      "_mail-DDd2ItFs.js"
     ]
   },
-  "_ConnectPhoneForm-_lOAQG_X-DgknT_gT.js": {
-    "file": "assets/ConnectPhoneForm-_lOAQG_X-DgknT_gT.js",
+  "_ConnectPhoneForm-_lOAQG_X-D-dzvEw-.js": {
+    "file": "assets/ConnectPhoneForm-_lOAQG_X-D-dzvEw-.js",
     "name": "ConnectPhoneForm-_lOAQG_X",
     "imports": [
       "index.html",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Chip-D2-wZOHJ-L9zdFfDD.js"
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Chip-D2-wZOHJ-DhVq9pPJ.js"
     ]
   },
-  "_ConnectWalletView-CDqboUej-CnaOw5eL.js": {
-    "file": "assets/ConnectWalletView-CDqboUej-CnaOw5eL.js",
+  "_ConnectWalletView-CDqboUej-DgNT6kbX.js": {
+    "file": "assets/ConnectWalletView-CDqboUej-DgNT6kbX.js",
     "name": "ConnectWalletView-CDqboUej",
     "imports": [
       "index.html",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_CopyableText-BCytXyJL-D5kvxv7y.js",
-      "_Link-DJ5gq9Di-D8ELJ6Gy.js",
-      "_QrCode-C1tgJtOy-BObh5Q7S.js",
-      "_EmailInputForm-Dgoii4vf-mLIatGND.js",
-      "_useI18n-BuIe8nUA-D0UUP5HE.js",
-      "_WalletCards-DH1rqayz-D2VE3o9k.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js"
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_CopyableText-BCytXyJL-CgqmgMih.js",
+      "_Link-DJ5gq9Di-C9D1qU33.js",
+      "_QrCode-C1tgJtOy-BHlPCubm.js",
+      "_EmailInputForm-Dgoii4vf-DwDfmkEh.js",
+      "_useI18n-BuIe8nUA-eHC_et0r.js",
+      "_WalletCards-DH1rqayz-Bxtd96Dc.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js"
     ]
   },
-  "_CopyToClipboard-DSTf_eKU-CYoE8YVP.js": {
-    "file": "assets/CopyToClipboard-DSTf_eKU-CYoE8YVP.js",
+  "_CopyToClipboard-DSTf_eKU-Dk-0tgfq.js": {
+    "file": "assets/CopyToClipboard-DSTf_eKU-Dk-0tgfq.js",
     "name": "CopyToClipboard-DSTf_eKU",
     "imports": [
       "index.html"
     ]
   },
-  "_CopyableText-BCytXyJL-D5kvxv7y.js": {
-    "file": "assets/CopyableText-BCytXyJL-D5kvxv7y.js",
+  "_CopyableText-BCytXyJL-CgqmgMih.js": {
+    "file": "assets/CopyableText-BCytXyJL-CgqmgMih.js",
     "name": "CopyableText-BCytXyJL",
     "imports": [
       "index.html",
-      "_check-BPM-pONt.js",
-      "_copy-CuK8iXj8.js"
+      "_check-CaX9dEME.js",
+      "_copy-C55C3k8T.js"
     ]
   },
-  "_CustomLandingScreenView-9mrgsDhT-valSqR4_.js": {
-    "file": "assets/CustomLandingScreenView-9mrgsDhT-valSqR4_.js",
+  "_CustomLandingScreenView-9mrgsDhT-DFn58tOE.js": {
+    "file": "assets/CustomLandingScreenView-9mrgsDhT-DFn58tOE.js",
     "name": "CustomLandingScreenView-9mrgsDhT",
     "imports": [
       "index.html",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_ConnectWalletView-CDqboUej-CnaOw5eL.js",
-      "_ConnectEmailForm-0GOHNayM-BOvjjVli.js",
-      "_Chip-D2-wZOHJ-L9zdFfDD.js",
-      "_farcaster-DPlSjvF5-CYwe3UgM.js",
-      "_FingerPrintIcon-CuVwCPgD.js",
-      "_Link-DJ5gq9Di-D8ELJ6Gy.js",
-      "_ConnectPhoneForm-_lOAQG_X-DgknT_gT.js",
-      "_twitch-5IOe4sIQ-CnW-5pMB.js",
-      "_telegram-B-JqnkqZ-CW8o8xNW.js",
-      "_WalletOverflowButton-BlijhJnI-DYJS2CDH.js",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_mail-nIfCO6of.js",
-      "_createLucideIcon-ktXaMrqE.js"
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_ConnectWalletView-CDqboUej-DgNT6kbX.js",
+      "_ConnectEmailForm-0GOHNayM-C9Cs0x9p.js",
+      "_Chip-D2-wZOHJ-DhVq9pPJ.js",
+      "_farcaster-DPlSjvF5-DocJwf1j.js",
+      "_FingerPrintIcon-DPcrAL97.js",
+      "_Link-DJ5gq9Di-C9D1qU33.js",
+      "_ConnectPhoneForm-_lOAQG_X-D-dzvEw-.js",
+      "_twitch-5IOe4sIQ-GwS3Bt1u.js",
+      "_telegram-B-JqnkqZ-31fKsVX2.js",
+      "_WalletOverflowButton-BlijhJnI-1ZGZ-9pj.js",
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_mail-DDd2ItFs.js",
+      "_createLucideIcon-jEE5KA3V.js"
     ]
   },
-  "_EmailInputForm-Dgoii4vf-mLIatGND.js": {
-    "file": "assets/EmailInputForm-Dgoii4vf-mLIatGND.js",
+  "_EmailInputForm-Dgoii4vf-DwDfmkEh.js": {
+    "file": "assets/EmailInputForm-Dgoii4vf-DwDfmkEh.js",
     "name": "EmailInputForm-Dgoii4vf",
     "imports": [
       "index.html",
-      "_ErrorMessage-D8VaAP5m-CSRfkILK.js"
+      "_ErrorMessage-D8VaAP5m-DxjeKNSn.js"
     ]
   },
-  "_EnrollTotp-uSQt9d2Q-BESwwvK4.js": {
-    "file": "assets/EnrollTotp-uSQt9d2Q-BESwwvK4.js",
+  "_EnrollTotp-uSQt9d2Q-CgAdSH7-.js": {
+    "file": "assets/EnrollTotp-uSQt9d2Q-CgAdSH7-.js",
     "name": "EnrollTotp-uSQt9d2Q",
     "imports": [
       "index.html",
-      "_PinInput-3SLvbnQa-BVMO8c16.js",
-      "_FingerPrintIcon-CuVwCPgD.js",
-      "_PhoneIcon-Buw36cAf.js",
-      "_ShieldCheckIcon-VDxRyXYH.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Chip-D2-wZOHJ-L9zdFfDD.js",
+      "_PinInput-3SLvbnQa-MWrS6AQg.js",
+      "_FingerPrintIcon-DPcrAL97.js",
+      "_PhoneIcon-CelU8-e8.js",
+      "_ShieldCheckIcon-CX3bDxyJ.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Chip-D2-wZOHJ-DhVq9pPJ.js",
       "node_modules/@privy-io/react-auth/dist/esm/ErrorScreen-DtGc3Chy.mjs",
       "node_modules/@privy-io/react-auth/dist/esm/LinkPasskeyScreen-OxaghvUl.mjs",
-      "_CopyToClipboard-DSTf_eKU-CYoE8YVP.js",
-      "_Layouts-BlFm53ED-BwtVJHVg.js",
-      "_LabelXs-oqZNqbm_-0c6bD-2B.js",
-      "_Subtitle-CV-2yKE4-3n7wOBX9.js",
-      "_Title-BnzYV3Is-BUerzvzw.js",
-      "_shared-FM0rljBt-Bvcdp-Bb.js",
-      "_QrCode-C1tgJtOy-BObh5Q7S.js"
+      "_CopyToClipboard-DSTf_eKU-Dk-0tgfq.js",
+      "_Layouts-BlFm53ED-Bhj8Zq_D.js",
+      "_LabelXs-oqZNqbm_-SwMnd8QF.js",
+      "_Subtitle-CV-2yKE4-KF2mgmQn.js",
+      "_Title-BnzYV3Is-C_zr4qem.js",
+      "_shared-FM0rljBt-B7vv_loM.js",
+      "_QrCode-C1tgJtOy-BHlPCubm.js"
     ]
   },
-  "_EnvelopeIcon-BGPqYNN7.js": {
-    "file": "assets/EnvelopeIcon-BGPqYNN7.js",
+  "_EnvelopeIcon-tl2SWtvR.js": {
+    "file": "assets/EnvelopeIcon-tl2SWtvR.js",
     "name": "EnvelopeIcon",
     "imports": [
       "index.html"
     ]
   },
-  "_ErrorBanner-CQERa7bL-Bwazymug.js": {
-    "file": "assets/ErrorBanner-CQERa7bL-Bwazymug.js",
+  "_ErrorBanner-CQERa7bL-DQIoernF.js": {
+    "file": "assets/ErrorBanner-CQERa7bL-DQIoernF.js",
     "name": "ErrorBanner-CQERa7bL",
     "imports": [
       "index.html",
-      "_ExclamationCircleIcon-CaK6qkTO.js"
+      "_ExclamationCircleIcon-Nk2pSHN5.js"
     ]
   },
-  "_ErrorMessage-D8VaAP5m-CSRfkILK.js": {
-    "file": "assets/ErrorMessage-D8VaAP5m-CSRfkILK.js",
+  "_ErrorMessage-D8VaAP5m-DxjeKNSn.js": {
+    "file": "assets/ErrorMessage-D8VaAP5m-DxjeKNSn.js",
     "name": "ErrorMessage-D8VaAP5m",
     "imports": [
       "index.html"
     ]
   },
-  "_ExclamationCircleIcon-CaK6qkTO.js": {
-    "file": "assets/ExclamationCircleIcon-CaK6qkTO.js",
+  "_ExclamationCircleIcon-Nk2pSHN5.js": {
+    "file": "assets/ExclamationCircleIcon-Nk2pSHN5.js",
     "name": "ExclamationCircleIcon",
     "imports": [
       "index.html"
     ]
   },
-  "_ExclamationTriangleIcon-DFwA0b-j.js": {
-    "file": "assets/ExclamationTriangleIcon-DFwA0b-j.js",
+  "_ExclamationTriangleIcon-BWrXnrlz.js": {
+    "file": "assets/ExclamationTriangleIcon-BWrXnrlz.js",
     "name": "ExclamationTriangleIcon",
     "imports": [
       "index.html"
     ]
   },
-  "_FingerPrintIcon-CuVwCPgD.js": {
-    "file": "assets/FingerPrintIcon-CuVwCPgD.js",
+  "_FingerPrintIcon-DPcrAL97.js": {
+    "file": "assets/FingerPrintIcon-DPcrAL97.js",
     "name": "FingerPrintIcon",
     "imports": [
       "index.html"
     ]
   },
-  "_FundWalletMethodHeader-Cfci4-83-CbGxLmI6.js": {
-    "file": "assets/FundWalletMethodHeader-Cfci4-83-CbGxLmI6.js",
+  "_FundWalletMethodHeader-Cfci4-83-DvDfYdnZ.js": {
+    "file": "assets/FundWalletMethodHeader-Cfci4-83-DvDfYdnZ.js",
     "name": "FundWalletMethodHeader-Cfci4-83",
     "imports": [
       "index.html",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js"
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js"
     ]
   },
-  "_GlobeAltIcon-B9KsrEBV.js": {
-    "file": "assets/GlobeAltIcon-B9KsrEBV.js",
+  "_GlobeAltIcon-BKo0Maa7.js": {
+    "file": "assets/GlobeAltIcon-BKo0Maa7.js",
     "name": "GlobeAltIcon",
     "imports": [
       "index.html"
     ]
   },
-  "_InfoBanner-DkQEPd77-BDvfQHJm.js": {
-    "file": "assets/InfoBanner-DkQEPd77-BDvfQHJm.js",
+  "_InfoBanner-DkQEPd77-DWW60X7W.js": {
+    "file": "assets/InfoBanner-DkQEPd77-DWW60X7W.js",
     "name": "InfoBanner-DkQEPd77",
     "imports": [
       "index.html"
     ]
   },
-  "_InjectedWalletIcon-DLcYOGDj-DZCOnUV7.js": {
-    "file": "assets/InjectedWalletIcon-DLcYOGDj-DZCOnUV7.js",
+  "_InjectedWalletIcon-DLcYOGDj-63L6yX2u.js": {
+    "file": "assets/InjectedWalletIcon-DLcYOGDj-63L6yX2u.js",
     "name": "InjectedWalletIcon-DLcYOGDj",
     "imports": [
       "index.html",
-      "_WalletIcon-DhKJR8EC.js"
+      "_WalletIcon-CRl1ZDF4.js"
     ]
   },
-  "_JsonTree-aPaJmPx7-CjtUpUzz.js": {
-    "file": "assets/JsonTree-aPaJmPx7-CjtUpUzz.js",
+  "_JsonTree-aPaJmPx7-C2S7avb-.js": {
+    "file": "assets/JsonTree-aPaJmPx7-C2S7avb-.js",
     "name": "JsonTree-aPaJmPx7",
     "imports": [
       "index.html"
     ]
   },
-  "_LabelXs-oqZNqbm_-0c6bD-2B.js": {
-    "file": "assets/LabelXs-oqZNqbm_-0c6bD-2B.js",
+  "_LabelXs-oqZNqbm_-SwMnd8QF.js": {
+    "file": "assets/LabelXs-oqZNqbm_-SwMnd8QF.js",
     "name": "LabelXs-oqZNqbm_",
     "imports": [
       "index.html"
     ]
   },
-  "_Layouts-BlFm53ED-BwtVJHVg.js": {
-    "file": "assets/Layouts-BlFm53ED-BwtVJHVg.js",
+  "_Layouts-BlFm53ED-Bhj8Zq_D.js": {
+    "file": "assets/Layouts-BlFm53ED-Bhj8Zq_D.js",
     "name": "Layouts-BlFm53ED",
     "imports": [
       "index.html"
     ]
   },
-  "_Link-DJ5gq9Di-D8ELJ6Gy.js": {
-    "file": "assets/Link-DJ5gq9Di-D8ELJ6Gy.js",
+  "_Link-DJ5gq9Di-C9D1qU33.js": {
+    "file": "assets/Link-DJ5gq9Di-C9D1qU33.js",
     "name": "Link-DJ5gq9Di",
     "imports": [
       "index.html"
     ]
   },
-  "_LoadingSkeleton-U6-3yFwI-DYng621o.js": {
-    "file": "assets/LoadingSkeleton-U6-3yFwI-DYng621o.js",
+  "_LoadingSkeleton-U6-3yFwI-D7PbqT2S.js": {
+    "file": "assets/LoadingSkeleton-U6-3yFwI-D7PbqT2S.js",
     "name": "LoadingSkeleton-U6-3yFwI",
     "imports": [
       "index.html"
     ]
   },
-  "_LockClosedIcon-Bg0eaXHa.js": {
-    "file": "assets/LockClosedIcon-Bg0eaXHa.js",
+  "_LockClosedIcon-CIDryi_y.js": {
+    "file": "assets/LockClosedIcon-CIDryi_y.js",
     "name": "LockClosedIcon",
     "imports": [
       "index.html"
     ]
   },
-  "_ModalHeader-D8-mhjp4-DeALdzmZ.js": {
-    "file": "assets/ModalHeader-D8-mhjp4-DeALdzmZ.js",
+  "_ModalHeader-D8-mhjp4-D2cSvJhh.js": {
+    "file": "assets/ModalHeader-D8-mhjp4-D2cSvJhh.js",
     "name": "ModalHeader-D8-mhjp4",
     "imports": [
       "index.html"
     ]
   },
-  "_OpenLink-DZHy38vr-BTfSVpFu.js": {
-    "file": "assets/OpenLink-DZHy38vr-BTfSVpFu.js",
+  "_OpenLink-DZHy38vr-BDkFdR9-.js": {
+    "file": "assets/OpenLink-DZHy38vr-BDkFdR9-.js",
     "name": "OpenLink-DZHy38vr",
     "imports": [
       "index.html"
     ]
   },
-  "_PhoneIcon-Buw36cAf.js": {
-    "file": "assets/PhoneIcon-Buw36cAf.js",
+  "_PhoneIcon-CelU8-e8.js": {
+    "file": "assets/PhoneIcon-CelU8-e8.js",
     "name": "PhoneIcon",
     "imports": [
       "index.html"
     ]
   },
-  "_PinInput-3SLvbnQa-BVMO8c16.js": {
-    "file": "assets/PinInput-3SLvbnQa-BVMO8c16.js",
+  "_PinInput-3SLvbnQa-MWrS6AQg.js": {
+    "file": "assets/PinInput-3SLvbnQa-MWrS6AQg.js",
     "name": "PinInput-3SLvbnQa",
     "imports": [
       "index.html"
     ]
   },
-  "_QrCode-C1tgJtOy-BObh5Q7S.js": {
-    "file": "assets/QrCode-C1tgJtOy-BObh5Q7S.js",
+  "_QrCode-C1tgJtOy-BHlPCubm.js": {
+    "file": "assets/QrCode-C1tgJtOy-BHlPCubm.js",
     "name": "QrCode-C1tgJtOy",
     "imports": [
       "index.html",
       "_dijkstra-COg3n3zL.js"
     ]
   },
-  "_Screen-Bp-TN9gb-lbw2Rmcb.js": {
-    "file": "assets/Screen-Bp-TN9gb-lbw2Rmcb.js",
+  "_Screen-Bp-TN9gb-CgQi8snK.js": {
+    "file": "assets/Screen-Bp-TN9gb-CgQi8snK.js",
     "name": "Screen-Bp-TN9gb",
     "imports": [
       "index.html",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js"
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_index-Dq_xe9dz-B5CfSfel.js"
     ]
   },
-  "_ScreenHeader-CHmc4-Lu-BkT2ykls.js": {
-    "file": "assets/ScreenHeader-CHmc4-Lu-BkT2ykls.js",
+  "_ScreenHeader-CHmc4-Lu-CzyJ3Pii.js": {
+    "file": "assets/ScreenHeader-CHmc4-Lu-CzyJ3Pii.js",
     "name": "ScreenHeader-CHmc4-Lu",
     "imports": [
       "index.html"
     ]
   },
-  "_ScreenLayout-DTmQLGPf-CxWjGTz0.js": {
-    "file": "assets/ScreenLayout-DTmQLGPf-CxWjGTz0.js",
+  "_ScreenLayout-DTmQLGPf-Bl4smUdO.js": {
+    "file": "assets/ScreenLayout-DTmQLGPf-Bl4smUdO.js",
     "name": "ScreenLayout-DTmQLGPf",
     "imports": [
       "index.html",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js"
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js"
     ]
   },
-  "_SetWalletPasswordForm-0nuoz3XZ-CNvGgGJe.js": {
-    "file": "assets/SetWalletPasswordForm-0nuoz3XZ-CNvGgGJe.js",
+  "_SetWalletPasswordForm-0nuoz3XZ-CtikKiJ7.js": {
+    "file": "assets/SetWalletPasswordForm-0nuoz3XZ-CtikKiJ7.js",
     "name": "SetWalletPasswordForm-0nuoz3XZ",
     "imports": [
       "index.html",
-      "_ExclamationTriangleIcon-DFwA0b-j.js",
-      "_Layouts-BlFm53ED-BwtVJHVg.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_shared-CwuyxHmv-DoMzGFq1.js",
-      "_Checkbox-BhNoOKjX-BjgJNC5a.js",
-      "_CheckCircleIcon-lXFuoXR1.js",
-      "_ScreenHeader-CHmc4-Lu-BkT2ykls.js"
+      "_ExclamationTriangleIcon-BWrXnrlz.js",
+      "_Layouts-BlFm53ED-Bhj8Zq_D.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_shared-CwuyxHmv-BVYTqArg.js",
+      "_Checkbox-BhNoOKjX-YK9XAkD3.js",
+      "_CheckCircleIcon-DFLJpeQM.js",
+      "_ScreenHeader-CHmc4-Lu-CzyJ3Pii.js"
     ]
   },
-  "_ShieldCheckIcon-VDxRyXYH.js": {
-    "file": "assets/ShieldCheckIcon-VDxRyXYH.js",
+  "_ShieldCheckIcon-CX3bDxyJ.js": {
+    "file": "assets/ShieldCheckIcon-CX3bDxyJ.js",
     "name": "ShieldCheckIcon",
     "imports": [
       "index.html"
     ]
   },
-  "_StackedContainer-B2vaEl56-DHQhH6ri.js": {
-    "file": "assets/StackedContainer-B2vaEl56-DHQhH6ri.js",
+  "_StackedContainer-B2vaEl56-DL9iqRHD.js": {
+    "file": "assets/StackedContainer-B2vaEl56-DL9iqRHD.js",
     "name": "StackedContainer-B2vaEl56",
     "imports": [
       "index.html"
     ]
   },
-  "_Subtitle-CV-2yKE4-3n7wOBX9.js": {
-    "file": "assets/Subtitle-CV-2yKE4-3n7wOBX9.js",
+  "_Subtitle-CV-2yKE4-KF2mgmQn.js": {
+    "file": "assets/Subtitle-CV-2yKE4-KF2mgmQn.js",
     "name": "Subtitle-CV-2yKE4",
     "imports": [
       "index.html"
     ]
   },
-  "_Title-BnzYV3Is-BUerzvzw.js": {
-    "file": "assets/Title-BnzYV3Is-BUerzvzw.js",
+  "_Title-BnzYV3Is-C_zr4qem.js": {
+    "file": "assets/Title-BnzYV3Is-C_zr4qem.js",
     "name": "Title-BnzYV3Is",
     "imports": [
       "index.html"
     ]
   },
-  "_TodoList-CgrU7uwu-CGNNQgI4.js": {
-    "file": "assets/TodoList-CgrU7uwu-CGNNQgI4.js",
+  "_TodoList-CgrU7uwu-TIRppYgz.js": {
+    "file": "assets/TodoList-CgrU7uwu-TIRppYgz.js",
     "name": "TodoList-CgrU7uwu",
     "imports": [
       "index.html",
-      "_createLucideIcon-ktXaMrqE.js",
-      "_check-BPM-pONt.js"
+      "_createLucideIcon-jEE5KA3V.js",
+      "_check-CaX9dEME.js"
     ]
   },
-  "_TransactionDetails-BurRo8R0-BXQM0L19.js": {
-    "file": "assets/TransactionDetails-BurRo8R0-BXQM0L19.js",
+  "_TransactionDetails-BurRo8R0-C_SiD5be.js": {
+    "file": "assets/TransactionDetails-BurRo8R0-C_SiD5be.js",
     "name": "TransactionDetails-BurRo8R0",
     "imports": [
       "index.html",
-      "_WalletLink--05Hzo2b-DN5etSMx.js",
-      "_ethers-D1WT71Ay-DvAUZlyq.js",
-      "_Layouts-BlFm53ED-BwtVJHVg.js",
-      "_ChevronDownIcon-CEQ-6sNt.js"
+      "_WalletLink--05Hzo2b-8O6qUNgy.js",
+      "_ethers-D1WT71Ay-BQ6rOR95.js",
+      "_Layouts-BlFm53ED-Bhj8Zq_D.js",
+      "_ChevronDownIcon-C8wpkRBF.js"
     ]
   },
-  "_TransactionErrorView-CPFrt0L4-D93dIk5k.js": {
-    "file": "assets/TransactionErrorView-CPFrt0L4-D93dIk5k.js",
+  "_TransactionErrorView-CPFrt0L4-lW3g4kx3.js": {
+    "file": "assets/TransactionErrorView-CPFrt0L4-lW3g4kx3.js",
     "name": "TransactionErrorView-CPFrt0L4",
     "imports": [
       "index.html",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Value-tcJV9e0L-DIexT38e.js",
-      "_ErrorMessage-D8VaAP5m-CSRfkILK.js",
-      "_LabelXs-oqZNqbm_-0c6bD-2B.js",
-      "_Subtitle-CV-2yKE4-3n7wOBX9.js",
-      "_Title-BnzYV3Is-BUerzvzw.js",
-      "_Address-BjZb-TIL-CUaA-wVO.js",
-      "_WalletInfoCard-DFt8ndGE-DxaLKWXn.js",
-      "_LoadingSkeleton-U6-3yFwI-DYng621o.js",
-      "_shared-FM0rljBt-Bvcdp-Bb.js",
-      "_Checkbox-BhNoOKjX-BjgJNC5a.js",
-      "_ErrorBanner-CQERa7bL-Bwazymug.js",
-      "_WarningBanner-c8L53pJ2-D_EmmYOl.js",
-      "_ExclamationCircleIcon-CaK6qkTO.js",
-      "_ChevronDownIcon-CEQ-6sNt.js",
-      "_formatters-CDGePEdL.js"
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Value-tcJV9e0L-Bv6aRaog.js",
+      "_ErrorMessage-D8VaAP5m-DxjeKNSn.js",
+      "_LabelXs-oqZNqbm_-SwMnd8QF.js",
+      "_Subtitle-CV-2yKE4-KF2mgmQn.js",
+      "_Title-BnzYV3Is-C_zr4qem.js",
+      "_Address-BjZb-TIL-Bu6eEFrD.js",
+      "_WalletInfoCard-DFt8ndGE-C_4uCkcb.js",
+      "_LoadingSkeleton-U6-3yFwI-D7PbqT2S.js",
+      "_shared-FM0rljBt-B7vv_loM.js",
+      "_Checkbox-BhNoOKjX-YK9XAkD3.js",
+      "_ErrorBanner-CQERa7bL-DQIoernF.js",
+      "_WarningBanner-c8L53pJ2-CEBXyz_y.js",
+      "_ExclamationCircleIcon-Nk2pSHN5.js",
+      "_ChevronDownIcon-C8wpkRBF.js",
+      "_formatters-DlHjBI8i.js"
     ]
   },
-  "_TransferOrBridgeLoadingScreen-DcCdHB-g-DxLDv_kV.js": {
-    "file": "assets/TransferOrBridgeLoadingScreen-DcCdHB-g-DxLDv_kV.js",
+  "_TransferOrBridgeLoadingScreen-DcCdHB-g-T0KQYrh-.js": {
+    "file": "assets/TransferOrBridgeLoadingScreen-DcCdHB-g-T0KQYrh-.js",
     "name": "TransferOrBridgeLoadingScreen-DcCdHB-g",
     "imports": [
       "index.html",
-      "_Layouts-BlFm53ED-BwtVJHVg.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_ScreenHeader-CHmc4-Lu-BkT2ykls.js",
-      "_FundWalletMethodHeader-Cfci4-83-CbGxLmI6.js",
-      "_InjectedWalletIcon-DLcYOGDj-DZCOnUV7.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js",
-      "_Value-tcJV9e0L-DIexT38e.js",
-      "_Address-BjZb-TIL-CUaA-wVO.js",
-      "_GlobeAltIcon-B9KsrEBV.js"
+      "_Layouts-BlFm53ED-Bhj8Zq_D.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_ScreenHeader-CHmc4-Lu-CzyJ3Pii.js",
+      "_FundWalletMethodHeader-Cfci4-83-DvDfYdnZ.js",
+      "_InjectedWalletIcon-DLcYOGDj-63L6yX2u.js",
+      "_index-Dq_xe9dz-B5CfSfel.js",
+      "_Value-tcJV9e0L-Bv6aRaog.js",
+      "_Address-BjZb-TIL-Bu6eEFrD.js",
+      "_GlobeAltIcon-BKo0Maa7.js"
     ]
   },
-  "_Value-tcJV9e0L-DIexT38e.js": {
-    "file": "assets/Value-tcJV9e0L-DIexT38e.js",
+  "_Value-tcJV9e0L-Bv6aRaog.js": {
+    "file": "assets/Value-tcJV9e0L-Bv6aRaog.js",
     "name": "Value-tcJV9e0L",
     "imports": [
       "index.html",
-      "_LoadingSkeleton-U6-3yFwI-DYng621o.js"
+      "_LoadingSkeleton-U6-3yFwI-D7PbqT2S.js"
     ]
   },
-  "_WalletCards-DH1rqayz-D2VE3o9k.js": {
-    "file": "assets/WalletCards-DH1rqayz-D2VE3o9k.js",
+  "_WalletCards-DH1rqayz-Bxtd96Dc.js": {
+    "file": "assets/WalletCards-DH1rqayz-Bxtd96Dc.js",
     "name": "WalletCards-DH1rqayz",
     "imports": [
       "index.html"
     ]
   },
-  "_WalletIcon-DhKJR8EC.js": {
-    "file": "assets/WalletIcon-DhKJR8EC.js",
+  "_WalletIcon-CRl1ZDF4.js": {
+    "file": "assets/WalletIcon-CRl1ZDF4.js",
     "name": "WalletIcon",
     "imports": [
       "index.html"
     ]
   },
-  "_WalletInfoCard-DFt8ndGE-DxaLKWXn.js": {
-    "file": "assets/WalletInfoCard-DFt8ndGE-DxaLKWXn.js",
+  "_WalletInfoCard-DFt8ndGE-C_4uCkcb.js": {
+    "file": "assets/WalletInfoCard-DFt8ndGE-C_4uCkcb.js",
     "name": "WalletInfoCard-DFt8ndGE",
     "imports": [
       "index.html",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_ErrorMessage-D8VaAP5m-CSRfkILK.js",
-      "_LabelXs-oqZNqbm_-0c6bD-2B.js",
-      "_Address-BjZb-TIL-CUaA-wVO.js",
-      "_shared-FM0rljBt-Bvcdp-Bb.js",
-      "_check-BPM-pONt.js",
-      "_copy-CuK8iXj8.js"
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_ErrorMessage-D8VaAP5m-DxjeKNSn.js",
+      "_LabelXs-oqZNqbm_-SwMnd8QF.js",
+      "_Address-BjZb-TIL-Bu6eEFrD.js",
+      "_shared-FM0rljBt-B7vv_loM.js",
+      "_check-CaX9dEME.js",
+      "_copy-C55C3k8T.js"
     ]
   },
-  "_WalletLink--05Hzo2b-DN5etSMx.js": {
-    "file": "assets/WalletLink--05Hzo2b-DN5etSMx.js",
+  "_WalletLink--05Hzo2b-8O6qUNgy.js": {
+    "file": "assets/WalletLink--05Hzo2b-8O6qUNgy.js",
     "name": "WalletLink--05Hzo2b",
     "imports": [
       "index.html",
-      "_ethers-D1WT71Ay-DvAUZlyq.js",
+      "_ethers-D1WT71Ay-BQ6rOR95.js",
       "_getFormattedUsdFromLamports-B6EqSEho-C-HCdwKa.js",
       "_transaction-CnfuREWo-nROljJQP.js"
     ]
   },
-  "_WalletOverflowButton-BlijhJnI-DYJS2CDH.js": {
-    "file": "assets/WalletOverflowButton-BlijhJnI-DYJS2CDH.js",
+  "_WalletOverflowButton-BlijhJnI-1ZGZ-9pj.js": {
+    "file": "assets/WalletOverflowButton-BlijhJnI-1ZGZ-9pj.js",
     "name": "WalletOverflowButton-BlijhJnI",
     "imports": [
       "index.html",
-      "_createLucideIcon-ktXaMrqE.js"
+      "_createLucideIcon-jEE5KA3V.js"
     ]
   },
-  "_WarningBanner-c8L53pJ2-D_EmmYOl.js": {
-    "file": "assets/WarningBanner-c8L53pJ2-D_EmmYOl.js",
+  "_WarningBanner-c8L53pJ2-CEBXyz_y.js": {
+    "file": "assets/WarningBanner-c8L53pJ2-CEBXyz_y.js",
     "name": "WarningBanner-c8L53pJ2",
     "imports": [
       "index.html",
-      "_ExclamationTriangleIcon-DFwA0b-j.js"
+      "_ExclamationTriangleIcon-BWrXnrlz.js"
     ]
   },
   "_analytics-mkkvFRju-DOXuftJB.js": {
@@ -534,43 +534,43 @@
     "file": "assets/capitalizeFirstLetter-DmLYqXsO-tV1Idewc.js",
     "name": "capitalizeFirstLetter-DmLYqXsO"
   },
-  "_check-BPM-pONt.js": {
-    "file": "assets/check-BPM-pONt.js",
+  "_check-CaX9dEME.js": {
+    "file": "assets/check-CaX9dEME.js",
     "name": "check",
     "imports": [
-      "_createLucideIcon-ktXaMrqE.js"
+      "_createLucideIcon-jEE5KA3V.js"
     ]
   },
-  "_circle-alert-BYcjPmUD.js": {
-    "file": "assets/circle-alert-BYcjPmUD.js",
+  "_circle-alert-CYruN8Zv.js": {
+    "file": "assets/circle-alert-CYruN8Zv.js",
     "name": "circle-alert",
     "imports": [
-      "_createLucideIcon-ktXaMrqE.js"
+      "_createLucideIcon-jEE5KA3V.js"
     ]
   },
-  "_circle-check-big-yTbqokzd.js": {
-    "file": "assets/circle-check-big-yTbqokzd.js",
+  "_circle-check-big-CWxLpkXO.js": {
+    "file": "assets/circle-check-big-CWxLpkXO.js",
     "name": "circle-check-big",
     "imports": [
-      "_createLucideIcon-ktXaMrqE.js"
+      "_createLucideIcon-jEE5KA3V.js"
     ]
   },
-  "_circle-x-DQsN317A.js": {
-    "file": "assets/circle-x-DQsN317A.js",
+  "_circle-x-iy2llt31.js": {
+    "file": "assets/circle-x-iy2llt31.js",
     "name": "circle-x",
     "imports": [
-      "_createLucideIcon-ktXaMrqE.js"
+      "_createLucideIcon-jEE5KA3V.js"
     ]
   },
-  "_copy-CuK8iXj8.js": {
-    "file": "assets/copy-CuK8iXj8.js",
+  "_copy-C55C3k8T.js": {
+    "file": "assets/copy-C55C3k8T.js",
     "name": "copy",
     "imports": [
-      "_createLucideIcon-ktXaMrqE.js"
+      "_createLucideIcon-jEE5KA3V.js"
     ]
   },
-  "_core-CA6HS9a-.js": {
-    "file": "assets/core-CA6HS9a-.js",
+  "_core-D-JK-YTH.js": {
+    "file": "assets/core-D-JK-YTH.js",
     "name": "core",
     "isDynamicEntry": true,
     "imports": [
@@ -584,8 +584,8 @@
       "node_modules/@reown/appkit-scaffold-ui/dist/esm/exports/w3m-modal.js"
     ]
   },
-  "_createLucideIcon-ktXaMrqE.js": {
-    "file": "assets/createLucideIcon-ktXaMrqE.js",
+  "_createLucideIcon-jEE5KA3V.js": {
+    "file": "assets/createLucideIcon-jEE5KA3V.js",
     "name": "createLucideIcon",
     "imports": [
       "index.html"
@@ -595,40 +595,40 @@
     "file": "assets/dijkstra-COg3n3zL.js",
     "name": "dijkstra"
   },
-  "_ethers-D1WT71Ay-DvAUZlyq.js": {
-    "file": "assets/ethers-D1WT71Ay-DvAUZlyq.js",
+  "_ethers-D1WT71Ay-BQ6rOR95.js": {
+    "file": "assets/ethers-D1WT71Ay-BQ6rOR95.js",
     "name": "ethers-D1WT71Ay",
     "imports": [
       "index.html"
     ]
   },
-  "_external-link-DEEJhTmI.js": {
-    "file": "assets/external-link-DEEJhTmI.js",
+  "_external-link-CU2b9M4s.js": {
+    "file": "assets/external-link-CU2b9M4s.js",
     "name": "external-link",
     "imports": [
-      "_createLucideIcon-ktXaMrqE.js"
+      "_createLucideIcon-jEE5KA3V.js"
     ]
   },
-  "_farcaster-DPlSjvF5-CYwe3UgM.js": {
-    "file": "assets/farcaster-DPlSjvF5-CYwe3UgM.js",
+  "_farcaster-DPlSjvF5-DocJwf1j.js": {
+    "file": "assets/farcaster-DPlSjvF5-DocJwf1j.js",
     "name": "farcaster-DPlSjvF5",
     "imports": [
       "index.html"
     ]
   },
-  "_fingerprint-pattern-CvOwd3bn.js": {
-    "file": "assets/fingerprint-pattern-CvOwd3bn.js",
+  "_fingerprint-pattern-C85qQdNT.js": {
+    "file": "assets/fingerprint-pattern-C85qQdNT.js",
     "name": "fingerprint-pattern",
     "imports": [
-      "_createLucideIcon-ktXaMrqE.js"
+      "_createLucideIcon-jEE5KA3V.js"
     ]
   },
   "_formatErc20TokenAmount-BuPk9xcy-CkAr4Oc0.js": {
     "file": "assets/formatErc20TokenAmount-BuPk9xcy-CkAr4Oc0.js",
     "name": "formatErc20TokenAmount-BuPk9xcy"
   },
-  "_formatters-CDGePEdL.js": {
-    "file": "assets/formatters-CDGePEdL.js",
+  "_formatters-DlHjBI8i.js": {
+    "file": "assets/formatters-DlHjBI8i.js",
     "name": "formatters",
     "imports": [
       "index.html"
@@ -638,15 +638,15 @@
     "file": "assets/getChainName-DjpPdUSc-c2urPd0g.js",
     "name": "getChainName-DjpPdUSc"
   },
-  "_getErc20Balance-DA4dGV9O-2vZGKVIn.js": {
-    "file": "assets/getErc20Balance-DA4dGV9O-2vZGKVIn.js",
+  "_getErc20Balance-DA4dGV9O-DhN8eKTM.js": {
+    "file": "assets/getErc20Balance-DA4dGV9O-DhN8eKTM.js",
     "name": "getErc20Balance-DA4dGV9O",
     "imports": [
       "index.html"
     ]
   },
-  "_getErc20TokenInfo-1Q6w1Ibq-DWFx5NS3.js": {
-    "file": "assets/getErc20TokenInfo-1Q6w1Ibq-DWFx5NS3.js",
+  "_getErc20TokenInfo-1Q6w1Ibq-B42WymIc.js": {
+    "file": "assets/getErc20TokenInfo-1Q6w1Ibq-B42WymIc.js",
     "name": "getErc20TokenInfo-1Q6w1Ibq",
     "imports": [
       "index.html"
@@ -663,11 +663,11 @@
       "_getFormattedUsdFromLamports-B6EqSEho-C-HCdwKa.js"
     ]
   },
-  "_index-BI1RfZGU.js": {
-    "file": "assets/index-BI1RfZGU.js",
+  "_index--ipaaxHf.js": {
+    "file": "assets/index--ipaaxHf.js",
     "name": "index",
     "imports": [
-      "_core-CA6HS9a-.js",
+      "_core-D-JK-YTH.js",
       "index.html"
     ],
     "dynamicImports": [
@@ -724,44 +724,44 @@
       "node_modules/@phosphor-icons/webcomponents/dist/icons/PhX.mjs"
     ]
   },
-  "_index-C9k7EfLZ-ClZe91rr.js": {
-    "file": "assets/index-C9k7EfLZ-ClZe91rr.js",
+  "_index-C9k7EfLZ-CLrSANb2.js": {
+    "file": "assets/index-C9k7EfLZ-CLrSANb2.js",
     "name": "index-C9k7EfLZ",
     "imports": [
       "index.html",
       "_analytics-mkkvFRju-DOXuftJB.js"
     ]
   },
-  "_index-Dq_xe9dz-Dqgmy4tf.js": {
-    "file": "assets/index-Dq_xe9dz-Dqgmy4tf.js",
+  "_index-Dq_xe9dz-B5CfSfel.js": {
+    "file": "assets/index-Dq_xe9dz-B5CfSfel.js",
     "name": "index-Dq_xe9dz",
     "imports": [
       "index.html"
     ]
   },
-  "_lock-CIdO-Gq_.js": {
-    "file": "assets/lock-CIdO-Gq_.js",
+  "_lock-BKQedAQh.js": {
+    "file": "assets/lock-BKQedAQh.js",
     "name": "lock",
     "imports": [
-      "_createLucideIcon-ktXaMrqE.js"
+      "_createLucideIcon-jEE5KA3V.js"
     ]
   },
-  "_mail-nIfCO6of.js": {
-    "file": "assets/mail-nIfCO6of.js",
+  "_mail-DDd2ItFs.js": {
+    "file": "assets/mail-DDd2ItFs.js",
     "name": "mail",
     "imports": [
-      "_createLucideIcon-ktXaMrqE.js"
+      "_createLucideIcon-jEE5KA3V.js"
     ]
   },
-  "_parseEther-Dc0V2TDG.js": {
-    "file": "assets/parseEther-Dc0V2TDG.js",
+  "_parseEther-qmIUj5dg.js": {
+    "file": "assets/parseEther-qmIUj5dg.js",
     "name": "parseEther",
     "imports": [
       "index.html"
     ]
   },
-  "_parseSignature-BGJEWVgj.js": {
-    "file": "assets/parseSignature-BGJEWVgj.js",
+  "_parseSignature-DGAVu9n6.js": {
+    "file": "assets/parseSignature-DGAVu9n6.js",
     "name": "parseSignature",
     "imports": [
       "index.html"
@@ -771,73 +771,73 @@
     "file": "assets/property-CnFDNXw5.js",
     "name": "property"
   },
-  "_reservoir-0wfhnc0j-C59efNqe.js": {
-    "file": "assets/reservoir-0wfhnc0j-C59efNqe.js",
+  "_reservoir-0wfhnc0j-B3rOEofm.js": {
+    "file": "assets/reservoir-0wfhnc0j-B3rOEofm.js",
     "name": "reservoir-0wfhnc0j",
     "imports": [
       "index.html"
     ]
   },
-  "_shared-CwuyxHmv-DoMzGFq1.js": {
-    "file": "assets/shared-CwuyxHmv-DoMzGFq1.js",
+  "_shared-CwuyxHmv-BVYTqArg.js": {
+    "file": "assets/shared-CwuyxHmv-BVYTqArg.js",
     "name": "shared-CwuyxHmv",
     "imports": [
       "index.html",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js"
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js"
     ]
   },
-  "_shared-FM0rljBt-Bvcdp-Bb.js": {
-    "file": "assets/shared-FM0rljBt-Bvcdp-Bb.js",
+  "_shared-FM0rljBt-B7vv_loM.js": {
+    "file": "assets/shared-FM0rljBt-B7vv_loM.js",
     "name": "shared-FM0rljBt",
     "imports": [
       "index.html"
     ]
   },
-  "_shouldProceedtoEmbeddedWalletCreationFlow-BMF_3TVv-CxjZJ0Eo.js": {
-    "file": "assets/shouldProceedtoEmbeddedWalletCreationFlow-BMF_3TVv-CxjZJ0Eo.js",
+  "_shouldProceedtoEmbeddedWalletCreationFlow-BMF_3TVv-D0wD2hz8.js": {
+    "file": "assets/shouldProceedtoEmbeddedWalletCreationFlow-BMF_3TVv-D0wD2hz8.js",
     "name": "shouldProceedtoEmbeddedWalletCreationFlow-BMF_3TVv",
     "imports": [
       "index.html"
     ]
   },
-  "_styles-BmZHuqSX-Bx5Gn5ub.js": {
-    "file": "assets/styles-BmZHuqSX-Bx5Gn5ub.js",
+  "_styles-BmZHuqSX-BkKUMJkf.js": {
+    "file": "assets/styles-BmZHuqSX-BkKUMJkf.js",
     "name": "styles-BmZHuqSX",
     "imports": [
       "index.html",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
       "node_modules/@privy-io/react-auth/dist/esm/LinkPasskeyScreen-OxaghvUl.mjs"
     ]
   },
-  "_styles-BsotlekN-BZjf0sJ5.js": {
-    "file": "assets/styles-BsotlekN-BZjf0sJ5.js",
+  "_styles-BsotlekN-BKyjzRfV.js": {
+    "file": "assets/styles-BsotlekN-BKyjzRfV.js",
     "name": "styles-BsotlekN",
     "imports": [
       "index.html"
     ]
   },
-  "_telegram-B-JqnkqZ-CW8o8xNW.js": {
-    "file": "assets/telegram-B-JqnkqZ-CW8o8xNW.js",
+  "_telegram-B-JqnkqZ-31fKsVX2.js": {
+    "file": "assets/telegram-B-JqnkqZ-31fKsVX2.js",
     "name": "telegram-B-JqnkqZ",
     "imports": [
       "index.html"
     ]
   },
-  "_to-ui-error-REESv0kM-BQ1vFfa5.js": {
-    "file": "assets/to-ui-error-REESv0kM-BQ1vFfa5.js",
+  "_to-ui-error-REESv0kM-CKpAzvkk.js": {
+    "file": "assets/to-ui-error-REESv0kM-CKpAzvkk.js",
     "name": "to-ui-error-REESv0kM",
     "imports": [
       "index.html",
-      "_PinInput-3SLvbnQa-BVMO8c16.js",
-      "_FingerPrintIcon-CuVwCPgD.js",
-      "_PhoneIcon-Buw36cAf.js",
-      "_ShieldCheckIcon-VDxRyXYH.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_ExclamationTriangleIcon-DFwA0b-j.js",
-      "_StackedContainer-B2vaEl56-DHQhH6ri.js",
-      "_useGetTokenPrice-BPBpM07F-C3qFUVrQ.js",
-      "_TransactionDetails-BurRo8R0-BXQM0L19.js"
+      "_PinInput-3SLvbnQa-MWrS6AQg.js",
+      "_FingerPrintIcon-DPcrAL97.js",
+      "_PhoneIcon-CelU8-e8.js",
+      "_ShieldCheckIcon-CX3bDxyJ.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_ExclamationTriangleIcon-BWrXnrlz.js",
+      "_StackedContainer-B2vaEl56-DL9iqRHD.js",
+      "_useGetTokenPrice-BPBpM07F-DKJUK4gu.js",
+      "_TransactionDetails-BurRo8R0-C_SiD5be.js"
     ]
   },
   "_transaction-CnfuREWo-nROljJQP.js": {
@@ -851,57 +851,57 @@
     "file": "assets/transfer-6YztDh-t-DU6hH7CZ.js",
     "name": "transfer-6YztDh-t"
   },
-  "_twitch-5IOe4sIQ-CnW-5pMB.js": {
-    "file": "assets/twitch-5IOe4sIQ-CnW-5pMB.js",
+  "_twitch-5IOe4sIQ-GwS3Bt1u.js": {
+    "file": "assets/twitch-5IOe4sIQ-GwS3Bt1u.js",
     "name": "twitch-5IOe4sIQ",
     "imports": [
       "index.html"
     ]
   },
-  "_useGetSolPrice-DwwjjGbd-Ctq-9OZk.js": {
-    "file": "assets/useGetSolPrice-DwwjjGbd-Ctq-9OZk.js",
+  "_useGetSolPrice-DwwjjGbd-CDf7Olwr.js": {
+    "file": "assets/useGetSolPrice-DwwjjGbd-CDf7Olwr.js",
     "name": "useGetSolPrice-DwwjjGbd",
     "imports": [
       "index.html"
     ]
   },
-  "_useGetTokenPrice-BPBpM07F-C3qFUVrQ.js": {
-    "file": "assets/useGetTokenPrice-BPBpM07F-C3qFUVrQ.js",
+  "_useGetTokenPrice-BPBpM07F-DKJUK4gu.js": {
+    "file": "assets/useGetTokenPrice-BPBpM07F-DKJUK4gu.js",
     "name": "useGetTokenPrice-BPBpM07F",
     "imports": [
       "index.html",
-      "_useGetSolPrice-DwwjjGbd-Ctq-9OZk.js"
+      "_useGetSolPrice-DwwjjGbd-CDf7Olwr.js"
     ]
   },
-  "_useI18n-BuIe8nUA-D0UUP5HE.js": {
-    "file": "assets/useI18n-BuIe8nUA-D0UUP5HE.js",
+  "_useI18n-BuIe8nUA-eHC_et0r.js": {
+    "file": "assets/useI18n-BuIe8nUA-eHC_et0r.js",
     "name": "useI18n-BuIe8nUA",
     "imports": [
       "index.html"
     ]
   },
-  "_useSolanaRpcClient-BUWOblv_-CLd9M6wp.js": {
-    "file": "assets/useSolanaRpcClient-BUWOblv_-CLd9M6wp.js",
+  "_useSolanaRpcClient-BUWOblv_-C6PDqOrO.js": {
+    "file": "assets/useSolanaRpcClient-BUWOblv_-C6PDqOrO.js",
     "name": "useSolanaRpcClient-BUWOblv_",
     "imports": [
       "index.html"
     ]
   },
-  "_useWalletBalance-CDyi5_iR-ChTO2z3z.js": {
-    "file": "assets/useWalletBalance-CDyi5_iR-ChTO2z3z.js",
+  "_useWalletBalance-CDyi5_iR-BpXPv2eK.js": {
+    "file": "assets/useWalletBalance-CDyi5_iR-BpXPv2eK.js",
     "name": "useWalletBalance-CDyi5_iR",
     "imports": [
       "index.html"
     ]
   },
   "index.html": {
-    "file": "assets/index-DkCllmlQ.js",
+    "file": "assets/index-DkJzA7yA.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
     "dynamicImports": [
       "node_modules/viem/_esm/utils/ccip.js",
-      "_core-CA6HS9a-.js",
+      "_core-D-JK-YTH.js",
       "node_modules/@base-org/account/dist/index.js",
       "node_modules/@simplewebauthn/browser/esm/index.js",
       "node_modules/@simplewebauthn/browser/esm/index.js",
@@ -976,17 +976,17 @@
       "src/components/IslandMap.tsx"
     ],
     "css": [
-      "assets/index-g7RksgLn.css"
+      "assets/index-C1k4ymX4.css"
     ]
   },
   "node_modules/@base-org/account/dist/index.js": {
-    "file": "assets/index-D8FL_uRq.js",
+    "file": "assets/index-DEg_DmUR.js",
     "name": "index",
     "src": "node_modules/@base-org/account/dist/index.js",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_parseSignature-BGJEWVgj.js"
+      "_parseSignature-DGAVu9n6.js"
     ]
   },
   "node_modules/@phosphor-icons/webcomponents/dist/icons/PhArrowCircleDown.mjs": {
@@ -1449,669 +1449,669 @@
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/AccountNotFoundScreen-C055cesr.mjs": {
-    "file": "assets/AccountNotFoundScreen-C055cesr-Cnr8gTrJ.js",
+    "file": "assets/AccountNotFoundScreen-C055cesr-D37BR84S.js",
     "name": "AccountNotFoundScreen-C055cesr",
     "src": "node_modules/@privy-io/react-auth/dist/esm/AccountNotFoundScreen-C055cesr.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_createLucideIcon-ktXaMrqE.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js"
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_createLucideIcon-jEE5KA3V.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/AffirmativeConsentScreen-DXy2kEcy.mjs": {
-    "file": "assets/AffirmativeConsentScreen-DXy2kEcy-Bms602dM.js",
+    "file": "assets/AffirmativeConsentScreen-DXy2kEcy-bAxUi8vj.js",
     "name": "AffirmativeConsentScreen-DXy2kEcy",
     "src": "node_modules/@privy-io/react-auth/dist/esm/AffirmativeConsentScreen-DXy2kEcy.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_shouldProceedtoEmbeddedWalletCreationFlow-BMF_3TVv-CxjZJ0Eo.js",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_createLucideIcon-ktXaMrqE.js",
-      "_external-link-DEEJhTmI.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js"
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_shouldProceedtoEmbeddedWalletCreationFlow-BMF_3TVv-D0wD2hz8.js",
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_createLucideIcon-jEE5KA3V.js",
+      "_external-link-CU2b9M4s.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/AllowlistRejectionScreen-BIzWPeoe.mjs": {
-    "file": "assets/AllowlistRejectionScreen-BIzWPeoe-plXjIrLe.js",
+    "file": "assets/AllowlistRejectionScreen-BIzWPeoe-B1xvmdYS.js",
     "name": "AllowlistRejectionScreen-BIzWPeoe",
     "src": "node_modules/@privy-io/react-auth/dist/esm/AllowlistRejectionScreen-BIzWPeoe.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_lock-CIdO-Gq_.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js",
-      "_createLucideIcon-ktXaMrqE.js"
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_lock-BKQedAQh.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js",
+      "_createLucideIcon-jEE5KA3V.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/AuthenticateWithWalletScreen-q3jQKiH6.mjs": {
-    "file": "assets/AuthenticateWithWalletScreen-q3jQKiH6-5vSEQYCF.js",
+    "file": "assets/AuthenticateWithWalletScreen-q3jQKiH6-B_AcdsNT.js",
     "name": "AuthenticateWithWalletScreen-q3jQKiH6",
     "src": "node_modules/@privy-io/react-auth/dist/esm/AuthenticateWithWalletScreen-q3jQKiH6.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_ConnectWalletView-CDqboUej-CnaOw5eL.js",
-      "_QrCode-C1tgJtOy-BObh5Q7S.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_CopyableText-BCytXyJL-D5kvxv7y.js",
-      "_check-BPM-pONt.js",
-      "_createLucideIcon-ktXaMrqE.js",
-      "_copy-CuK8iXj8.js",
-      "_Link-DJ5gq9Di-D8ELJ6Gy.js",
-      "_EmailInputForm-Dgoii4vf-mLIatGND.js",
-      "_ErrorMessage-D8VaAP5m-CSRfkILK.js",
-      "_useI18n-BuIe8nUA-D0UUP5HE.js",
-      "_WalletCards-DH1rqayz-D2VE3o9k.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js",
+      "_ConnectWalletView-CDqboUej-DgNT6kbX.js",
+      "_QrCode-C1tgJtOy-BHlPCubm.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_CopyableText-BCytXyJL-CgqmgMih.js",
+      "_check-CaX9dEME.js",
+      "_createLucideIcon-jEE5KA3V.js",
+      "_copy-C55C3k8T.js",
+      "_Link-DJ5gq9Di-C9D1qU33.js",
+      "_EmailInputForm-Dgoii4vf-DwDfmkEh.js",
+      "_ErrorMessage-D8VaAP5m-DxjeKNSn.js",
+      "_useI18n-BuIe8nUA-eHC_et0r.js",
+      "_WalletCards-DH1rqayz-Bxtd96Dc.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js",
       "_dijkstra-COg3n3zL.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/AwaitingEvmToSolBridgingScreen-B4R4PEVm.mjs": {
-    "file": "assets/AwaitingEvmToSolBridgingScreen-B4R4PEVm-BjGEP2ku.js",
+    "file": "assets/AwaitingEvmToSolBridgingScreen-B4R4PEVm-DReLUKE8.js",
     "name": "AwaitingEvmToSolBridgingScreen-B4R4PEVm",
     "src": "node_modules/@privy-io/react-auth/dist/esm/AwaitingEvmToSolBridgingScreen-B4R4PEVm.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_CheckCircleIcon-B_3MoKfc.js",
-      "_Layouts-BlFm53ED-BwtVJHVg.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_ScreenHeader-CHmc4-Lu-BkT2ykls.js",
-      "_FundWalletMethodHeader-Cfci4-83-CbGxLmI6.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js",
-      "_useGetTokenPrice-BPBpM07F-C3qFUVrQ.js",
+      "_CheckCircleIcon-BBRajA6y.js",
+      "_Layouts-BlFm53ED-Bhj8Zq_D.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_ScreenHeader-CHmc4-Lu-CzyJ3Pii.js",
+      "_FundWalletMethodHeader-Cfci4-83-DvDfYdnZ.js",
+      "_index-Dq_xe9dz-B5CfSfel.js",
+      "_useGetTokenPrice-BPBpM07F-DKJUK4gu.js",
       "_analytics-mkkvFRju-DOXuftJB.js",
-      "_reservoir-0wfhnc0j-C59efNqe.js",
+      "_reservoir-0wfhnc0j-B3rOEofm.js",
       "_getChainName-DjpPdUSc-c2urPd0g.js",
       "_transaction-CnfuREWo-nROljJQP.js",
-      "_BridgeNetworkSelectionView-CaDh-Zck-B-Y8Ku-w.js",
-      "_TransferOrBridgeLoadingScreen-DcCdHB-g-DxLDv_kV.js",
-      "_useGetSolPrice-DwwjjGbd-Ctq-9OZk.js",
+      "_BridgeNetworkSelectionView-CaDh-Zck-CloXYgeY.js",
+      "_TransferOrBridgeLoadingScreen-DcCdHB-g-T0KQYrh-.js",
+      "_useGetSolPrice-DwwjjGbd-CDf7Olwr.js",
       "_getFormattedUsdFromLamports-B6EqSEho-C-HCdwKa.js",
-      "_getErc20Balance-DA4dGV9O-2vZGKVIn.js",
-      "_Value-tcJV9e0L-DIexT38e.js",
-      "_LoadingSkeleton-U6-3yFwI-DYng621o.js",
-      "_ErrorMessage-D8VaAP5m-CSRfkILK.js",
-      "_Subtitle-CV-2yKE4-3n7wOBX9.js",
-      "_Title-BnzYV3Is-BUerzvzw.js",
-      "_WalletIcon-DhKJR8EC.js",
-      "_Chip-D2-wZOHJ-L9zdFfDD.js",
-      "_shared-FM0rljBt-Bvcdp-Bb.js",
-      "_ChevronDownIcon-CEQ-6sNt.js",
+      "_getErc20Balance-DA4dGV9O-DhN8eKTM.js",
+      "_Value-tcJV9e0L-Bv6aRaog.js",
+      "_LoadingSkeleton-U6-3yFwI-D7PbqT2S.js",
+      "_ErrorMessage-D8VaAP5m-DxjeKNSn.js",
+      "_Subtitle-CV-2yKE4-KF2mgmQn.js",
+      "_Title-BnzYV3Is-C_zr4qem.js",
+      "_WalletIcon-CRl1ZDF4.js",
+      "_Chip-D2-wZOHJ-DhVq9pPJ.js",
+      "_shared-FM0rljBt-B7vv_loM.js",
+      "_ChevronDownIcon-C8wpkRBF.js",
       "_formatErc20TokenAmount-BuPk9xcy-CkAr4Oc0.js",
-      "_ethers-D1WT71Ay-DvAUZlyq.js",
-      "_styles-BmZHuqSX-Bx5Gn5ub.js",
+      "_ethers-D1WT71Ay-BQ6rOR95.js",
+      "_styles-BmZHuqSX-BkKUMJkf.js",
       "node_modules/@privy-io/react-auth/dist/esm/LinkPasskeyScreen-OxaghvUl.mjs",
-      "_TodoList-CgrU7uwu-CGNNQgI4.js",
-      "_createLucideIcon-ktXaMrqE.js",
-      "_check-BPM-pONt.js",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_circle-check-big-yTbqokzd.js",
-      "_fingerprint-pattern-CvOwd3bn.js",
-      "_formatters-CDGePEdL.js",
-      "_InjectedWalletIcon-DLcYOGDj-DZCOnUV7.js",
-      "_Address-BjZb-TIL-CUaA-wVO.js",
-      "_copy-CuK8iXj8.js",
-      "_GlobeAltIcon-B9KsrEBV.js"
+      "_TodoList-CgrU7uwu-TIRppYgz.js",
+      "_createLucideIcon-jEE5KA3V.js",
+      "_check-CaX9dEME.js",
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_circle-check-big-CWxLpkXO.js",
+      "_fingerprint-pattern-C85qQdNT.js",
+      "_formatters-DlHjBI8i.js",
+      "_InjectedWalletIcon-DLcYOGDj-63L6yX2u.js",
+      "_Address-BjZb-TIL-Bu6eEFrD.js",
+      "_copy-C55C3k8T.js",
+      "_GlobeAltIcon-BKo0Maa7.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/AwaitingExternalEthereumTransferScreen-Dwy69FD1.mjs": {
-    "file": "assets/AwaitingExternalEthereumTransferScreen-Dwy69FD1-DDJb7PvL.js",
+    "file": "assets/AwaitingExternalEthereumTransferScreen-Dwy69FD1-CdEsPo3Z.js",
     "name": "AwaitingExternalEthereumTransferScreen-Dwy69FD1",
     "src": "node_modules/@privy-io/react-auth/dist/esm/AwaitingExternalEthereumTransferScreen-Dwy69FD1.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_CheckCircleIcon-B_3MoKfc.js",
-      "_Layouts-BlFm53ED-BwtVJHVg.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_ScreenHeader-CHmc4-Lu-BkT2ykls.js",
-      "_FundWalletMethodHeader-Cfci4-83-CbGxLmI6.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js",
-      "_useGetTokenPrice-BPBpM07F-C3qFUVrQ.js",
+      "_CheckCircleIcon-BBRajA6y.js",
+      "_Layouts-BlFm53ED-Bhj8Zq_D.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_ScreenHeader-CHmc4-Lu-CzyJ3Pii.js",
+      "_FundWalletMethodHeader-Cfci4-83-DvDfYdnZ.js",
+      "_index-Dq_xe9dz-B5CfSfel.js",
+      "_useGetTokenPrice-BPBpM07F-DKJUK4gu.js",
       "_transfer-6YztDh-t-DU6hH7CZ.js",
       "_formatErc20TokenAmount-BuPk9xcy-CkAr4Oc0.js",
-      "_ethers-D1WT71Ay-DvAUZlyq.js",
+      "_ethers-D1WT71Ay-BQ6rOR95.js",
       "_analytics-mkkvFRju-DOXuftJB.js",
-      "_reservoir-0wfhnc0j-C59efNqe.js",
-      "_BridgeNetworkSelectionView-CaDh-Zck-B-Y8Ku-w.js",
-      "_getErc20Balance-DA4dGV9O-2vZGKVIn.js",
-      "_TransferOrBridgeLoadingScreen-DcCdHB-g-DxLDv_kV.js",
-      "_parseEther-Dc0V2TDG.js",
-      "_useGetSolPrice-DwwjjGbd-Ctq-9OZk.js",
-      "_Value-tcJV9e0L-DIexT38e.js",
-      "_LoadingSkeleton-U6-3yFwI-DYng621o.js",
-      "_ErrorMessage-D8VaAP5m-CSRfkILK.js",
-      "_Subtitle-CV-2yKE4-3n7wOBX9.js",
-      "_Title-BnzYV3Is-BUerzvzw.js",
-      "_WalletIcon-DhKJR8EC.js",
+      "_reservoir-0wfhnc0j-B3rOEofm.js",
+      "_BridgeNetworkSelectionView-CaDh-Zck-CloXYgeY.js",
+      "_getErc20Balance-DA4dGV9O-DhN8eKTM.js",
+      "_TransferOrBridgeLoadingScreen-DcCdHB-g-T0KQYrh-.js",
+      "_parseEther-qmIUj5dg.js",
+      "_useGetSolPrice-DwwjjGbd-CDf7Olwr.js",
+      "_Value-tcJV9e0L-Bv6aRaog.js",
+      "_LoadingSkeleton-U6-3yFwI-D7PbqT2S.js",
+      "_ErrorMessage-D8VaAP5m-DxjeKNSn.js",
+      "_Subtitle-CV-2yKE4-KF2mgmQn.js",
+      "_Title-BnzYV3Is-C_zr4qem.js",
+      "_WalletIcon-CRl1ZDF4.js",
       "_getChainName-DjpPdUSc-c2urPd0g.js",
-      "_Chip-D2-wZOHJ-L9zdFfDD.js",
-      "_shared-FM0rljBt-Bvcdp-Bb.js",
-      "_ChevronDownIcon-CEQ-6sNt.js",
-      "_styles-BmZHuqSX-Bx5Gn5ub.js",
+      "_Chip-D2-wZOHJ-DhVq9pPJ.js",
+      "_shared-FM0rljBt-B7vv_loM.js",
+      "_ChevronDownIcon-C8wpkRBF.js",
+      "_styles-BmZHuqSX-BkKUMJkf.js",
       "node_modules/@privy-io/react-auth/dist/esm/LinkPasskeyScreen-OxaghvUl.mjs",
-      "_TodoList-CgrU7uwu-CGNNQgI4.js",
-      "_createLucideIcon-ktXaMrqE.js",
-      "_check-BPM-pONt.js",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_circle-check-big-yTbqokzd.js",
-      "_fingerprint-pattern-CvOwd3bn.js",
-      "_formatters-CDGePEdL.js",
-      "_InjectedWalletIcon-DLcYOGDj-DZCOnUV7.js",
-      "_Address-BjZb-TIL-CUaA-wVO.js",
-      "_copy-CuK8iXj8.js",
-      "_GlobeAltIcon-B9KsrEBV.js"
+      "_TodoList-CgrU7uwu-TIRppYgz.js",
+      "_createLucideIcon-jEE5KA3V.js",
+      "_check-CaX9dEME.js",
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_circle-check-big-CWxLpkXO.js",
+      "_fingerprint-pattern-C85qQdNT.js",
+      "_formatters-DlHjBI8i.js",
+      "_InjectedWalletIcon-DLcYOGDj-63L6yX2u.js",
+      "_Address-BjZb-TIL-Bu6eEFrD.js",
+      "_copy-C55C3k8T.js",
+      "_GlobeAltIcon-BKo0Maa7.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/AwaitingPasswordlessCodeScreen-Ch_YXDTX.mjs": {
-    "file": "assets/AwaitingPasswordlessCodeScreen-Ch_YXDTX-DDgKGsMt.js",
+    "file": "assets/AwaitingPasswordlessCodeScreen-Ch_YXDTX-CautG7sh.js",
     "name": "AwaitingPasswordlessCodeScreen-Ch_YXDTX",
     "src": "node_modules/@privy-io/react-auth/dist/esm/AwaitingPasswordlessCodeScreen-Ch_YXDTX.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_EnvelopeIcon-BGPqYNN7.js",
-      "_PhoneIcon-Buw36cAf.js",
-      "_Layouts-BlFm53ED-BwtVJHVg.js",
-      "_Link-DJ5gq9Di-D8ELJ6Gy.js",
-      "_shouldProceedtoEmbeddedWalletCreationFlow-BMF_3TVv-CxjZJ0Eo.js",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js"
+      "_EnvelopeIcon-tl2SWtvR.js",
+      "_PhoneIcon-CelU8-e8.js",
+      "_Layouts-BlFm53ED-Bhj8Zq_D.js",
+      "_Link-DJ5gq9Di-C9D1qU33.js",
+      "_shouldProceedtoEmbeddedWalletCreationFlow-BMF_3TVv-D0wD2hz8.js",
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/AwaitingSolToEvmBridgingScreen-spElnpUE.mjs": {
-    "file": "assets/AwaitingSolToEvmBridgingScreen-spElnpUE-DUcP1zig.js",
+    "file": "assets/AwaitingSolToEvmBridgingScreen-spElnpUE-Bv0SOafa.js",
     "name": "AwaitingSolToEvmBridgingScreen-spElnpUE",
     "src": "node_modules/@privy-io/react-auth/dist/esm/AwaitingSolToEvmBridgingScreen-spElnpUE.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_CheckCircleIcon-B_3MoKfc.js",
-      "_Layouts-BlFm53ED-BwtVJHVg.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_ScreenHeader-CHmc4-Lu-BkT2ykls.js",
-      "_FundWalletMethodHeader-Cfci4-83-CbGxLmI6.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js",
+      "_CheckCircleIcon-BBRajA6y.js",
+      "_Layouts-BlFm53ED-Bhj8Zq_D.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_ScreenHeader-CHmc4-Lu-CzyJ3Pii.js",
+      "_FundWalletMethodHeader-Cfci4-83-DvDfYdnZ.js",
+      "_index-Dq_xe9dz-B5CfSfel.js",
       "_analytics-mkkvFRju-DOXuftJB.js",
-      "_reservoir-0wfhnc0j-C59efNqe.js",
-      "_TransferOrBridgeLoadingScreen-DcCdHB-g-DxLDv_kV.js",
-      "_parseEther-Dc0V2TDG.js",
-      "_InjectedWalletIcon-DLcYOGDj-DZCOnUV7.js",
-      "_WalletIcon-DhKJR8EC.js",
-      "_Value-tcJV9e0L-DIexT38e.js",
-      "_LoadingSkeleton-U6-3yFwI-DYng621o.js",
-      "_Address-BjZb-TIL-CUaA-wVO.js",
-      "_check-BPM-pONt.js",
-      "_createLucideIcon-ktXaMrqE.js",
-      "_copy-CuK8iXj8.js",
-      "_GlobeAltIcon-B9KsrEBV.js"
+      "_reservoir-0wfhnc0j-B3rOEofm.js",
+      "_TransferOrBridgeLoadingScreen-DcCdHB-g-T0KQYrh-.js",
+      "_parseEther-qmIUj5dg.js",
+      "_InjectedWalletIcon-DLcYOGDj-63L6yX2u.js",
+      "_WalletIcon-CRl1ZDF4.js",
+      "_Value-tcJV9e0L-Bv6aRaog.js",
+      "_LoadingSkeleton-U6-3yFwI-D7PbqT2S.js",
+      "_Address-BjZb-TIL-Bu6eEFrD.js",
+      "_check-CaX9dEME.js",
+      "_createLucideIcon-jEE5KA3V.js",
+      "_copy-C55C3k8T.js",
+      "_GlobeAltIcon-BKo0Maa7.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/CaptchaScreen-BZy78GrD.mjs": {
-    "file": "assets/CaptchaScreen-BZy78GrD-C1kXP5Iv.js",
+    "file": "assets/CaptchaScreen-BZy78GrD-DbbFbuM9.js",
     "name": "CaptchaScreen-BZy78GrD",
     "src": "node_modules/@privy-io/react-auth/dist/esm/CaptchaScreen-BZy78GrD.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_circle-check-big-yTbqokzd.js",
-      "_circle-x-DQsN317A.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js",
-      "_createLucideIcon-ktXaMrqE.js"
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_circle-check-big-CWxLpkXO.js",
+      "_circle-x-iy2llt31.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js",
+      "_createLucideIcon-jEE5KA3V.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/CoinbaseOnrampStatusScreen-CTWZaE1o.mjs": {
-    "file": "assets/CoinbaseOnrampStatusScreen-CTWZaE1o-BpJ3hb9v.js",
+    "file": "assets/CoinbaseOnrampStatusScreen-CTWZaE1o-Bsl5Rt6B.js",
     "name": "CoinbaseOnrampStatusScreen-CTWZaE1o",
     "src": "node_modules/@privy-io/react-auth/dist/esm/CoinbaseOnrampStatusScreen-CTWZaE1o.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_ArrowsRightLeftIcon-DioepqF0.js",
-      "_CheckCircleIcon-lXFuoXR1.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Layouts-BlFm53ED-BwtVJHVg.js",
+      "_ArrowsRightLeftIcon-hyTn4ALo.js",
+      "_CheckCircleIcon-DFLJpeQM.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Layouts-BlFm53ED-Bhj8Zq_D.js",
       "_analytics-mkkvFRju-DOXuftJB.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/ConnectLedgerScreen-CIPOaq8e.mjs": {
-    "file": "assets/ConnectLedgerScreen-CIPOaq8e-DCQRf9iw.js",
+    "file": "assets/ConnectLedgerScreen-CIPOaq8e-D5DaMffx.js",
     "name": "ConnectLedgerScreen-CIPOaq8e",
     "src": "node_modules/@privy-io/react-auth/dist/esm/ConnectLedgerScreen-CIPOaq8e.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_createLucideIcon-ktXaMrqE.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js"
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_createLucideIcon-jEE5KA3V.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/ConnectOnlyLandingScreen-CbLV-cj4.mjs": {
-    "file": "assets/ConnectOnlyLandingScreen-CbLV-cj4-DWMgk28f.js",
+    "file": "assets/ConnectOnlyLandingScreen-CbLV-cj4-DZEyvxPV.js",
     "name": "ConnectOnlyLandingScreen-CbLV-cj4",
     "src": "node_modules/@privy-io/react-auth/dist/esm/ConnectOnlyLandingScreen-CbLV-cj4.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_ConnectWalletView-CDqboUej-CnaOw5eL.js",
-      "_QrCode-C1tgJtOy-BObh5Q7S.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_CopyableText-BCytXyJL-D5kvxv7y.js",
-      "_check-BPM-pONt.js",
-      "_createLucideIcon-ktXaMrqE.js",
-      "_copy-CuK8iXj8.js",
-      "_Link-DJ5gq9Di-D8ELJ6Gy.js",
-      "_EmailInputForm-Dgoii4vf-mLIatGND.js",
-      "_ErrorMessage-D8VaAP5m-CSRfkILK.js",
-      "_useI18n-BuIe8nUA-D0UUP5HE.js",
-      "_WalletCards-DH1rqayz-D2VE3o9k.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js",
+      "_ConnectWalletView-CDqboUej-DgNT6kbX.js",
+      "_QrCode-C1tgJtOy-BHlPCubm.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_CopyableText-BCytXyJL-CgqmgMih.js",
+      "_check-CaX9dEME.js",
+      "_createLucideIcon-jEE5KA3V.js",
+      "_copy-C55C3k8T.js",
+      "_Link-DJ5gq9Di-C9D1qU33.js",
+      "_EmailInputForm-Dgoii4vf-DwDfmkEh.js",
+      "_ErrorMessage-D8VaAP5m-DxjeKNSn.js",
+      "_useI18n-BuIe8nUA-eHC_et0r.js",
+      "_WalletCards-DH1rqayz-Bxtd96Dc.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js",
       "_dijkstra-COg3n3zL.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/ConnectOnlyStatusScreen-bmx1wwk1.mjs": {
-    "file": "assets/ConnectOnlyStatusScreen-bmx1wwk1-DVF-KeV7.js",
+    "file": "assets/ConnectOnlyStatusScreen-bmx1wwk1-DTZv796l.js",
     "name": "ConnectOnlyStatusScreen-bmx1wwk1",
     "src": "node_modules/@privy-io/react-auth/dist/esm/ConnectOnlyStatusScreen-bmx1wwk1.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
       "node_modules/@privy-io/react-auth/dist/esm/ConnectionStatusScreen-D-9fLZfA.mjs",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js",
-      "_Link-DJ5gq9Di-D8ELJ6Gy.js",
-      "_useI18n-BuIe8nUA-D0UUP5HE.js",
-      "_shouldProceedtoEmbeddedWalletCreationFlow-BMF_3TVv-CxjZJ0Eo.js"
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js",
+      "_Link-DJ5gq9Di-C9D1qU33.js",
+      "_useI18n-BuIe8nUA-eHC_et0r.js",
+      "_shouldProceedtoEmbeddedWalletCreationFlow-BMF_3TVv-D0wD2hz8.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/ConnectOrCreateScreen-DXw5Y8gN.mjs": {
-    "file": "assets/ConnectOrCreateScreen-DXw5Y8gN-yMSZ1SBy.js",
+    "file": "assets/ConnectOrCreateScreen-DXw5Y8gN-DGB72bG8.js",
     "name": "ConnectOrCreateScreen-DXw5Y8gN",
     "src": "node_modules/@privy-io/react-auth/dist/esm/ConnectOrCreateScreen-DXw5Y8gN.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_CustomLandingScreenView-9mrgsDhT-valSqR4_.js",
-      "_QrCode-C1tgJtOy-BObh5Q7S.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_ConnectWalletView-CDqboUej-CnaOw5eL.js",
-      "_CopyableText-BCytXyJL-D5kvxv7y.js",
-      "_check-BPM-pONt.js",
-      "_createLucideIcon-ktXaMrqE.js",
-      "_copy-CuK8iXj8.js",
-      "_Link-DJ5gq9Di-D8ELJ6Gy.js",
-      "_EmailInputForm-Dgoii4vf-mLIatGND.js",
-      "_ErrorMessage-D8VaAP5m-CSRfkILK.js",
-      "_useI18n-BuIe8nUA-D0UUP5HE.js",
-      "_WalletCards-DH1rqayz-D2VE3o9k.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js",
-      "_ConnectEmailForm-0GOHNayM-BOvjjVli.js",
-      "_Chip-D2-wZOHJ-L9zdFfDD.js",
-      "_LoadingSkeleton-U6-3yFwI-DYng621o.js",
-      "_mail-nIfCO6of.js",
-      "_farcaster-DPlSjvF5-CYwe3UgM.js",
-      "_FingerPrintIcon-CuVwCPgD.js",
-      "_ConnectPhoneForm-_lOAQG_X-DgknT_gT.js",
-      "_twitch-5IOe4sIQ-CnW-5pMB.js",
-      "_telegram-B-JqnkqZ-CW8o8xNW.js",
-      "_WalletOverflowButton-BlijhJnI-DYJS2CDH.js",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
+      "_CustomLandingScreenView-9mrgsDhT-DFn58tOE.js",
+      "_QrCode-C1tgJtOy-BHlPCubm.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_ConnectWalletView-CDqboUej-DgNT6kbX.js",
+      "_CopyableText-BCytXyJL-CgqmgMih.js",
+      "_check-CaX9dEME.js",
+      "_createLucideIcon-jEE5KA3V.js",
+      "_copy-C55C3k8T.js",
+      "_Link-DJ5gq9Di-C9D1qU33.js",
+      "_EmailInputForm-Dgoii4vf-DwDfmkEh.js",
+      "_ErrorMessage-D8VaAP5m-DxjeKNSn.js",
+      "_useI18n-BuIe8nUA-eHC_et0r.js",
+      "_WalletCards-DH1rqayz-Bxtd96Dc.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js",
+      "_ConnectEmailForm-0GOHNayM-C9Cs0x9p.js",
+      "_Chip-D2-wZOHJ-DhVq9pPJ.js",
+      "_LoadingSkeleton-U6-3yFwI-D7PbqT2S.js",
+      "_mail-DDd2ItFs.js",
+      "_farcaster-DPlSjvF5-DocJwf1j.js",
+      "_FingerPrintIcon-DPcrAL97.js",
+      "_ConnectPhoneForm-_lOAQG_X-D-dzvEw-.js",
+      "_twitch-5IOe4sIQ-GwS3Bt1u.js",
+      "_telegram-B-JqnkqZ-31fKsVX2.js",
+      "_WalletOverflowButton-BlijhJnI-1ZGZ-9pj.js",
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
       "_dijkstra-COg3n3zL.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/ConnectionStatusScreen-D-9fLZfA.mjs": {
-    "file": "assets/ConnectionStatusScreen-D-9fLZfA-Boien4yj.js",
+    "file": "assets/ConnectionStatusScreen-D-9fLZfA-BtAhLoop.js",
     "name": "ConnectionStatusScreen-D-9fLZfA",
     "src": "node_modules/@privy-io/react-auth/dist/esm/ConnectionStatusScreen-D-9fLZfA.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_Link-DJ5gq9Di-D8ELJ6Gy.js",
-      "_useI18n-BuIe8nUA-D0UUP5HE.js",
-      "_shouldProceedtoEmbeddedWalletCreationFlow-BMF_3TVv-CxjZJ0Eo.js",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js"
+      "_Link-DJ5gq9Di-C9D1qU33.js",
+      "_useI18n-BuIe8nUA-eHC_et0r.js",
+      "_shouldProceedtoEmbeddedWalletCreationFlow-BMF_3TVv-D0wD2hz8.js",
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/CrossAppAuthScreen-Co723kT3.mjs": {
-    "file": "assets/CrossAppAuthScreen-Co723kT3-CQ1-_pDC.js",
+    "file": "assets/CrossAppAuthScreen-Co723kT3-CoQ8c0pF.js",
     "name": "CrossAppAuthScreen-Co723kT3",
     "src": "node_modules/@privy-io/react-auth/dist/esm/CrossAppAuthScreen-Co723kT3.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_shouldProceedtoEmbeddedWalletCreationFlow-BMF_3TVv-CxjZJ0Eo.js",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js"
+      "_shouldProceedtoEmbeddedWalletCreationFlow-BMF_3TVv-D0wD2hz8.js",
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/DelegatedActionsConsentScreen-CyQTJHgT.mjs": {
-    "file": "assets/DelegatedActionsConsentScreen-CyQTJHgT-DqzqOSUW.js",
+    "file": "assets/DelegatedActionsConsentScreen-CyQTJHgT-BIiAUQrV.js",
     "name": "DelegatedActionsConsentScreen-CyQTJHgT",
     "src": "node_modules/@privy-io/react-auth/dist/esm/DelegatedActionsConsentScreen-CyQTJHgT.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_WalletInfoCard-DFt8ndGE-DxaLKWXn.js",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_circle-alert-BYcjPmUD.js",
-      "_circle-check-big-yTbqokzd.js",
-      "_createLucideIcon-ktXaMrqE.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_ErrorMessage-D8VaAP5m-CSRfkILK.js",
-      "_LabelXs-oqZNqbm_-0c6bD-2B.js",
-      "_Address-BjZb-TIL-CUaA-wVO.js",
-      "_check-BPM-pONt.js",
-      "_copy-CuK8iXj8.js",
-      "_shared-FM0rljBt-Bvcdp-Bb.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js"
+      "_WalletInfoCard-DFt8ndGE-C_4uCkcb.js",
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_circle-alert-CYruN8Zv.js",
+      "_circle-check-big-CWxLpkXO.js",
+      "_createLucideIcon-jEE5KA3V.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_ErrorMessage-D8VaAP5m-DxjeKNSn.js",
+      "_LabelXs-oqZNqbm_-SwMnd8QF.js",
+      "_Address-BjZb-TIL-Bu6eEFrD.js",
+      "_check-CaX9dEME.js",
+      "_copy-C55C3k8T.js",
+      "_shared-FM0rljBt-B7vv_loM.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/DelegatedActionsRevokeScreen-CFm4F3CM.mjs": {
-    "file": "assets/DelegatedActionsRevokeScreen-CFm4F3CM-hVliiQ-t.js",
+    "file": "assets/DelegatedActionsRevokeScreen-CFm4F3CM-C7Mwryf1.js",
     "name": "DelegatedActionsRevokeScreen-CFm4F3CM",
     "src": "node_modules/@privy-io/react-auth/dist/esm/DelegatedActionsRevokeScreen-CFm4F3CM.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_circle-alert-BYcjPmUD.js",
-      "_circle-check-big-yTbqokzd.js",
-      "_createLucideIcon-ktXaMrqE.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js"
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_circle-alert-CYruN8Zv.js",
+      "_circle-check-big-CWxLpkXO.js",
+      "_createLucideIcon-jEE5KA3V.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/EmbeddedWalletConnectingScreen-DmTtzGwq.mjs": {
-    "file": "assets/EmbeddedWalletConnectingScreen-DmTtzGwq-MU-g8FAF.js",
+    "file": "assets/EmbeddedWalletConnectingScreen-DmTtzGwq-CYFCPlfD.js",
     "name": "EmbeddedWalletConnectingScreen-DmTtzGwq",
     "src": "node_modules/@privy-io/react-auth/dist/esm/EmbeddedWalletConnectingScreen-DmTtzGwq.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_circle-x-DQsN317A.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js",
-      "_createLucideIcon-ktXaMrqE.js"
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_circle-x-iy2llt31.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js",
+      "_createLucideIcon-jEE5KA3V.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/EmbeddedWalletCreatedScreen-Cj1c5KyP.mjs": {
-    "file": "assets/EmbeddedWalletCreatedScreen-Cj1c5KyP-STaFybx3.js",
+    "file": "assets/EmbeddedWalletCreatedScreen-Cj1c5KyP-Dd7hjLlt.js",
     "name": "EmbeddedWalletCreatedScreen-Cj1c5KyP",
     "src": "node_modules/@privy-io/react-auth/dist/esm/EmbeddedWalletCreatedScreen-Cj1c5KyP.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_circle-check-big-yTbqokzd.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js",
-      "_createLucideIcon-ktXaMrqE.js"
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_circle-check-big-CWxLpkXO.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js",
+      "_createLucideIcon-jEE5KA3V.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/EmbeddedWalletKeyExportScreen-CsWRTEgd.mjs": {
-    "file": "assets/EmbeddedWalletKeyExportScreen-CsWRTEgd-CwYGyeZ6.js",
+    "file": "assets/EmbeddedWalletKeyExportScreen-CsWRTEgd-D-bwHPNI.js",
     "name": "EmbeddedWalletKeyExportScreen-CsWRTEgd",
     "src": "node_modules/@privy-io/react-auth/dist/esm/EmbeddedWalletKeyExportScreen-CsWRTEgd.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_WarningBanner-c8L53pJ2-D_EmmYOl.js",
-      "_WalletInfoCard-DFt8ndGE-DxaLKWXn.js",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_ExclamationTriangleIcon-DFwA0b-j.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_ErrorMessage-D8VaAP5m-CSRfkILK.js",
-      "_LabelXs-oqZNqbm_-0c6bD-2B.js",
-      "_Address-BjZb-TIL-CUaA-wVO.js",
-      "_check-BPM-pONt.js",
-      "_createLucideIcon-ktXaMrqE.js",
-      "_copy-CuK8iXj8.js",
-      "_shared-FM0rljBt-Bvcdp-Bb.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js"
+      "_WarningBanner-c8L53pJ2-CEBXyz_y.js",
+      "_WalletInfoCard-DFt8ndGE-C_4uCkcb.js",
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_ExclamationTriangleIcon-BWrXnrlz.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_ErrorMessage-D8VaAP5m-DxjeKNSn.js",
+      "_LabelXs-oqZNqbm_-SwMnd8QF.js",
+      "_Address-BjZb-TIL-Bu6eEFrD.js",
+      "_check-CaX9dEME.js",
+      "_createLucideIcon-jEE5KA3V.js",
+      "_copy-C55C3k8T.js",
+      "_shared-FM0rljBt-B7vv_loM.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/EmbeddedWalletOnAccountCreateScreen-DBAmWm90.mjs": {
-    "file": "assets/EmbeddedWalletOnAccountCreateScreen-DBAmWm90-C77p63q2.js",
+    "file": "assets/EmbeddedWalletOnAccountCreateScreen-DBAmWm90-DOUCxwQP.js",
     "name": "EmbeddedWalletOnAccountCreateScreen-DBAmWm90",
     "src": "node_modules/@privy-io/react-auth/dist/esm/EmbeddedWalletOnAccountCreateScreen-DBAmWm90.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_circle-x-DQsN317A.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js",
-      "_createLucideIcon-ktXaMrqE.js"
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_circle-x-iy2llt31.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js",
+      "_createLucideIcon-jEE5KA3V.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/EmbeddedWalletPasswordUpdateScreen-B5w6wtgf.mjs": {
-    "file": "assets/EmbeddedWalletPasswordUpdateScreen-B5w6wtgf-CK81XIOy.js",
+    "file": "assets/EmbeddedWalletPasswordUpdateScreen-B5w6wtgf-BH4wUVTp.js",
     "name": "EmbeddedWalletPasswordUpdateScreen-B5w6wtgf",
     "src": "node_modules/@privy-io/react-auth/dist/esm/EmbeddedWalletPasswordUpdateScreen-B5w6wtgf.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_SetWalletPasswordForm-0nuoz3XZ-CNvGgGJe.js",
-      "_ExclamationTriangleIcon-DFwA0b-j.js",
-      "_Layouts-BlFm53ED-BwtVJHVg.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_shared-CwuyxHmv-DoMzGFq1.js",
-      "_Checkbox-BhNoOKjX-BjgJNC5a.js",
-      "_CheckCircleIcon-lXFuoXR1.js",
-      "_ScreenHeader-CHmc4-Lu-BkT2ykls.js"
+      "_SetWalletPasswordForm-0nuoz3XZ-CtikKiJ7.js",
+      "_ExclamationTriangleIcon-BWrXnrlz.js",
+      "_Layouts-BlFm53ED-Bhj8Zq_D.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_shared-CwuyxHmv-BVYTqArg.js",
+      "_Checkbox-BhNoOKjX-YK9XAkD3.js",
+      "_CheckCircleIcon-DFLJpeQM.js",
+      "_ScreenHeader-CHmc4-Lu-CzyJ3Pii.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/EmbeddedWalletPasswordUpdateSplashScreen-BvsscceO.mjs": {
-    "file": "assets/EmbeddedWalletPasswordUpdateSplashScreen-BvsscceO-CCZplPD7.js",
+    "file": "assets/EmbeddedWalletPasswordUpdateSplashScreen-BvsscceO-y-RFYFZq.js",
     "name": "EmbeddedWalletPasswordUpdateSplashScreen-BvsscceO",
     "src": "node_modules/@privy-io/react-auth/dist/esm/EmbeddedWalletPasswordUpdateSplashScreen-BvsscceO.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_lock-CIdO-Gq_.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js",
-      "_createLucideIcon-ktXaMrqE.js"
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_lock-BKQedAQh.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js",
+      "_createLucideIcon-jEE5KA3V.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/ErrorScreen-DtGc3Chy.mjs": {
-    "file": "assets/ErrorScreen-DtGc3Chy-CqKShu6T.js",
+    "file": "assets/ErrorScreen-DtGc3Chy-BH8iMUah.js",
     "name": "ErrorScreen-DtGc3Chy",
     "src": "node_modules/@privy-io/react-auth/dist/esm/ErrorScreen-DtGc3Chy.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_reservoir-0wfhnc0j-C59efNqe.js",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_createLucideIcon-ktXaMrqE.js",
-      "_lock-CIdO-Gq_.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js"
+      "_reservoir-0wfhnc0j-B3rOEofm.js",
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_createLucideIcon-jEE5KA3V.js",
+      "_lock-BKQedAQh.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/FarcasterConnectStatusScreen-DGeCyr6b.mjs": {
-    "file": "assets/FarcasterConnectStatusScreen-DGeCyr6b-BCZtC1z1.js",
+    "file": "assets/FarcasterConnectStatusScreen-DGeCyr6b-BTY3-XK8.js",
     "name": "FarcasterConnectStatusScreen-DGeCyr6b",
     "src": "node_modules/@privy-io/react-auth/dist/esm/FarcasterConnectStatusScreen-DGeCyr6b.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_OpenLink-DZHy38vr-BTfSVpFu.js",
-      "_QrCode-C1tgJtOy-BObh5Q7S.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_LabelXs-oqZNqbm_-0c6bD-2B.js",
-      "_shouldProceedtoEmbeddedWalletCreationFlow-BMF_3TVv-CxjZJ0Eo.js",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_farcaster-DPlSjvF5-CYwe3UgM.js",
-      "_check-BPM-pONt.js",
-      "_copy-CuK8iXj8.js",
+      "_OpenLink-DZHy38vr-BDkFdR9-.js",
+      "_QrCode-C1tgJtOy-BHlPCubm.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_LabelXs-oqZNqbm_-SwMnd8QF.js",
+      "_shouldProceedtoEmbeddedWalletCreationFlow-BMF_3TVv-D0wD2hz8.js",
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_farcaster-DPlSjvF5-DocJwf1j.js",
+      "_check-CaX9dEME.js",
+      "_copy-C55C3k8T.js",
       "_dijkstra-COg3n3zL.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js",
-      "_createLucideIcon-ktXaMrqE.js"
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js",
+      "_createLucideIcon-jEE5KA3V.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/FarcasterSignerStatusScreen-DASa1xq2.mjs": {
-    "file": "assets/FarcasterSignerStatusScreen-DASa1xq2-DVEpRB8r.js",
+    "file": "assets/FarcasterSignerStatusScreen-DASa1xq2-DsT8v2Cc.js",
     "name": "FarcasterSignerStatusScreen-DASa1xq2",
     "src": "node_modules/@privy-io/react-auth/dist/esm/FarcasterSignerStatusScreen-DASa1xq2.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_CopyToClipboard-DSTf_eKU-CYoE8YVP.js",
-      "_OpenLink-DZHy38vr-BTfSVpFu.js",
-      "_QrCode-C1tgJtOy-BObh5Q7S.js",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_farcaster-DPlSjvF5-CYwe3UgM.js",
+      "_CopyToClipboard-DSTf_eKU-Dk-0tgfq.js",
+      "_OpenLink-DZHy38vr-BDkFdR9-.js",
+      "_QrCode-C1tgJtOy-BHlPCubm.js",
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_farcaster-DPlSjvF5-DocJwf1j.js",
       "_dijkstra-COg3n3zL.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js"
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/FundSolWalletWithExternalSolanaWallet-0jNi_hvn.mjs": {
-    "file": "assets/FundSolWalletWithExternalSolanaWallet-0jNi_hvn-BZSMlcGz.js",
+    "file": "assets/FundSolWalletWithExternalSolanaWallet-0jNi_hvn-Cd58-HnT.js",
     "name": "FundSolWalletWithExternalSolanaWallet-0jNi_hvn",
     "src": "node_modules/@privy-io/react-auth/dist/esm/FundSolWalletWithExternalSolanaWallet-0jNi_hvn.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_CheckCircleIcon-B_3MoKfc.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Layouts-BlFm53ED-BwtVJHVg.js",
-      "_ScreenHeader-CHmc4-Lu-BkT2ykls.js",
-      "_FundWalletMethodHeader-Cfci4-83-CbGxLmI6.js",
-      "_InjectedWalletIcon-DLcYOGDj-DZCOnUV7.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js",
-      "_Value-tcJV9e0L-DIexT38e.js",
-      "_useSolanaRpcClient-BUWOblv_-CLd9M6wp.js",
-      "_useGetTokenPrice-BPBpM07F-C3qFUVrQ.js",
+      "_CheckCircleIcon-BBRajA6y.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Layouts-BlFm53ED-Bhj8Zq_D.js",
+      "_ScreenHeader-CHmc4-Lu-CzyJ3Pii.js",
+      "_FundWalletMethodHeader-Cfci4-83-DvDfYdnZ.js",
+      "_InjectedWalletIcon-DLcYOGDj-63L6yX2u.js",
+      "_index-Dq_xe9dz-B5CfSfel.js",
+      "_Value-tcJV9e0L-Bv6aRaog.js",
+      "_useSolanaRpcClient-BUWOblv_-C6PDqOrO.js",
+      "_useGetTokenPrice-BPBpM07F-DKJUK4gu.js",
       "_analytics-mkkvFRju-DOXuftJB.js",
       "_getFormattedUsdFromLamports-B6EqSEho-C-HCdwKa.js",
       "_getUsdcMintAddress-DFI1hv05-jlhpBW9a.js",
       "_getChainName-DjpPdUSc-c2urPd0g.js",
-      "_formatters-CDGePEdL.js",
-      "_WalletIcon-DhKJR8EC.js",
-      "_LoadingSkeleton-U6-3yFwI-DYng621o.js",
-      "_useGetSolPrice-DwwjjGbd-Ctq-9OZk.js"
+      "_formatters-DlHjBI8i.js",
+      "_WalletIcon-CRl1ZDF4.js",
+      "_LoadingSkeleton-U6-3yFwI-D7PbqT2S.js",
+      "_useGetSolPrice-DwwjjGbd-CDf7Olwr.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/FundWithBankDepositScreen-D_uu3GEF.mjs": {
-    "file": "assets/FundWithBankDepositScreen-D_uu3GEF-VW8bXX_c.js",
+    "file": "assets/FundWithBankDepositScreen-D_uu3GEF-Dbu8wO42.js",
     "name": "FundWithBankDepositScreen-D_uu3GEF",
     "src": "node_modules/@privy-io/react-auth/dist/esm/FundWithBankDepositScreen-D_uu3GEF.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_CopyableText-BCytXyJL-D5kvxv7y.js",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_InfoBanner-DkQEPd77-BDvfQHJm.js",
-      "_createLucideIcon-ktXaMrqE.js",
-      "_check-BPM-pONt.js",
-      "_circle-x-DQsN317A.js",
-      "_copy-CuK8iXj8.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js"
+      "_CopyableText-BCytXyJL-CgqmgMih.js",
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_InfoBanner-DkQEPd77-DWW60X7W.js",
+      "_createLucideIcon-jEE5KA3V.js",
+      "_check-CaX9dEME.js",
+      "_circle-x-iy2llt31.js",
+      "_copy-C55C3k8T.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/FundingEditAmountScreen-vQUS-a80.mjs": {
-    "file": "assets/FundingEditAmountScreen-vQUS-a80-CUqeqMCf.js",
+    "file": "assets/FundingEditAmountScreen-vQUS-a80-DCmgyiVy.js",
     "name": "FundingEditAmountScreen-vQUS-a80",
     "src": "node_modules/@privy-io/react-auth/dist/esm/FundingEditAmountScreen-vQUS-a80.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Layouts-BlFm53ED-BwtVJHVg.js",
-      "_FundWalletMethodHeader-Cfci4-83-CbGxLmI6.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js",
-      "_Title-BnzYV3Is-BUerzvzw.js",
-      "_useGetTokenPrice-BPBpM07F-C3qFUVrQ.js",
-      "_ethers-D1WT71Ay-DvAUZlyq.js",
-      "_styles-BmZHuqSX-Bx5Gn5ub.js",
-      "_useGetSolPrice-DwwjjGbd-Ctq-9OZk.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Layouts-BlFm53ED-Bhj8Zq_D.js",
+      "_FundWalletMethodHeader-Cfci4-83-DvDfYdnZ.js",
+      "_index-Dq_xe9dz-B5CfSfel.js",
+      "_Title-BnzYV3Is-C_zr4qem.js",
+      "_useGetTokenPrice-BPBpM07F-DKJUK4gu.js",
+      "_ethers-D1WT71Ay-BQ6rOR95.js",
+      "_styles-BmZHuqSX-BkKUMJkf.js",
+      "_useGetSolPrice-DwwjjGbd-CDf7Olwr.js",
       "node_modules/@privy-io/react-auth/dist/esm/LinkPasskeyScreen-OxaghvUl.mjs",
-      "_TodoList-CgrU7uwu-CGNNQgI4.js",
-      "_createLucideIcon-ktXaMrqE.js",
-      "_check-BPM-pONt.js",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_circle-check-big-yTbqokzd.js",
-      "_fingerprint-pattern-CvOwd3bn.js"
+      "_TodoList-CgrU7uwu-TIRppYgz.js",
+      "_createLucideIcon-jEE5KA3V.js",
+      "_check-CaX9dEME.js",
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_circle-check-big-CWxLpkXO.js",
+      "_fingerprint-pattern-C85qQdNT.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/FundingMethodSelectionScreen-G8gkM1Mk.mjs": {
-    "file": "assets/FundingMethodSelectionScreen-G8gkM1Mk-D22yft9-.js",
+    "file": "assets/FundingMethodSelectionScreen-G8gkM1Mk-DCygiWDw.js",
     "name": "FundingMethodSelectionScreen-G8gkM1Mk",
     "src": "node_modules/@privy-io/react-auth/dist/esm/FundingMethodSelectionScreen-G8gkM1Mk.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_ArrowsRightLeftIcon-DioepqF0.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_FundWalletMethodHeader-Cfci4-83-CbGxLmI6.js",
-      "_ErrorBanner-CQERa7bL-Bwazymug.js",
-      "_InfoBanner-DkQEPd77-BDvfQHJm.js",
-      "_WalletCards-DH1rqayz-D2VE3o9k.js",
-      "_getErc20TokenInfo-1Q6w1Ibq-DWFx5NS3.js",
-      "_index-C9k7EfLZ-ClZe91rr.js",
-      "_styles-BmZHuqSX-Bx5Gn5ub.js",
-      "_ExclamationCircleIcon-CaK6qkTO.js",
+      "_ArrowsRightLeftIcon-hyTn4ALo.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_FundWalletMethodHeader-Cfci4-83-DvDfYdnZ.js",
+      "_ErrorBanner-CQERa7bL-DQIoernF.js",
+      "_InfoBanner-DkQEPd77-DWW60X7W.js",
+      "_WalletCards-DH1rqayz-Bxtd96Dc.js",
+      "_getErc20TokenInfo-1Q6w1Ibq-B42WymIc.js",
+      "_index-C9k7EfLZ-CLrSANb2.js",
+      "_styles-BmZHuqSX-BkKUMJkf.js",
+      "_ExclamationCircleIcon-Nk2pSHN5.js",
       "_analytics-mkkvFRju-DOXuftJB.js",
       "node_modules/@privy-io/react-auth/dist/esm/LinkPasskeyScreen-OxaghvUl.mjs",
-      "_TodoList-CgrU7uwu-CGNNQgI4.js",
-      "_createLucideIcon-ktXaMrqE.js",
-      "_check-BPM-pONt.js",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js",
-      "_circle-check-big-yTbqokzd.js",
-      "_fingerprint-pattern-CvOwd3bn.js"
+      "_TodoList-CgrU7uwu-TIRppYgz.js",
+      "_createLucideIcon-jEE5KA3V.js",
+      "_check-CaX9dEME.js",
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js",
+      "_circle-check-big-CWxLpkXO.js",
+      "_fingerprint-pattern-C85qQdNT.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/HCaptchaWrapper-CUi9LJsp.mjs": {
-    "file": "assets/HCaptchaWrapper-CUi9LJsp-NCxfvHcA.js",
+    "file": "assets/HCaptchaWrapper-CUi9LJsp-CL_Sv28f.js",
     "name": "HCaptchaWrapper-CUi9LJsp",
     "src": "node_modules/@privy-io/react-auth/dist/esm/HCaptchaWrapper-CUi9LJsp.mjs",
     "isDynamicEntry": true,
@@ -2120,573 +2120,573 @@
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/InAppBrowserLoginNotPossible-C8mlSbYe.mjs": {
-    "file": "assets/InAppBrowserLoginNotPossible-C8mlSbYe-D5n3PSpI.js",
+    "file": "assets/InAppBrowserLoginNotPossible-C8mlSbYe-D20y6Pq_.js",
     "name": "InAppBrowserLoginNotPossible-C8mlSbYe",
     "src": "node_modules/@privy-io/react-auth/dist/esm/InAppBrowserLoginNotPossible-C8mlSbYe.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_external-link-DEEJhTmI.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js",
-      "_createLucideIcon-ktXaMrqE.js"
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_external-link-CU2b9M4s.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js",
+      "_createLucideIcon-jEE5KA3V.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/InstallWalletScreen-D0kdHc5W.mjs": {
-    "file": "assets/InstallWalletScreen-D0kdHc5W-Ah7OuboN.js",
+    "file": "assets/InstallWalletScreen-D0kdHc5W-DMrcvkML.js",
     "name": "InstallWalletScreen-D0kdHc5W",
     "src": "node_modules/@privy-io/react-auth/dist/esm/InstallWalletScreen-D0kdHc5W.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_Link-DJ5gq9Di-D8ELJ6Gy.js",
-      "_TodoList-CgrU7uwu-CGNNQgI4.js",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_createLucideIcon-ktXaMrqE.js",
-      "_check-BPM-pONt.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js"
+      "_Link-DJ5gq9Di-C9D1qU33.js",
+      "_TodoList-CgrU7uwu-TIRppYgz.js",
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_createLucideIcon-jEE5KA3V.js",
+      "_check-CaX9dEME.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/LandingScreen-0MlIkV3C.mjs": {
-    "file": "assets/LandingScreen-0MlIkV3C-DhGLW-YC.js",
+    "file": "assets/LandingScreen-0MlIkV3C-DuiSWU78.js",
     "name": "LandingScreen-0MlIkV3C",
     "src": "node_modules/@privy-io/react-auth/dist/esm/LandingScreen-0MlIkV3C.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_CustomLandingScreenView-9mrgsDhT-valSqR4_.js",
-      "_QrCode-C1tgJtOy-BObh5Q7S.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_ConnectWalletView-CDqboUej-CnaOw5eL.js",
-      "_CopyableText-BCytXyJL-D5kvxv7y.js",
-      "_check-BPM-pONt.js",
-      "_createLucideIcon-ktXaMrqE.js",
-      "_copy-CuK8iXj8.js",
-      "_Link-DJ5gq9Di-D8ELJ6Gy.js",
-      "_EmailInputForm-Dgoii4vf-mLIatGND.js",
-      "_ErrorMessage-D8VaAP5m-CSRfkILK.js",
-      "_useI18n-BuIe8nUA-D0UUP5HE.js",
-      "_WalletCards-DH1rqayz-D2VE3o9k.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js",
-      "_ConnectEmailForm-0GOHNayM-BOvjjVli.js",
-      "_Chip-D2-wZOHJ-L9zdFfDD.js",
-      "_LoadingSkeleton-U6-3yFwI-DYng621o.js",
-      "_mail-nIfCO6of.js",
-      "_farcaster-DPlSjvF5-CYwe3UgM.js",
-      "_FingerPrintIcon-CuVwCPgD.js",
-      "_ConnectPhoneForm-_lOAQG_X-DgknT_gT.js",
-      "_twitch-5IOe4sIQ-CnW-5pMB.js",
-      "_telegram-B-JqnkqZ-CW8o8xNW.js",
-      "_WalletOverflowButton-BlijhJnI-DYJS2CDH.js",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
+      "_CustomLandingScreenView-9mrgsDhT-DFn58tOE.js",
+      "_QrCode-C1tgJtOy-BHlPCubm.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_ConnectWalletView-CDqboUej-DgNT6kbX.js",
+      "_CopyableText-BCytXyJL-CgqmgMih.js",
+      "_check-CaX9dEME.js",
+      "_createLucideIcon-jEE5KA3V.js",
+      "_copy-C55C3k8T.js",
+      "_Link-DJ5gq9Di-C9D1qU33.js",
+      "_EmailInputForm-Dgoii4vf-DwDfmkEh.js",
+      "_ErrorMessage-D8VaAP5m-DxjeKNSn.js",
+      "_useI18n-BuIe8nUA-eHC_et0r.js",
+      "_WalletCards-DH1rqayz-Bxtd96Dc.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js",
+      "_ConnectEmailForm-0GOHNayM-C9Cs0x9p.js",
+      "_Chip-D2-wZOHJ-DhVq9pPJ.js",
+      "_LoadingSkeleton-U6-3yFwI-D7PbqT2S.js",
+      "_mail-DDd2ItFs.js",
+      "_farcaster-DPlSjvF5-DocJwf1j.js",
+      "_FingerPrintIcon-DPcrAL97.js",
+      "_ConnectPhoneForm-_lOAQG_X-D-dzvEw-.js",
+      "_twitch-5IOe4sIQ-GwS3Bt1u.js",
+      "_telegram-B-JqnkqZ-31fKsVX2.js",
+      "_WalletOverflowButton-BlijhJnI-1ZGZ-9pj.js",
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
       "_dijkstra-COg3n3zL.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/LinkConflictScreen-DW31R5fr.mjs": {
-    "file": "assets/LinkConflictScreen-DW31R5fr-DQnOaEoZ.js",
+    "file": "assets/LinkConflictScreen-DW31R5fr-0DZnuZ7r.js",
     "name": "LinkConflictScreen-DW31R5fr",
     "src": "node_modules/@privy-io/react-auth/dist/esm/LinkConflictScreen-DW31R5fr.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_ExclamationTriangleIcon-DFwA0b-j.js",
-      "_WalletIcon-DhKJR8EC.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_StackedContainer-B2vaEl56-DHQhH6ri.js",
-      "_Address-BjZb-TIL-CUaA-wVO.js",
+      "_ExclamationTriangleIcon-BWrXnrlz.js",
+      "_WalletIcon-CRl1ZDF4.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_StackedContainer-B2vaEl56-DL9iqRHD.js",
+      "_Address-BjZb-TIL-Bu6eEFrD.js",
       "_capitalizeFirstLetter-DmLYqXsO-tV1Idewc.js",
-      "_ExclamationCircleIcon-CaK6qkTO.js",
-      "_check-BPM-pONt.js",
-      "_createLucideIcon-ktXaMrqE.js",
-      "_copy-CuK8iXj8.js"
+      "_ExclamationCircleIcon-Nk2pSHN5.js",
+      "_check-CaX9dEME.js",
+      "_createLucideIcon-jEE5KA3V.js",
+      "_copy-C55C3k8T.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/LinkEmailScreen-B10iXGH8.mjs": {
-    "file": "assets/LinkEmailScreen-B10iXGH8-CZHv1Sv-.js",
+    "file": "assets/LinkEmailScreen-B10iXGH8-ClBfWqxg.js",
     "name": "LinkEmailScreen-B10iXGH8",
     "src": "node_modules/@privy-io/react-auth/dist/esm/LinkEmailScreen-B10iXGH8.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_EnvelopeIcon-BGPqYNN7.js",
-      "_ConnectEmailForm-0GOHNayM-BOvjjVli.js",
-      "_Layouts-BlFm53ED-BwtVJHVg.js",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Chip-D2-wZOHJ-L9zdFfDD.js",
-      "_LoadingSkeleton-U6-3yFwI-DYng621o.js",
-      "_EmailInputForm-Dgoii4vf-mLIatGND.js",
-      "_ErrorMessage-D8VaAP5m-CSRfkILK.js",
-      "_mail-nIfCO6of.js",
-      "_createLucideIcon-ktXaMrqE.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js"
+      "_EnvelopeIcon-tl2SWtvR.js",
+      "_ConnectEmailForm-0GOHNayM-C9Cs0x9p.js",
+      "_Layouts-BlFm53ED-Bhj8Zq_D.js",
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Chip-D2-wZOHJ-DhVq9pPJ.js",
+      "_LoadingSkeleton-U6-3yFwI-D7PbqT2S.js",
+      "_EmailInputForm-Dgoii4vf-DwDfmkEh.js",
+      "_ErrorMessage-D8VaAP5m-DxjeKNSn.js",
+      "_mail-DDd2ItFs.js",
+      "_createLucideIcon-jEE5KA3V.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/LinkPasskeyScreen-OxaghvUl.mjs": {
-    "file": "assets/LinkPasskeyScreen-OxaghvUl-Bo58ef81.js",
+    "file": "assets/LinkPasskeyScreen-OxaghvUl-GGgKE4Ge.js",
     "name": "LinkPasskeyScreen-OxaghvUl",
     "src": "node_modules/@privy-io/react-auth/dist/esm/LinkPasskeyScreen-OxaghvUl.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_TodoList-CgrU7uwu-CGNNQgI4.js",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_circle-check-big-yTbqokzd.js",
-      "_fingerprint-pattern-CvOwd3bn.js",
-      "_createLucideIcon-ktXaMrqE.js",
-      "_check-BPM-pONt.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js"
+      "_TodoList-CgrU7uwu-TIRppYgz.js",
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_circle-check-big-CWxLpkXO.js",
+      "_fingerprint-pattern-C85qQdNT.js",
+      "_createLucideIcon-jEE5KA3V.js",
+      "_check-CaX9dEME.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/LinkPhoneScreen-Cdg3eg7w.mjs": {
-    "file": "assets/LinkPhoneScreen-Cdg3eg7w-CYuMyTxS.js",
+    "file": "assets/LinkPhoneScreen-Cdg3eg7w-8hvXoOWZ.js",
     "name": "LinkPhoneScreen-Cdg3eg7w",
     "src": "node_modules/@privy-io/react-auth/dist/esm/LinkPhoneScreen-Cdg3eg7w.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_PhoneIcon-Buw36cAf.js",
-      "_ConnectPhoneForm-_lOAQG_X-DgknT_gT.js",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Chip-D2-wZOHJ-L9zdFfDD.js",
-      "_LoadingSkeleton-U6-3yFwI-DYng621o.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js"
+      "_PhoneIcon-CelU8-e8.js",
+      "_ConnectPhoneForm-_lOAQG_X-D-dzvEw-.js",
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Chip-D2-wZOHJ-DhVq9pPJ.js",
+      "_LoadingSkeleton-U6-3yFwI-D7PbqT2S.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/LoginFailedScreen-BVOo2ycm.mjs": {
-    "file": "assets/LoginFailedScreen-BVOo2ycm-DK1wU8Rk.js",
+    "file": "assets/LoginFailedScreen-BVOo2ycm-C8qHzJlI.js",
     "name": "LoginFailedScreen-BVOo2ycm",
     "src": "node_modules/@privy-io/react-auth/dist/esm/LoginFailedScreen-BVOo2ycm.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_circle-x-DQsN317A.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js",
-      "_createLucideIcon-ktXaMrqE.js"
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_circle-x-iy2llt31.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js",
+      "_createLucideIcon-jEE5KA3V.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/ManualTransferScreen-_04Sq7zU.mjs": {
-    "file": "assets/ManualTransferScreen-_04Sq7zU-DYMimBsp.js",
+    "file": "assets/ManualTransferScreen-_04Sq7zU-q9Myzuvj.js",
     "name": "ManualTransferScreen-_04Sq7zU",
     "src": "node_modules/@privy-io/react-auth/dist/esm/ManualTransferScreen-_04Sq7zU.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Layouts-BlFm53ED-BwtVJHVg.js",
-      "_QrCode-C1tgJtOy-BObh5Q7S.js",
-      "_FundWalletMethodHeader-Cfci4-83-CbGxLmI6.js",
-      "_InfoBanner-DkQEPd77-BDvfQHJm.js",
-      "_Subtitle-CV-2yKE4-3n7wOBX9.js",
-      "_Title-BnzYV3Is-BUerzvzw.js",
-      "_WalletInfoCard-DFt8ndGE-DxaLKWXn.js",
-      "_useWalletBalance-CDyi5_iR-ChTO2z3z.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Layouts-BlFm53ED-Bhj8Zq_D.js",
+      "_QrCode-C1tgJtOy-BHlPCubm.js",
+      "_FundWalletMethodHeader-Cfci4-83-DvDfYdnZ.js",
+      "_InfoBanner-DkQEPd77-DWW60X7W.js",
+      "_Subtitle-CV-2yKE4-KF2mgmQn.js",
+      "_Title-BnzYV3Is-C_zr4qem.js",
+      "_WalletInfoCard-DFt8ndGE-C_4uCkcb.js",
+      "_useWalletBalance-CDyi5_iR-BpXPv2eK.js",
       "_analytics-mkkvFRju-DOXuftJB.js",
       "_getChainName-DjpPdUSc-c2urPd0g.js",
       "_getUsdcMintAddress-DFI1hv05-jlhpBW9a.js",
       "_transaction-CnfuREWo-nROljJQP.js",
-      "_getErc20Balance-DA4dGV9O-2vZGKVIn.js",
-      "_formatters-CDGePEdL.js",
+      "_getErc20Balance-DA4dGV9O-DhN8eKTM.js",
+      "_formatters-DlHjBI8i.js",
       "_dijkstra-COg3n3zL.js",
-      "_ErrorMessage-D8VaAP5m-CSRfkILK.js",
-      "_LabelXs-oqZNqbm_-0c6bD-2B.js",
-      "_Address-BjZb-TIL-CUaA-wVO.js",
-      "_check-BPM-pONt.js",
-      "_createLucideIcon-ktXaMrqE.js",
-      "_copy-CuK8iXj8.js",
-      "_shared-FM0rljBt-Bvcdp-Bb.js",
+      "_ErrorMessage-D8VaAP5m-DxjeKNSn.js",
+      "_LabelXs-oqZNqbm_-SwMnd8QF.js",
+      "_Address-BjZb-TIL-Bu6eEFrD.js",
+      "_check-CaX9dEME.js",
+      "_createLucideIcon-jEE5KA3V.js",
+      "_copy-C55C3k8T.js",
+      "_shared-FM0rljBt-B7vv_loM.js",
       "_getFormattedUsdFromLamports-B6EqSEho-C-HCdwKa.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/MfaAuthEnrollmentFlowScreen-DApO6DPY.mjs": {
-    "file": "assets/MfaAuthEnrollmentFlowScreen-DApO6DPY-Cvce60Td.js",
+    "file": "assets/MfaAuthEnrollmentFlowScreen-DApO6DPY-buXgMa7y.js",
     "name": "MfaAuthEnrollmentFlowScreen-DApO6DPY",
     "src": "node_modules/@privy-io/react-auth/dist/esm/MfaAuthEnrollmentFlowScreen-DApO6DPY.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_ShieldCheckIcon-VDxRyXYH.js",
-      "_EnrollTotp-uSQt9d2Q-BESwwvK4.js",
-      "_PinInput-3SLvbnQa-BVMO8c16.js",
-      "_QrCode-C1tgJtOy-BObh5Q7S.js",
-      "_FingerPrintIcon-CuVwCPgD.js",
-      "_PhoneIcon-Buw36cAf.js",
-      "_Chip-D2-wZOHJ-L9zdFfDD.js",
-      "_LoadingSkeleton-U6-3yFwI-DYng621o.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_ShieldCheckIcon-CX3bDxyJ.js",
+      "_EnrollTotp-uSQt9d2Q-CgAdSH7-.js",
+      "_PinInput-3SLvbnQa-MWrS6AQg.js",
+      "_QrCode-C1tgJtOy-BHlPCubm.js",
+      "_FingerPrintIcon-DPcrAL97.js",
+      "_PhoneIcon-CelU8-e8.js",
+      "_Chip-D2-wZOHJ-DhVq9pPJ.js",
+      "_LoadingSkeleton-U6-3yFwI-D7PbqT2S.js",
       "node_modules/@privy-io/react-auth/dist/esm/ErrorScreen-DtGc3Chy.mjs",
-      "_reservoir-0wfhnc0j-C59efNqe.js",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js",
-      "_createLucideIcon-ktXaMrqE.js",
-      "_lock-CIdO-Gq_.js",
+      "_reservoir-0wfhnc0j-B3rOEofm.js",
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js",
+      "_createLucideIcon-jEE5KA3V.js",
+      "_lock-BKQedAQh.js",
       "node_modules/@privy-io/react-auth/dist/esm/LinkPasskeyScreen-OxaghvUl.mjs",
-      "_TodoList-CgrU7uwu-CGNNQgI4.js",
-      "_check-BPM-pONt.js",
-      "_circle-check-big-yTbqokzd.js",
-      "_fingerprint-pattern-CvOwd3bn.js",
-      "_CopyToClipboard-DSTf_eKU-CYoE8YVP.js",
-      "_Layouts-BlFm53ED-BwtVJHVg.js",
-      "_LabelXs-oqZNqbm_-0c6bD-2B.js",
-      "_Subtitle-CV-2yKE4-3n7wOBX9.js",
-      "_Title-BnzYV3Is-BUerzvzw.js",
-      "_shared-FM0rljBt-Bvcdp-Bb.js",
+      "_TodoList-CgrU7uwu-TIRppYgz.js",
+      "_check-CaX9dEME.js",
+      "_circle-check-big-CWxLpkXO.js",
+      "_fingerprint-pattern-C85qQdNT.js",
+      "_CopyToClipboard-DSTf_eKU-Dk-0tgfq.js",
+      "_Layouts-BlFm53ED-Bhj8Zq_D.js",
+      "_LabelXs-oqZNqbm_-SwMnd8QF.js",
+      "_Subtitle-CV-2yKE4-KF2mgmQn.js",
+      "_Title-BnzYV3Is-C_zr4qem.js",
+      "_shared-FM0rljBt-B7vv_loM.js",
       "_dijkstra-COg3n3zL.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/MfaAuthVerifyFlowScreen-mdmdgWdO.mjs": {
-    "file": "assets/MfaAuthVerifyFlowScreen-mdmdgWdO-D_m8uqgi.js",
+    "file": "assets/MfaAuthVerifyFlowScreen-mdmdgWdO-C2OY0-gr.js",
     "name": "MfaAuthVerifyFlowScreen-mdmdgWdO",
     "src": "node_modules/@privy-io/react-auth/dist/esm/MfaAuthVerifyFlowScreen-mdmdgWdO.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_to-ui-error-REESv0kM-BQ1vFfa5.js",
-      "_PinInput-3SLvbnQa-BVMO8c16.js",
-      "_FingerPrintIcon-CuVwCPgD.js",
-      "_PhoneIcon-Buw36cAf.js",
-      "_ShieldCheckIcon-VDxRyXYH.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js",
-      "_ExclamationTriangleIcon-DFwA0b-j.js",
-      "_StackedContainer-B2vaEl56-DHQhH6ri.js",
-      "_useGetTokenPrice-BPBpM07F-C3qFUVrQ.js",
-      "_useGetSolPrice-DwwjjGbd-Ctq-9OZk.js",
-      "_TransactionDetails-BurRo8R0-BXQM0L19.js",
-      "_WalletLink--05Hzo2b-DN5etSMx.js",
-      "_ethers-D1WT71Ay-DvAUZlyq.js",
+      "_to-ui-error-REESv0kM-CKpAzvkk.js",
+      "_PinInput-3SLvbnQa-MWrS6AQg.js",
+      "_FingerPrintIcon-DPcrAL97.js",
+      "_PhoneIcon-CelU8-e8.js",
+      "_ShieldCheckIcon-CX3bDxyJ.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js",
+      "_ExclamationTriangleIcon-BWrXnrlz.js",
+      "_StackedContainer-B2vaEl56-DL9iqRHD.js",
+      "_useGetTokenPrice-BPBpM07F-DKJUK4gu.js",
+      "_useGetSolPrice-DwwjjGbd-CDf7Olwr.js",
+      "_TransactionDetails-BurRo8R0-C_SiD5be.js",
+      "_WalletLink--05Hzo2b-8O6qUNgy.js",
+      "_ethers-D1WT71Ay-BQ6rOR95.js",
       "_getFormattedUsdFromLamports-B6EqSEho-C-HCdwKa.js",
       "_transaction-CnfuREWo-nROljJQP.js",
-      "_Layouts-BlFm53ED-BwtVJHVg.js",
-      "_ChevronDownIcon-CEQ-6sNt.js"
+      "_Layouts-BlFm53ED-Bhj8Zq_D.js",
+      "_ChevronDownIcon-C8wpkRBF.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/MfaEnrollmentFlowScreen-DRZTnt-I.mjs": {
-    "file": "assets/MfaEnrollmentFlowScreen-DRZTnt-I-BypQcqVh.js",
+    "file": "assets/MfaEnrollmentFlowScreen-DRZTnt-I-DTIU-DLu.js",
     "name": "MfaEnrollmentFlowScreen-DRZTnt-I",
     "src": "node_modules/@privy-io/react-auth/dist/esm/MfaEnrollmentFlowScreen-DRZTnt-I.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_ShieldCheckIcon-VDxRyXYH.js",
-      "_EnrollTotp-uSQt9d2Q-BESwwvK4.js",
-      "_CheckCircleIcon-B_3MoKfc.js",
-      "_PhoneIcon-Buw36cAf.js",
-      "_ConnectPhoneForm-_lOAQG_X-DgknT_gT.js",
-      "_PinInput-3SLvbnQa-BVMO8c16.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_ShieldCheckIcon-CX3bDxyJ.js",
+      "_EnrollTotp-uSQt9d2Q-CgAdSH7-.js",
+      "_CheckCircleIcon-BBRajA6y.js",
+      "_PhoneIcon-CelU8-e8.js",
+      "_ConnectPhoneForm-_lOAQG_X-D-dzvEw-.js",
+      "_PinInput-3SLvbnQa-MWrS6AQg.js",
       "node_modules/@privy-io/react-auth/dist/esm/ErrorScreen-DtGc3Chy.mjs",
-      "_QrCode-C1tgJtOy-BObh5Q7S.js",
-      "_FingerPrintIcon-CuVwCPgD.js",
-      "_Chip-D2-wZOHJ-L9zdFfDD.js",
-      "_LoadingSkeleton-U6-3yFwI-DYng621o.js",
+      "_QrCode-C1tgJtOy-BHlPCubm.js",
+      "_FingerPrintIcon-DPcrAL97.js",
+      "_Chip-D2-wZOHJ-DhVq9pPJ.js",
+      "_LoadingSkeleton-U6-3yFwI-D7PbqT2S.js",
       "node_modules/@privy-io/react-auth/dist/esm/LinkPasskeyScreen-OxaghvUl.mjs",
-      "_TodoList-CgrU7uwu-CGNNQgI4.js",
-      "_createLucideIcon-ktXaMrqE.js",
-      "_check-BPM-pONt.js",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js",
-      "_circle-check-big-yTbqokzd.js",
-      "_fingerprint-pattern-CvOwd3bn.js",
-      "_CopyToClipboard-DSTf_eKU-CYoE8YVP.js",
-      "_Layouts-BlFm53ED-BwtVJHVg.js",
-      "_LabelXs-oqZNqbm_-0c6bD-2B.js",
-      "_Subtitle-CV-2yKE4-3n7wOBX9.js",
-      "_Title-BnzYV3Is-BUerzvzw.js",
-      "_shared-FM0rljBt-Bvcdp-Bb.js",
-      "_reservoir-0wfhnc0j-C59efNqe.js",
-      "_lock-CIdO-Gq_.js",
+      "_TodoList-CgrU7uwu-TIRppYgz.js",
+      "_createLucideIcon-jEE5KA3V.js",
+      "_check-CaX9dEME.js",
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js",
+      "_circle-check-big-CWxLpkXO.js",
+      "_fingerprint-pattern-C85qQdNT.js",
+      "_CopyToClipboard-DSTf_eKU-Dk-0tgfq.js",
+      "_Layouts-BlFm53ED-Bhj8Zq_D.js",
+      "_LabelXs-oqZNqbm_-SwMnd8QF.js",
+      "_Subtitle-CV-2yKE4-KF2mgmQn.js",
+      "_Title-BnzYV3Is-C_zr4qem.js",
+      "_shared-FM0rljBt-B7vv_loM.js",
+      "_reservoir-0wfhnc0j-B3rOEofm.js",
+      "_lock-BKQedAQh.js",
       "_dijkstra-COg3n3zL.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/MfaVerifyFlowScreen-mrf95cEs.mjs": {
-    "file": "assets/MfaVerifyFlowScreen-mrf95cEs-CRmIhKG2.js",
+    "file": "assets/MfaVerifyFlowScreen-mrf95cEs-B8z1i8WH.js",
     "name": "MfaVerifyFlowScreen-mrf95cEs",
     "src": "node_modules/@privy-io/react-auth/dist/esm/MfaVerifyFlowScreen-mrf95cEs.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_to-ui-error-REESv0kM-BQ1vFfa5.js",
-      "_PinInput-3SLvbnQa-BVMO8c16.js",
-      "_FingerPrintIcon-CuVwCPgD.js",
-      "_PhoneIcon-Buw36cAf.js",
-      "_ShieldCheckIcon-VDxRyXYH.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js",
-      "_ExclamationTriangleIcon-DFwA0b-j.js",
-      "_StackedContainer-B2vaEl56-DHQhH6ri.js",
-      "_useGetTokenPrice-BPBpM07F-C3qFUVrQ.js",
-      "_useGetSolPrice-DwwjjGbd-Ctq-9OZk.js",
-      "_TransactionDetails-BurRo8R0-BXQM0L19.js",
-      "_WalletLink--05Hzo2b-DN5etSMx.js",
-      "_ethers-D1WT71Ay-DvAUZlyq.js",
+      "_to-ui-error-REESv0kM-CKpAzvkk.js",
+      "_PinInput-3SLvbnQa-MWrS6AQg.js",
+      "_FingerPrintIcon-DPcrAL97.js",
+      "_PhoneIcon-CelU8-e8.js",
+      "_ShieldCheckIcon-CX3bDxyJ.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js",
+      "_ExclamationTriangleIcon-BWrXnrlz.js",
+      "_StackedContainer-B2vaEl56-DL9iqRHD.js",
+      "_useGetTokenPrice-BPBpM07F-DKJUK4gu.js",
+      "_useGetSolPrice-DwwjjGbd-CDf7Olwr.js",
+      "_TransactionDetails-BurRo8R0-C_SiD5be.js",
+      "_WalletLink--05Hzo2b-8O6qUNgy.js",
+      "_ethers-D1WT71Ay-BQ6rOR95.js",
       "_getFormattedUsdFromLamports-B6EqSEho-C-HCdwKa.js",
       "_transaction-CnfuREWo-nROljJQP.js",
-      "_Layouts-BlFm53ED-BwtVJHVg.js",
-      "_ChevronDownIcon-CEQ-6sNt.js"
+      "_Layouts-BlFm53ED-Bhj8Zq_D.js",
+      "_ChevronDownIcon-C8wpkRBF.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/MoonpayStatusScreen-DDSK5dda.mjs": {
-    "file": "assets/MoonpayStatusScreen-DDSK5dda-CWkmdg_X.js",
+    "file": "assets/MoonpayStatusScreen-DDSK5dda-Ch02XXgy.js",
     "name": "MoonpayStatusScreen-DDSK5dda",
     "src": "node_modules/@privy-io/react-auth/dist/esm/MoonpayStatusScreen-DDSK5dda.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_ArrowsRightLeftIcon-DioepqF0.js",
-      "_CheckCircleIcon-lXFuoXR1.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Layouts-BlFm53ED-BwtVJHVg.js",
-      "_index-C9k7EfLZ-ClZe91rr.js",
+      "_ArrowsRightLeftIcon-hyTn4ALo.js",
+      "_CheckCircleIcon-DFLJpeQM.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Layouts-BlFm53ED-Bhj8Zq_D.js",
+      "_index-C9k7EfLZ-CLrSANb2.js",
       "_analytics-mkkvFRju-DOXuftJB.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/OAuthStatusScreen-DSAUQ_YN.mjs": {
-    "file": "assets/OAuthStatusScreen-DSAUQ_YN-Cyir9JsI.js",
+    "file": "assets/OAuthStatusScreen-DSAUQ_YN-BnpIUlDE.js",
     "name": "OAuthStatusScreen-DSAUQ_YN",
     "src": "node_modules/@privy-io/react-auth/dist/esm/OAuthStatusScreen-DSAUQ_YN.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_twitch-5IOe4sIQ-CnW-5pMB.js",
-      "_GlobeAltIcon-B9KsrEBV.js",
-      "_shouldProceedtoEmbeddedWalletCreationFlow-BMF_3TVv-CxjZJ0Eo.js",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
+      "_twitch-5IOe4sIQ-GwS3Bt1u.js",
+      "_GlobeAltIcon-BKo0Maa7.js",
+      "_shouldProceedtoEmbeddedWalletCreationFlow-BMF_3TVv-D0wD2hz8.js",
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
       "_capitalizeFirstLetter-DmLYqXsO-tV1Idewc.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js"
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/PasskeySelectSignupOrLogin-G19VpAdI.mjs": {
-    "file": "assets/PasskeySelectSignupOrLogin-G19VpAdI-Dz7AfXCf.js",
+    "file": "assets/PasskeySelectSignupOrLogin-G19VpAdI-DQR5Kl6O.js",
     "name": "PasskeySelectSignupOrLogin-G19VpAdI",
     "src": "node_modules/@privy-io/react-auth/dist/esm/PasskeySelectSignupOrLogin-G19VpAdI.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_fingerprint-pattern-CvOwd3bn.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js",
-      "_createLucideIcon-ktXaMrqE.js"
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_fingerprint-pattern-C85qQdNT.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js",
+      "_createLucideIcon-jEE5KA3V.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/PasskeyStatusScreen-TD2nYAnk.mjs": {
-    "file": "assets/PasskeyStatusScreen-TD2nYAnk-4li6_e5P.js",
+    "file": "assets/PasskeyStatusScreen-TD2nYAnk-DOcnqErv.js",
     "name": "PasskeyStatusScreen-TD2nYAnk",
     "src": "node_modules/@privy-io/react-auth/dist/esm/PasskeyStatusScreen-TD2nYAnk.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_shouldProceedtoEmbeddedWalletCreationFlow-BMF_3TVv-CxjZJ0Eo.js",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_fingerprint-pattern-CvOwd3bn.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js",
-      "_createLucideIcon-ktXaMrqE.js"
+      "_shouldProceedtoEmbeddedWalletCreationFlow-BMF_3TVv-D0wD2hz8.js",
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_fingerprint-pattern-C85qQdNT.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js",
+      "_createLucideIcon-jEE5KA3V.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/PasswordRecoveryScreen-C0oVVZYe.mjs": {
-    "file": "assets/PasswordRecoveryScreen-C0oVVZYe-D02yl23j.js",
+    "file": "assets/PasswordRecoveryScreen-C0oVVZYe-CeED0O4W.js",
     "name": "PasswordRecoveryScreen-C0oVVZYe",
     "src": "node_modules/@privy-io/react-auth/dist/esm/PasswordRecoveryScreen-C0oVVZYe.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_ShieldCheckIcon-VDxRyXYH.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Layouts-BlFm53ED-BwtVJHVg.js",
-      "_shared-CwuyxHmv-DoMzGFq1.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js"
+      "_ShieldCheckIcon-CX3bDxyJ.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Layouts-BlFm53ED-Bhj8Zq_D.js",
+      "_shared-CwuyxHmv-BVYTqArg.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/RecoveryOAuthStatusScreen-Ca9VYOrA.mjs": {
-    "file": "assets/RecoveryOAuthStatusScreen-Ca9VYOrA-CcUmk3o2.js",
+    "file": "assets/RecoveryOAuthStatusScreen-Ca9VYOrA-ClRg2aPw.js",
     "name": "RecoveryOAuthStatusScreen-Ca9VYOrA",
     "src": "node_modules/@privy-io/react-auth/dist/esm/RecoveryOAuthStatusScreen-Ca9VYOrA.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_ScreenHeader-CHmc4-Lu-BkT2ykls.js",
-      "_styles-BsotlekN-BZjf0sJ5.js"
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_ScreenHeader-CHmc4-Lu-CzyJ3Pii.js",
+      "_styles-BsotlekN-BKyjzRfV.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/RecoveryPasswordCreateScreen-Q1zuy9fu.mjs": {
-    "file": "assets/RecoveryPasswordCreateScreen-Q1zuy9fu-Dhg6C_rB.js",
+    "file": "assets/RecoveryPasswordCreateScreen-Q1zuy9fu-Q71XRecq.js",
     "name": "RecoveryPasswordCreateScreen-Q1zuy9fu",
     "src": "node_modules/@privy-io/react-auth/dist/esm/RecoveryPasswordCreateScreen-Q1zuy9fu.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_SetWalletPasswordForm-0nuoz3XZ-CNvGgGJe.js",
-      "_ExclamationTriangleIcon-DFwA0b-j.js",
-      "_Layouts-BlFm53ED-BwtVJHVg.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_shared-CwuyxHmv-DoMzGFq1.js",
-      "_Checkbox-BhNoOKjX-BjgJNC5a.js",
-      "_CheckCircleIcon-lXFuoXR1.js",
-      "_ScreenHeader-CHmc4-Lu-BkT2ykls.js"
+      "_SetWalletPasswordForm-0nuoz3XZ-CtikKiJ7.js",
+      "_ExclamationTriangleIcon-BWrXnrlz.js",
+      "_Layouts-BlFm53ED-Bhj8Zq_D.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_shared-CwuyxHmv-BVYTqArg.js",
+      "_Checkbox-BhNoOKjX-YK9XAkD3.js",
+      "_CheckCircleIcon-DFLJpeQM.js",
+      "_ScreenHeader-CHmc4-Lu-CzyJ3Pii.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/RecoverySelectionScreen-scmqFA8Y.mjs": {
-    "file": "assets/RecoverySelectionScreen-scmqFA8Y-DbYO2hIL.js",
+    "file": "assets/RecoverySelectionScreen-scmqFA8Y-CYsb72ua.js",
     "name": "RecoverySelectionScreen-scmqFA8Y",
     "src": "node_modules/@privy-io/react-auth/dist/esm/RecoverySelectionScreen-scmqFA8Y.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_LockClosedIcon-Bg0eaXHa.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_ScreenHeader-CHmc4-Lu-BkT2ykls.js",
-      "_styles-BsotlekN-BZjf0sJ5.js"
+      "_LockClosedIcon-CIDryi_y.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_ScreenHeader-CHmc4-Lu-CzyJ3Pii.js",
+      "_styles-BsotlekN-BKyjzRfV.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/SetAutomaticRecoveryScreen-D-__1Pf7.mjs": {
-    "file": "assets/SetAutomaticRecoveryScreen-D-__1Pf7-vtM10blG.js",
+    "file": "assets/SetAutomaticRecoveryScreen-D-__1Pf7-C-Dxyx30.js",
     "name": "SetAutomaticRecoveryScreen-D-__1Pf7",
     "src": "node_modules/@privy-io/react-auth/dist/esm/SetAutomaticRecoveryScreen-D-__1Pf7.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_ExclamationTriangleIcon-DFwA0b-j.js",
-      "_LockClosedIcon-Bg0eaXHa.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Subtitle-CV-2yKE4-3n7wOBX9.js",
-      "_Title-BnzYV3Is-BUerzvzw.js"
+      "_ExclamationTriangleIcon-BWrXnrlz.js",
+      "_LockClosedIcon-CIDryi_y.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Subtitle-CV-2yKE4-KF2mgmQn.js",
+      "_Title-BnzYV3Is-C_zr4qem.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/SignRequestScreen-D6HSUOxx.mjs": {
-    "file": "assets/SignRequestScreen-D6HSUOxx-Bom1gF3n.js",
+    "file": "assets/SignRequestScreen-D6HSUOxx-DEONQFB-.js",
     "name": "SignRequestScreen-D6HSUOxx",
     "src": "node_modules/@privy-io/react-auth/dist/esm/SignRequestScreen-D6HSUOxx.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_CopyToClipboard-DSTf_eKU-CYoE8YVP.js",
-      "_Layouts-BlFm53ED-BwtVJHVg.js",
-      "_JsonTree-aPaJmPx7-CjtUpUzz.js",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_createLucideIcon-ktXaMrqE.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js"
+      "_CopyToClipboard-DSTf_eKU-Dk-0tgfq.js",
+      "_Layouts-BlFm53ED-Bhj8Zq_D.js",
+      "_JsonTree-aPaJmPx7-C2S7avb-.js",
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_createLucideIcon-jEE5KA3V.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/StandardSignAndSendTransactionScreen-YlstFfkB.mjs": {
-    "file": "assets/StandardSignAndSendTransactionScreen-YlstFfkB-B-WlpV_t.js",
+    "file": "assets/StandardSignAndSendTransactionScreen-YlstFfkB-CBYGH8Nw.js",
     "name": "StandardSignAndSendTransactionScreen-YlstFfkB",
     "src": "node_modules/@privy-io/react-auth/dist/esm/StandardSignAndSendTransactionScreen-YlstFfkB.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_useGetSolPrice-DwwjjGbd-Ctq-9OZk.js",
+      "_useGetSolPrice-DwwjjGbd-CDf7Olwr.js",
       "node_modules/@privy-io/react-auth/dist/esm/ErrorScreen-DtGc3Chy.mjs",
-      "_CheckCircleIcon-B_3MoKfc.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Layouts-BlFm53ED-BwtVJHVg.js",
-      "_ScreenHeader-CHmc4-Lu-BkT2ykls.js",
-      "_Value-tcJV9e0L-DIexT38e.js",
-      "_WalletLink--05Hzo2b-DN5etSMx.js",
-      "_StackedContainer-B2vaEl56-DHQhH6ri.js",
-      "_TransactionErrorView-CPFrt0L4-D93dIk5k.js",
+      "_CheckCircleIcon-BBRajA6y.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Layouts-BlFm53ED-Bhj8Zq_D.js",
+      "_ScreenHeader-CHmc4-Lu-CzyJ3Pii.js",
+      "_Value-tcJV9e0L-Bv6aRaog.js",
+      "_WalletLink--05Hzo2b-8O6qUNgy.js",
+      "_StackedContainer-B2vaEl56-DL9iqRHD.js",
+      "_TransactionErrorView-CPFrt0L4-lW3g4kx3.js",
       "_transaction-CnfuREWo-nROljJQP.js",
-      "_useSolanaRpcClient-BUWOblv_-CLd9M6wp.js",
+      "_useSolanaRpcClient-BUWOblv_-C6PDqOrO.js",
       "_getFormattedUsdFromLamports-B6EqSEho-C-HCdwKa.js",
-      "_formatters-CDGePEdL.js",
-      "_reservoir-0wfhnc0j-C59efNqe.js",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js",
-      "_createLucideIcon-ktXaMrqE.js",
-      "_lock-CIdO-Gq_.js",
-      "_LoadingSkeleton-U6-3yFwI-DYng621o.js",
-      "_ethers-D1WT71Ay-DvAUZlyq.js",
-      "_ErrorMessage-D8VaAP5m-CSRfkILK.js",
-      "_LabelXs-oqZNqbm_-0c6bD-2B.js",
-      "_Subtitle-CV-2yKE4-3n7wOBX9.js",
-      "_Title-BnzYV3Is-BUerzvzw.js",
-      "_Address-BjZb-TIL-CUaA-wVO.js",
-      "_check-BPM-pONt.js",
-      "_copy-CuK8iXj8.js",
-      "_WalletInfoCard-DFt8ndGE-DxaLKWXn.js",
-      "_shared-FM0rljBt-Bvcdp-Bb.js",
-      "_Checkbox-BhNoOKjX-BjgJNC5a.js",
-      "_ErrorBanner-CQERa7bL-Bwazymug.js",
-      "_ExclamationCircleIcon-CaK6qkTO.js",
-      "_WarningBanner-c8L53pJ2-D_EmmYOl.js",
-      "_ExclamationTriangleIcon-DFwA0b-j.js",
-      "_ChevronDownIcon-CEQ-6sNt.js"
+      "_formatters-DlHjBI8i.js",
+      "_reservoir-0wfhnc0j-B3rOEofm.js",
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js",
+      "_createLucideIcon-jEE5KA3V.js",
+      "_lock-BKQedAQh.js",
+      "_LoadingSkeleton-U6-3yFwI-D7PbqT2S.js",
+      "_ethers-D1WT71Ay-BQ6rOR95.js",
+      "_ErrorMessage-D8VaAP5m-DxjeKNSn.js",
+      "_LabelXs-oqZNqbm_-SwMnd8QF.js",
+      "_Subtitle-CV-2yKE4-KF2mgmQn.js",
+      "_Title-BnzYV3Is-C_zr4qem.js",
+      "_Address-BjZb-TIL-Bu6eEFrD.js",
+      "_check-CaX9dEME.js",
+      "_copy-C55C3k8T.js",
+      "_WalletInfoCard-DFt8ndGE-C_4uCkcb.js",
+      "_shared-FM0rljBt-B7vv_loM.js",
+      "_Checkbox-BhNoOKjX-YK9XAkD3.js",
+      "_ErrorBanner-CQERa7bL-DQIoernF.js",
+      "_ExclamationCircleIcon-Nk2pSHN5.js",
+      "_WarningBanner-c8L53pJ2-CEBXyz_y.js",
+      "_ExclamationTriangleIcon-BWrXnrlz.js",
+      "_ChevronDownIcon-C8wpkRBF.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/TelegramAuthScreen-DHCcieoC.mjs": {
-    "file": "assets/TelegramAuthScreen-DHCcieoC-CqGHA8p7.js",
+    "file": "assets/TelegramAuthScreen-DHCcieoC-CiqCBMRy.js",
     "name": "TelegramAuthScreen-DHCcieoC",
     "src": "node_modules/@privy-io/react-auth/dist/esm/TelegramAuthScreen-DHCcieoC.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_shouldProceedtoEmbeddedWalletCreationFlow-BMF_3TVv-CxjZJ0Eo.js",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_telegram-B-JqnkqZ-CW8o8xNW.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js"
+      "_shouldProceedtoEmbeddedWalletCreationFlow-BMF_3TVv-D0wD2hz8.js",
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_telegram-B-JqnkqZ-31fKsVX2.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/TransferFromWalletScreen-BG5Mj5tz.mjs": {
-    "file": "assets/TransferFromWalletScreen-BG5Mj5tz-DDCpmdkJ.js",
+    "file": "assets/TransferFromWalletScreen-BG5Mj5tz-DPi1BEHC.js",
     "name": "TransferFromWalletScreen-BG5Mj5tz",
     "src": "node_modules/@privy-io/react-auth/dist/esm/TransferFromWalletScreen-BG5Mj5tz.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_ScreenHeader-CHmc4-Lu-BkT2ykls.js",
-      "_FundWalletMethodHeader-Cfci4-83-CbGxLmI6.js",
-      "_Chip-D2-wZOHJ-L9zdFfDD.js",
-      "_Subtitle-CV-2yKE4-3n7wOBX9.js",
-      "_WalletOverflowButton-BlijhJnI-DYJS2CDH.js",
-      "_InjectedWalletIcon-DLcYOGDj-DZCOnUV7.js",
-      "_styles-BmZHuqSX-Bx5Gn5ub.js",
-      "_LoadingSkeleton-U6-3yFwI-DYng621o.js",
-      "_createLucideIcon-ktXaMrqE.js",
-      "_WalletIcon-DhKJR8EC.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_ScreenHeader-CHmc4-Lu-CzyJ3Pii.js",
+      "_FundWalletMethodHeader-Cfci4-83-DvDfYdnZ.js",
+      "_Chip-D2-wZOHJ-DhVq9pPJ.js",
+      "_Subtitle-CV-2yKE4-KF2mgmQn.js",
+      "_WalletOverflowButton-BlijhJnI-1ZGZ-9pj.js",
+      "_InjectedWalletIcon-DLcYOGDj-63L6yX2u.js",
+      "_styles-BmZHuqSX-BkKUMJkf.js",
+      "_LoadingSkeleton-U6-3yFwI-D7PbqT2S.js",
+      "_createLucideIcon-jEE5KA3V.js",
+      "_WalletIcon-CRl1ZDF4.js",
       "node_modules/@privy-io/react-auth/dist/esm/LinkPasskeyScreen-OxaghvUl.mjs",
-      "_TodoList-CgrU7uwu-CGNNQgI4.js",
-      "_check-BPM-pONt.js",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js",
-      "_circle-check-big-yTbqokzd.js",
-      "_fingerprint-pattern-CvOwd3bn.js"
+      "_TodoList-CgrU7uwu-TIRppYgz.js",
+      "_check-CaX9dEME.js",
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js",
+      "_circle-check-big-CWxLpkXO.js",
+      "_fingerprint-pattern-C85qQdNT.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/TurnstileWrapper-Co-t5mTh.mjs": {
-    "file": "assets/TurnstileWrapper-Co-t5mTh-KbiB7U_b.js",
+    "file": "assets/TurnstileWrapper-Co-t5mTh-Bx4XeDuH.js",
     "name": "TurnstileWrapper-Co-t5mTh",
     "src": "node_modules/@privy-io/react-auth/dist/esm/TurnstileWrapper-Co-t5mTh.mjs",
     "isDynamicEntry": true,
@@ -2695,152 +2695,152 @@
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/UpdateEmailScreen-ndRi1gY6.mjs": {
-    "file": "assets/UpdateEmailScreen-ndRi1gY6-BgpLcFbz.js",
+    "file": "assets/UpdateEmailScreen-ndRi1gY6-D5aBUVOY.js",
     "name": "UpdateEmailScreen-ndRi1gY6",
     "src": "node_modules/@privy-io/react-auth/dist/esm/UpdateEmailScreen-ndRi1gY6.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_EnvelopeIcon-BGPqYNN7.js",
-      "_Layouts-BlFm53ED-BwtVJHVg.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_EmailInputForm-Dgoii4vf-mLIatGND.js",
-      "_ErrorMessage-D8VaAP5m-CSRfkILK.js",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_mail-nIfCO6of.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js",
-      "_createLucideIcon-ktXaMrqE.js"
+      "_EnvelopeIcon-tl2SWtvR.js",
+      "_Layouts-BlFm53ED-Bhj8Zq_D.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_EmailInputForm-Dgoii4vf-DwDfmkEh.js",
+      "_ErrorMessage-D8VaAP5m-DxjeKNSn.js",
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_mail-DDd2ItFs.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js",
+      "_createLucideIcon-jEE5KA3V.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/UpdatePhoneScreen-DoH__glA.mjs": {
-    "file": "assets/UpdatePhoneScreen-DoH__glA-D6t_3h0i.js",
+    "file": "assets/UpdatePhoneScreen-DoH__glA-CRKBBjk9.js",
     "name": "UpdatePhoneScreen-DoH__glA",
     "src": "node_modules/@privy-io/react-auth/dist/esm/UpdatePhoneScreen-DoH__glA.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_PhoneIcon-Buw36cAf.js",
-      "_ConnectPhoneForm-_lOAQG_X-DgknT_gT.js",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Chip-D2-wZOHJ-L9zdFfDD.js",
-      "_LoadingSkeleton-U6-3yFwI-DYng621o.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js"
+      "_PhoneIcon-CelU8-e8.js",
+      "_ConnectPhoneForm-_lOAQG_X-D-dzvEw-.js",
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Chip-D2-wZOHJ-DhVq9pPJ.js",
+      "_LoadingSkeleton-U6-3yFwI-D7PbqT2S.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/UserLimitReachedScreen-BLzaOW7F.mjs": {
-    "file": "assets/UserLimitReachedScreen-BLzaOW7F-Bw1elT_-.js",
+    "file": "assets/UserLimitReachedScreen-BLzaOW7F-CGtZD3ab.js",
     "name": "UserLimitReachedScreen-BLzaOW7F",
     "src": "node_modules/@privy-io/react-auth/dist/esm/UserLimitReachedScreen-BLzaOW7F.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js"
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/WalletInterstitialScreen-BQ-ku50j.mjs": {
-    "file": "assets/WalletInterstitialScreen-BQ-ku50j-t4qQg-gZ.js",
+    "file": "assets/WalletInterstitialScreen-BQ-ku50j-s_IOrbdy.js",
     "name": "WalletInterstitialScreen-BQ-ku50j",
     "src": "node_modules/@privy-io/react-auth/dist/esm/WalletInterstitialScreen-BQ-ku50j.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js"
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js"
     ]
   },
   "node_modules/@privy-io/react-auth/dist/esm/index-BH9-XZRZ.mjs": {
-    "file": "assets/index-BH9-XZRZ-sAh-Bar8.js",
+    "file": "assets/index-BH9-XZRZ-B453gm32.js",
     "name": "index-BH9-XZRZ",
     "src": "node_modules/@privy-io/react-auth/dist/esm/index-BH9-XZRZ.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_Address-BjZb-TIL-CUaA-wVO.js",
-      "_useGetTokenPrice-BPBpM07F-C3qFUVrQ.js",
-      "_useWalletBalance-CDyi5_iR-ChTO2z3z.js",
-      "_getErc20TokenInfo-1Q6w1Ibq-DWFx5NS3.js",
+      "_Address-BjZb-TIL-Bu6eEFrD.js",
+      "_useGetTokenPrice-BPBpM07F-DKJUK4gu.js",
+      "_useWalletBalance-CDyi5_iR-BpXPv2eK.js",
+      "_getErc20TokenInfo-1Q6w1Ibq-B42WymIc.js",
       "_formatErc20TokenAmount-BuPk9xcy-CkAr4Oc0.js",
-      "_ethers-D1WT71Ay-DvAUZlyq.js",
+      "_ethers-D1WT71Ay-BQ6rOR95.js",
       "node_modules/@privy-io/react-auth/dist/esm/ErrorScreen-DtGc3Chy.mjs",
-      "_ModalHeader-D8-mhjp4-DeALdzmZ.js",
-      "_JsonTree-aPaJmPx7-CjtUpUzz.js",
-      "_TransactionErrorView-CPFrt0L4-D93dIk5k.js",
-      "_Layouts-BlFm53ED-BwtVJHVg.js",
-      "_ScreenHeader-CHmc4-Lu-BkT2ykls.js",
-      "_TransactionDetails-BurRo8R0-BXQM0L19.js",
+      "_ModalHeader-D8-mhjp4-D2cSvJhh.js",
+      "_JsonTree-aPaJmPx7-C2S7avb-.js",
+      "_TransactionErrorView-CPFrt0L4-lW3g4kx3.js",
+      "_Layouts-BlFm53ED-Bhj8Zq_D.js",
+      "_ScreenHeader-CHmc4-Lu-CzyJ3Pii.js",
+      "_TransactionDetails-BurRo8R0-C_SiD5be.js",
       "_transfer-6YztDh-t-DU6hH7CZ.js",
-      "_formatters-CDGePEdL.js",
-      "_check-BPM-pONt.js",
-      "_createLucideIcon-ktXaMrqE.js",
-      "_copy-CuK8iXj8.js",
-      "_useGetSolPrice-DwwjjGbd-Ctq-9OZk.js",
-      "_reservoir-0wfhnc0j-C59efNqe.js",
-      "_ScreenLayout-DTmQLGPf-CxWjGTz0.js",
-      "_Screen-Bp-TN9gb-lbw2Rmcb.js",
-      "_index-Dq_xe9dz-Dqgmy4tf.js",
-      "_lock-CIdO-Gq_.js",
-      "_Value-tcJV9e0L-DIexT38e.js",
-      "_LoadingSkeleton-U6-3yFwI-DYng621o.js",
-      "_ErrorMessage-D8VaAP5m-CSRfkILK.js",
-      "_LabelXs-oqZNqbm_-0c6bD-2B.js",
-      "_Subtitle-CV-2yKE4-3n7wOBX9.js",
-      "_Title-BnzYV3Is-BUerzvzw.js",
-      "_WalletInfoCard-DFt8ndGE-DxaLKWXn.js",
-      "_shared-FM0rljBt-Bvcdp-Bb.js",
-      "_Checkbox-BhNoOKjX-BjgJNC5a.js",
-      "_ErrorBanner-CQERa7bL-Bwazymug.js",
-      "_ExclamationCircleIcon-CaK6qkTO.js",
-      "_WarningBanner-c8L53pJ2-D_EmmYOl.js",
-      "_ExclamationTriangleIcon-DFwA0b-j.js",
-      "_ChevronDownIcon-CEQ-6sNt.js",
-      "_WalletLink--05Hzo2b-DN5etSMx.js",
+      "_formatters-DlHjBI8i.js",
+      "_check-CaX9dEME.js",
+      "_createLucideIcon-jEE5KA3V.js",
+      "_copy-C55C3k8T.js",
+      "_useGetSolPrice-DwwjjGbd-CDf7Olwr.js",
+      "_reservoir-0wfhnc0j-B3rOEofm.js",
+      "_ScreenLayout-DTmQLGPf-Bl4smUdO.js",
+      "_Screen-Bp-TN9gb-CgQi8snK.js",
+      "_index-Dq_xe9dz-B5CfSfel.js",
+      "_lock-BKQedAQh.js",
+      "_Value-tcJV9e0L-Bv6aRaog.js",
+      "_LoadingSkeleton-U6-3yFwI-D7PbqT2S.js",
+      "_ErrorMessage-D8VaAP5m-DxjeKNSn.js",
+      "_LabelXs-oqZNqbm_-SwMnd8QF.js",
+      "_Subtitle-CV-2yKE4-KF2mgmQn.js",
+      "_Title-BnzYV3Is-C_zr4qem.js",
+      "_WalletInfoCard-DFt8ndGE-C_4uCkcb.js",
+      "_shared-FM0rljBt-B7vv_loM.js",
+      "_Checkbox-BhNoOKjX-YK9XAkD3.js",
+      "_ErrorBanner-CQERa7bL-DQIoernF.js",
+      "_ExclamationCircleIcon-Nk2pSHN5.js",
+      "_WarningBanner-c8L53pJ2-CEBXyz_y.js",
+      "_ExclamationTriangleIcon-BWrXnrlz.js",
+      "_ChevronDownIcon-C8wpkRBF.js",
+      "_WalletLink--05Hzo2b-8O6qUNgy.js",
       "_getFormattedUsdFromLamports-B6EqSEho-C-HCdwKa.js",
       "_transaction-CnfuREWo-nROljJQP.js"
     ]
   },
   "node_modules/@reown/appkit-controllers/dist/esm/exports/features.js": {
-    "file": "assets/features-rR3zVA7n.js",
+    "file": "assets/features-mX6_VE1f.js",
     "name": "features",
     "src": "node_modules/@reown/appkit-controllers/dist/esm/exports/features.js",
     "isDynamicEntry": true,
     "imports": [
-      "_core-CA6HS9a-.js",
+      "_core-D-JK-YTH.js",
       "index.html"
     ]
   },
   "node_modules/@reown/appkit-scaffold-ui/dist/esm/exports/basic.js": {
-    "file": "assets/basic-C5GujKDu.js",
+    "file": "assets/basic-E5YMMPJv.js",
     "name": "basic",
     "src": "node_modules/@reown/appkit-scaffold-ui/dist/esm/exports/basic.js",
     "isDynamicEntry": true,
     "imports": [
-      "_core-CA6HS9a-.js",
-      "_index-BI1RfZGU.js",
+      "_core-D-JK-YTH.js",
+      "_index--ipaaxHf.js",
       "index.html",
       "_dijkstra-COg3n3zL.js"
     ]
   },
   "node_modules/@reown/appkit-scaffold-ui/dist/esm/exports/w3m-modal.js": {
-    "file": "assets/w3m-modal-C1585Ols.js",
+    "file": "assets/w3m-modal-DNFcu1Rd.js",
     "name": "w3m-modal",
     "src": "node_modules/@reown/appkit-scaffold-ui/dist/esm/exports/w3m-modal.js",
     "isDynamicEntry": true,
     "imports": [
-      "_core-CA6HS9a-.js",
-      "_index-BI1RfZGU.js",
+      "_core-D-JK-YTH.js",
+      "_index--ipaaxHf.js",
       "index.html"
     ]
   },
   "node_modules/@reown/appkit/node_modules/@walletconnect/universal-provider/node_modules/@walletconnect/utils/node_modules/viem/node_modules/@noble/curves/esm/secp256k1.js": {
-    "file": "assets/secp256k1-DU6ViIGc.js",
+    "file": "assets/secp256k1-rxzWCMq9.js",
     "name": "secp256k1",
     "src": "node_modules/@reown/appkit/node_modules/@walletconnect/universal-provider/node_modules/@walletconnect/utils/node_modules/viem/node_modules/@noble/curves/esm/secp256k1.js",
     "isDynamicEntry": true,
@@ -2855,20 +2855,20 @@
     "isDynamicEntry": true
   },
   "node_modules/viem/_esm/index.js": {
-    "file": "assets/index-BjK9swta.js",
+    "file": "assets/index-CbUC0okA.js",
     "name": "index",
     "src": "node_modules/viem/_esm/index.js",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_core-CA6HS9a-.js",
-      "_parseSignature-BGJEWVgj.js",
+      "_core-D-JK-YTH.js",
+      "_parseSignature-DGAVu9n6.js",
       "node_modules/viem/_esm/utils/ccip.js",
-      "_parseEther-Dc0V2TDG.js"
+      "_parseEther-qmIUj5dg.js"
     ]
   },
   "node_modules/viem/_esm/utils/ccip.js": {
-    "file": "assets/ccip-qXtSEymI.js",
+    "file": "assets/ccip-CpyfmPGK.js",
     "name": "ccip",
     "src": "node_modules/viem/_esm/utils/ccip.js",
     "isDynamicEntry": true,
@@ -2877,23 +2877,23 @@
     ]
   },
   "src/components/BungalowScene.tsx": {
-    "file": "assets/BungalowScene-BG3KpgPU.js",
+    "file": "assets/BungalowScene-BcaRrac6.js",
     "name": "BungalowScene",
     "src": "src/components/BungalowScene.tsx",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_CanvasErrorBoundary-C5zoARHR.js"
+      "_CanvasErrorBoundary-DUSpp6eE.js"
     ]
   },
   "src/components/IslandMap.tsx": {
-    "file": "assets/IslandMap-C6x-P_H8.js",
+    "file": "assets/IslandMap-BA-v4dLi.js",
     "name": "IslandMap",
     "src": "src/components/IslandMap.tsx",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_CanvasErrorBoundary-C5zoARHR.js"
+      "_CanvasErrorBoundary-DUSpp6eE.js"
     ]
   }
 }

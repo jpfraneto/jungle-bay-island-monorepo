@@ -128,7 +128,9 @@ function getCompatibleSlotTypes(
   return ["wall-frame"];
 }
 
-function describePlacementSpots(slotTypes: SelectableSlotType[] | null): string {
+function describePlacementSpots(
+  slotTypes: SelectableSlotType[] | null,
+): string {
   if (!slotTypes || slotTypes.length === 0) {
     return "placement spot";
   }
@@ -152,7 +154,11 @@ function formatPlacementSpotCount(
   count: number,
   slotTypes: SelectableSlotType[] | null,
 ): string {
-  const label = slotTypes ? describePlacementSpots(slotTypes) : "room spot";
+  if (!slotTypes || slotTypes.length === 0) {
+    return `${count} open room spot${count === 1 ? "" : "s"} total`;
+  }
+
+  const label = describePlacementSpots(slotTypes);
   return `${count} open ${label}${count === 1 ? "" : "s"}`;
 }
 
@@ -1150,8 +1156,7 @@ export default function BungalowScene({
     scene?.slots.filter(
       (slot) =>
         !slot.filled &&
-        (!compatibleSlotTypes ||
-          compatibleSlotTypes.includes(slot.slotType)),
+        (!compatibleSlotTypes || compatibleSlotTypes.includes(slot.slotType)),
     ).length ?? 0;
   const roomImageUrl = imageUrl || getTokenImageUrl(null, ca, symbol ?? title);
 
@@ -1286,7 +1291,7 @@ export default function BungalowScene({
                 fontWeight: 600,
               }}
             >
-              Open Bodega for {symbol ?? title}
+              Shop Bodega
             </button>
           </div>
         </div>
@@ -1385,7 +1390,8 @@ export default function BungalowScene({
             >
               <span>
                 Placing <strong>{selectedBodegaItem.title}</strong>. Click an
-                open <strong>{describePlacementSpots(compatibleSlotTypes)}</strong>{" "}
+                open{" "}
+                <strong>{describePlacementSpots(compatibleSlotTypes)}</strong>{" "}
                 in this room.
               </span>
               <button

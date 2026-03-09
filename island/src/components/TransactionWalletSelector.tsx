@@ -5,6 +5,7 @@ import { useUserWalletLinks } from "../hooks/useUserWalletLinks";
 
 interface TransactionWalletSelectorProps {
   onSelect: (address: string) => void;
+  value?: string | null;
   label?: string;
   onAddWallet?: () => void | Promise<void>;
   isAddingWallet?: boolean;
@@ -19,15 +20,19 @@ function truncateAddress(address: string): string {
 
 export default function TransactionWalletSelector({
   onSelect,
-  label = "Pay with",
+  value = null,
+  label = "Sign with",
   onAddWallet,
   isAddingWallet = false,
   addWalletStatus = null,
   addWalletError = null,
 }: TransactionWalletSelectorProps) {
   const { authenticated, connectWallet, login } = usePrivy();
-  const { walletAddress, setActiveWallet, wallets: connectedWallets } =
-    usePrivyBaseWallet();
+  const {
+    walletAddress,
+    setActiveWallet,
+    wallets: connectedWallets,
+  } = usePrivyBaseWallet();
   const {
     wallets: linkedWalletRows,
     isLoading,
@@ -39,7 +44,8 @@ export default function TransactionWalletSelector({
     [linkedWalletRows],
   );
   const connectedWalletAddresses = useMemo(
-    () => new Set(connectedWallets.map((wallet) => wallet.address.toLowerCase())),
+    () =>
+      new Set(connectedWallets.map((wallet) => wallet.address.toLowerCase())),
     [connectedWallets],
   );
   const options = useMemo(
@@ -51,24 +57,33 @@ export default function TransactionWalletSelector({
   );
 
   const activeWalletAddress = walletAddress ?? "";
-  const activeWalletLinked =
-    Boolean(activeWalletAddress) &&
-    linkedWallets.some(
-      (linkedWallet) =>
-        linkedWallet.toLowerCase() === activeWalletAddress.toLowerCase(),
-    );
   const activeWalletAvailable =
     Boolean(activeWalletAddress) &&
     options.some(
       (address) => address.toLowerCase() === activeWalletAddress.toLowerCase(),
     );
-  const selectorValue = activeWalletAvailable ? activeWalletAddress : options[0] ?? "";
+  const preferredWalletAddress = value?.trim() || "";
+  const displayedWalletAddress =
+    preferredWalletAddress ||
+    (activeWalletAvailable ? activeWalletAddress : "") ||
+    (options[0] ?? "");
+  const selectorValue = options.some(
+    (address) => address.toLowerCase() === displayedWalletAddress.toLowerCase(),
+  )
+    ? displayedWalletAddress
+    : (options[0] ?? "");
+  const displayedWalletLinked =
+    Boolean(displayedWalletAddress) &&
+    linkedWallets.some(
+      (linkedWallet) =>
+        linkedWallet.toLowerCase() === displayedWalletAddress.toLowerCase(),
+    );
   const hasUnavailableLinkedWallets = linkedWallets.length > options.length;
 
   useEffect(() => {
     if (!authenticated) return;
     if (!selectorValue) return;
-    if (activeWalletAvailable) return;
+    if (activeWalletAvailable && !preferredWalletAddress) return;
 
     try {
       setActiveWallet(selectorValue);
@@ -80,6 +95,7 @@ export default function TransactionWalletSelector({
     activeWalletAvailable,
     authenticated,
     onSelect,
+    preferredWalletAddress,
     selectorValue,
     setActiveWallet,
   ]);
@@ -149,7 +165,9 @@ export default function TransactionWalletSelector({
           <div style={{ color: "#ffd3d3", fontSize: 12 }}>{loadError}</div>
         ) : null}
         {addWalletStatus ? (
-          <div style={{ color: "#9dd7a8", fontSize: 12 }}>{addWalletStatus}</div>
+          <div style={{ color: "#9dd7a8", fontSize: 12 }}>
+            {addWalletStatus}
+          </div>
         ) : null}
         {addWalletError ? (
           <div style={{ color: "#ffd3d3", fontSize: 12 }}>{addWalletError}</div>
@@ -206,9 +224,9 @@ export default function TransactionWalletSelector({
             alignContent: "center",
           }}
         >
-          <strong>{truncateAddress(activeWalletAddress)}</strong>
+          <strong>{truncateAddress(selectorValue || activeWalletAddress)}</strong>
           <span style={{ fontSize: 12, color: "rgba(247,239,214,0.66)" }}>
-            {activeWalletLinked ? "Linked wallet" : "Current wallet"}
+            {displayedWalletLinked ? "Linked wallet" : "Current wallet"}
           </span>
         </div>
       )}
@@ -221,7 +239,7 @@ export default function TransactionWalletSelector({
           Only wallets currently connected in Privy can pay here.
         </div>
       ) : null}
-      {!activeWalletLinked ? (
+      {!displayedWalletLinked ? (
         <div
           style={{
             display: "flex",

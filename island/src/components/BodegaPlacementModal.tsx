@@ -154,7 +154,9 @@ function buildDecorationFromItem(
 
 function normalizeInstallRecord(input: unknown): InstallRecord | null {
   const candidate =
-    input && typeof input === "object" ? (input as Record<string, unknown>) : null;
+    input && typeof input === "object"
+      ? (input as Record<string, unknown>)
+      : null;
   const id = Number(candidate?.id ?? 0);
   if (!Number.isFinite(id) || id <= 0) {
     return null;
@@ -187,19 +189,20 @@ export default function BodegaPlacementModal({
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showWalletGate, setShowWalletGate] = useState(false);
+  const [selectedWallet, setSelectedWallet] = useState<string>("");
   const [confirmedPayment, setConfirmedPayment] =
     useState<ConfirmedPayment | null>(null);
-  const [confirmedInstall, setConfirmedInstall] = useState<InstallRecord | null>(
-    null,
-  );
+  const [confirmedInstall, setConfirmedInstall] =
+    useState<InstallRecord | null>(null);
 
   useEffect(() => {
     setStatus(null);
     setError(null);
     setShowWalletGate(false);
+    setSelectedWallet(walletAddress ?? "");
     setConfirmedPayment(null);
     setConfirmedInstall(null);
-  }, [item.id, slotId]);
+  }, [item.id, slotId, walletAddress]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -224,7 +227,9 @@ export default function BodegaPlacementModal({
 
   const previewUrl = getBodegaPreviewUrl(item);
   const creatorLabel = formatCreatorLabel(item);
-  const linkedWallets = linkedWalletRows.map((wallet) => wallet.address.toLowerCase());
+  const linkedWallets = linkedWalletRows.map((wallet) =>
+    wallet.address.toLowerCase(),
+  );
   const canRetryWithoutPaying = Boolean(confirmedPayment);
   const canRetryPlacementOnly = Boolean(confirmedInstall);
   const isProcessing = Boolean(status) || isTransferring;
@@ -245,7 +250,7 @@ export default function BodegaPlacementModal({
       return;
     }
 
-    const payoutWallet = walletAddress;
+    const payoutWallet = selectedWallet || walletAddress;
     if (!payoutWallet || linkedWalletRows.length === 0) {
       setShowWalletGate(true);
       setError("Link your wallet before placing this item.");
@@ -298,12 +303,10 @@ export default function BodegaPlacementModal({
           }),
         });
 
-        const data = (await response.json().catch(() => null)) as
-          | {
-              install?: unknown;
-              error?: unknown;
-            }
-          | null;
+        const data = (await response.json().catch(() => null)) as {
+          install?: unknown;
+          error?: unknown;
+        } | null;
         const apiError =
           typeof data?.error === "string" && data.error.trim().length > 0
             ? data.error
@@ -323,7 +326,11 @@ export default function BodegaPlacementModal({
         throw new Error("Missing auth token");
       }
 
-      await onPlace(slotId, buildDecorationFromItem(item, payment.payer), token);
+      await onPlace(
+        slotId,
+        buildDecorationFromItem(item, payment.payer),
+        token,
+      );
 
       setConfirmedPayment(null);
       setConfirmedInstall(null);
@@ -487,8 +494,10 @@ export default function BodegaPlacementModal({
         </div>
 
         <TransactionWalletSelector
-          label="Pay with"
-          onSelect={() => {
+          label="Sign with"
+          value={selectedWallet}
+          onSelect={(nextAddress) => {
+            setSelectedWallet(nextAddress);
             setError(null);
             setShowWalletGate(false);
           }}

@@ -83,7 +83,7 @@ function asNumber(input: unknown): number {
 export const BODEGA_ASSET_LABELS: Record<BodegaAssetType, string> = {
   decoration: "Decorations",
   game: "Games",
-  miniapp: "Miniapps",
+  miniapp: "Builds",
   link: "Links",
   image: "Images",
   frame: "Frames",
@@ -93,7 +93,7 @@ export const BODEGA_ASSET_LABELS: Record<BodegaAssetType, string> = {
 export const BODEGA_ASSET_SINGULAR_LABELS: Record<BodegaAssetType, string> = {
   decoration: "Decoration",
   game: "Game",
-  miniapp: "Miniapp",
+  miniapp: "Build",
   link: "Link",
   image: "Image",
   frame: "Frame",
@@ -103,7 +103,7 @@ export const BODEGA_ASSET_SINGULAR_LABELS: Record<BodegaAssetType, string> = {
 export const BODEGA_ASSET_DESCRIPTIONS: Record<BodegaAssetType, string> = {
   decoration: "Portable decor that gives a bungalow visual character.",
   game: "Playful destinations and micro-games communities can host.",
-  miniapp: "Useful tools and lightweight apps that live inside a bungalow.",
+  miniapp: "Useful builds, tools, and lightweight apps that live inside a bungalow.",
   link: "Fast utility links, resources, and off-island exits.",
   image: "Visual artifacts, posters, and gallery-style drops.",
   frame: "Short notes and callouts that pin directly to the wall.",
@@ -112,7 +112,7 @@ export const BODEGA_ASSET_DESCRIPTIONS: Record<BodegaAssetType, string> = {
 
 export const BODEGA_ASSET_GROUP_LABELS: Record<BodegaAssetGroup, string> = {
   art: "Art",
-  miniapp: "Miniapps",
+  miniapp: "Builds",
 };
 
 export function normalizeDirectoryBungalows(input: unknown): DirectoryBungalow[] {

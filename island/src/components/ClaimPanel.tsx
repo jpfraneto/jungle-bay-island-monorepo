@@ -30,7 +30,14 @@ function getNextClaimCountdown(
 
   const now = new Date();
   const nextUtcNoon = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 12, 0, 0),
+    Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(),
+      12,
+      0,
+      0,
+    ),
   );
   if (nextUtcNoon.getTime() <= now.getTime()) {
     nextUtcNoon.setUTCDate(nextUtcNoon.getUTCDate() + 1);
@@ -71,10 +78,8 @@ export default function ClaimPanel({
 }: ClaimPanelProps) {
   const { authenticated, login, getAccessToken } = usePrivy();
   const { publicClient, requireWallet, walletAddress } = usePrivyBaseWallet();
-  const {
-    wallets: linkedWalletRows,
-    refetch: refetchLinkedWallets,
-  } = useUserWalletLinks(authenticated);
+  const { wallets: linkedWalletRows, refetch: refetchLinkedWallets } =
+    useUserWalletLinks(authenticated);
   const {
     linkCurrentWallet,
     isLinking: isLinkingWallet,
@@ -97,7 +102,9 @@ export default function ClaimPanel({
   const [showWalletGate, setShowWalletGate] = useState(false);
   const nextClaimText = getNextClaimCountdown(claimable?.claimed_today);
   const panelClassName = `${styles.panel} ${!sticky ? styles.panelStatic : ""}`;
-  const linkedWallets = linkedWalletRows.map((wallet) => wallet.address.toLowerCase());
+  const linkedWallets = linkedWalletRows.map((wallet) =>
+    wallet.address.toLowerCase(),
+  );
 
   useEffect(() => {
     if (!walletAddress) return;
@@ -221,19 +228,25 @@ export default function ClaimPanel({
         throw new Error("Claim transaction failed");
       }
 
-      const confirmResponse = await fetch(`/api/claims/${chain}/${ca}/confirm`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          wallet: address,
-          payout_wallet: payoutWallet,
-        }),
-      });
+      const confirmResponse = await fetch(
+        `/api/claims/${chain}/${ca}/confirm`,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            wallet: address,
+            payout_wallet: payoutWallet,
+          }),
+        },
+      );
 
       if (!confirmResponse.ok) {
-        const confirmData = (await confirmResponse.json()) as { error?: string };
+        const confirmData = (await confirmResponse.json()) as {
+          error?: string;
+        };
         throw new Error(
-          confirmData.error ?? `Claim confirmation failed (${confirmResponse.status})`,
+          confirmData.error ??
+            `Claim confirmation failed (${confirmResponse.status})`,
         );
       }
 
@@ -315,7 +328,8 @@ export default function ClaimPanel({
       <h3>Claim Rewards</h3>
 
       <WalletSelector
-        label="Pay with"
+        label="Sign with"
+        value={selectedPayoutWallet}
         onSelect={(address) => {
           setSelectedPayoutWallet(address);
           setError(null);
@@ -333,7 +347,9 @@ export default function ClaimPanel({
           >
             {isLinkingWallet ? "Linking..." : "Add wallet"}
           </button>
-          {linkStatus ? <div className={styles.status}>{linkStatus}</div> : null}
+          {linkStatus ? (
+            <div className={styles.status}>{linkStatus}</div>
+          ) : null}
           {linkError ? <div className={styles.error}>{linkError}</div> : null}
         </div>
       ) : null}
@@ -355,7 +371,9 @@ export default function ClaimPanel({
       <button
         type="button"
         className={styles.actionButton}
-        disabled={!claimable.can_claim || isClaiming || linkedWalletRows.length === 0}
+        disabled={
+          !claimable.can_claim || isClaiming || linkedWalletRows.length === 0
+        }
         onClick={() => {
           void handleClaim();
         }}

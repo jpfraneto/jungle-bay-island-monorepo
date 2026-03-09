@@ -56,9 +56,9 @@ export default function BodegaModal({
           cache: "no-store",
           signal: controller.signal,
         });
-        const data = (await response.json().catch(() => null)) as
-          | BodegaCatalogResponse
-          | null;
+        const data = (await response
+          .json()
+          .catch(() => null)) as BodegaCatalogResponse | null;
         const apiError =
           typeof data?.error === "string" && data.error.trim().length > 0
             ? data.error
@@ -306,7 +306,7 @@ export default function BodegaModal({
                         fontSize: 12,
                       }}
                     >
-                      {item.price_in_jbm} JBM
+                      {item.price_in_jbm} jungle bay memes
                     </div>
                   </div>
 
@@ -328,7 +328,7 @@ export default function BodegaModal({
                       flex: "0 0 auto",
                     }}
                   >
-                    {canSelectItems ? "Place" : "Owner only"}
+                    {canSelectItems ? "Buy" : "Owner only"}
                   </button>
                 </div>
               );

@@ -224,7 +224,7 @@ app.get("/api/og", async (c) => {
       headers: { "User-Agent": "Mozilla/5.0 (compatible; JBIBot/1.0)" },
     });
     const html = await res.text();
-    const get = (prop: string) => {
+    const getProperty = (prop: string) => {
       const match =
         html.match(
           new RegExp(
@@ -240,10 +240,36 @@ app.get("/api/og", async (c) => {
         );
       return match?.[1];
     };
+    const getName = (name: string) => {
+      const match =
+        html.match(
+          new RegExp(
+            `<meta[^>]*name=["']${name}["'][^>]*content=["']([^"']+)["']`,
+            "i",
+          ),
+        ) ??
+        html.match(
+          new RegExp(
+            `<meta[^>]*content=["']([^"']+)["'][^>]*name=["']${name}["']`,
+            "i",
+          ),
+        );
+      return match?.[1];
+    };
+    const getTitleTag = () => {
+      const match = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+      return match?.[1]?.trim();
+    };
     const data: OGData = {
-      title: get("og:title") ?? get("twitter:title"),
-      image: get("og:image") ?? get("twitter:image"),
-      description: get("og:description"),
+      title:
+        getProperty("og:title") ??
+        getProperty("twitter:title") ??
+        getTitleTag(),
+      image: getProperty("og:image") ?? getProperty("twitter:image"),
+      description:
+        getProperty("og:description") ??
+        getProperty("twitter:description") ??
+        getName("description"),
     };
     ogCache.set(url, { data, ts: Date.now() });
     return c.json(data);

@@ -58,10 +58,8 @@ export default function AddItemModal({
 }: AddItemModalProps) {
   const { authenticated, getAccessToken, login } = usePrivy();
   const { walletAddress } = usePrivyBaseWallet();
-  const {
-    wallets: linkedWalletRows,
-    refetch: refetchLinkedWallets,
-  } = useUserWalletLinks(authenticated);
+  const { wallets: linkedWalletRows, refetch: refetchLinkedWallets } =
+    useUserWalletLinks(authenticated);
   const {
     linkCurrentWallet,
     isLinking: isLinkingWallet,
@@ -410,7 +408,11 @@ export default function AddItemModal({
           </div>
         ) : null}
 
-        <WalletSelector label="Pay with" onSelect={setSelectedPayWallet} />
+        <WalletSelector
+          label="Sign with"
+          value={selectedPayWallet}
+          onSelect={setSelectedPayWallet}
+        />
         {showWalletGate || linkedWalletRows.length === 0 ? (
           <div className={styles.error}>
             <strong>You need a linked wallet to continue.</strong>

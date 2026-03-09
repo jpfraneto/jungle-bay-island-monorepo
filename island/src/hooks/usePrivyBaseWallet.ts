@@ -7,6 +7,10 @@ import {
 } from "@privy-io/react-auth";
 import { createPublicClient, createWalletClient, custom, http } from "viem";
 import { base } from "viem/chains";
+import {
+  getPrivyWalletChainType,
+  getPrivyWalletList,
+} from "../utils/privyWalletOptions";
 
 const BASE_CAIP_CHAIN_ID = `eip155:${base.id}`;
 const BASE_RPC_URL = "https://mainnet.base.org";
@@ -141,7 +145,8 @@ export function usePrivyBaseWallet() {
 
     if (!activeWallet) {
       connectWallet({
-        walletChainType: "ethereum-only",
+        walletChainType: getPrivyWalletChainType(),
+        walletList: getPrivyWalletList(),
       });
       throw new Error("Connect an external Ethereum wallet in Privy");
     }

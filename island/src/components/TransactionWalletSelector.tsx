@@ -2,6 +2,10 @@ import { useEffect, useMemo } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
 import { useUserWalletLinks } from "../hooks/useUserWalletLinks";
+import {
+  getPrivyWalletChainType,
+  getPrivyWalletList,
+} from "../utils/privyWalletOptions";
 
 interface TransactionWalletSelectorProps {
   onSelect: (address: string) => void;
@@ -146,7 +150,12 @@ export default function TransactionWalletSelector({
           </div>
           <button
             type="button"
-            onClick={() => connectWallet({ walletChainType: "ethereum-only" })}
+            onClick={() =>
+              connectWallet({
+                walletChainType: getPrivyWalletChainType(),
+                walletList: getPrivyWalletList(),
+              })
+            }
             style={{
               minHeight: 40,
               borderRadius: 10,

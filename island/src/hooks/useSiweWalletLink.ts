@@ -1,218 +1,208 @@
-import { useCallback, useState } from "react";
-import { useLinkWithSiwe, usePrivy } from "@privy-io/react-auth";
-import { base } from "viem/chains";
-import { usePrivyBaseWallet } from "./usePrivyBaseWallet";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useModalStatus, usePrivy } from "@privy-io/react-auth";
+import {
+  getPrivyWalletChainType,
+  getPrivyWalletList,
+} from "../utils/privyWalletOptions";
+import { useUserWalletLinks } from "./useUserWalletLinks";
 
-interface LinkWalletResponse {
-  wallets?: unknown;
-  error?: unknown;
-}
-
-const CHAIN_ID = `eip155:${base.id}`;
-const SIWE_DOMAIN_SUFFIX = " wants you to sign in with your Ethereum account:";
-const SIWE_DEBUG =
-  typeof window !== "undefined" &&
-  (import.meta.env.DEV || window.localStorage.getItem("debug:siwe") === "1");
-
-interface SiweOrigin {
-  domain: string;
-  host: string;
-  uri: string;
-}
-
-function getCurrentSiweOrigin(): SiweOrigin {
-  if (typeof window === "undefined") {
-    return {
-      domain: "",
-      host: "",
-      uri: "",
-    };
-  }
-
-  return {
-    domain: window.location.hostname.toLowerCase(),
-    host: window.location.host.toLowerCase(),
-    uri: window.location.origin.toLowerCase(),
-  };
-}
-
-function extractSiweDomain(message: string): string | null {
-  const firstLine = message.split("\n", 1)[0]?.trim() ?? "";
-  if (!firstLine.endsWith(SIWE_DOMAIN_SUFFIX)) return null;
-
-  const domain = firstLine.slice(0, -SIWE_DOMAIN_SUFFIX.length).trim();
-  return domain ? domain.toLowerCase() : null;
-}
-
-function extractSiweUri(message: string): string | null {
-  const match = message.match(/^URI:\s*(.+)$/m);
-  if (!match?.[1]) return null;
-  return match[1].trim().toLowerCase();
-}
-
-function normalizeOrigin(value: string): string | null {
-  if (!value) return null;
-  try {
-    return new URL(value).origin.toLowerCase();
-  } catch {
-    return null;
-  }
-}
-
-function assertSiweMessageMatchesCurrentOrigin(message: string, origin: SiweOrigin): void {
-  const messageDomain = extractSiweDomain(message);
-  const messageUri = extractSiweUri(message);
-  const messageOrigin = normalizeOrigin(messageUri ?? "");
-  const expectedOrigins = new Set([origin.uri].filter(Boolean));
-  const domainMatches = Boolean(
-    messageDomain && (messageDomain === origin.domain || messageDomain === origin.host),
-  );
-  const uriMatches = Boolean(messageOrigin && expectedOrigins.has(messageOrigin));
-
-  if (domainMatches && uriMatches) return;
-
-  throw new Error(
-    `SIWE origin mismatch. Expected domain ${origin.domain || "(unknown)"} and URI ${
-      origin.uri || "(unknown)"
-    }, got domain ${messageDomain || "(missing)"} and URI ${messageUri || "(missing)"}.`,
-  );
-}
-
-async function generateSiweMessageForOrigin({
-  generateSiweMessage,
-  address,
-  chainId,
-  origin,
-}: {
-  generateSiweMessage: (input: unknown) => Promise<string>;
-  address: string;
-  chainId: string;
-  origin: SiweOrigin;
-}): Promise<string> {
-  const candidates: unknown[] = [
-    {
-      wallet: {
-        address,
-        chainId,
-      },
-      from: {
-        domain: origin.domain,
-        uri: origin.uri,
-      },
-    },
-    {
-      address,
-      chainId,
-      from: {
-        domain: origin.domain,
-        uri: origin.uri,
-      },
-    },
-    {
-      address,
-      chainId,
-    },
-  ];
-
-  let lastError: unknown = null;
-
-  for (const payload of candidates) {
-    try {
-      return await generateSiweMessage(payload);
-    } catch (error) {
-      lastError = error;
-    }
-  }
-
-  if (lastError instanceof Error) {
-    throw lastError;
-  }
-
-  throw new Error("Failed to generate SIWE message");
-}
-
-function extractSiweNonce(message: string): string | null {
-  const match = message.match(/^Nonce:\s*(.+)$/m);
-  if (!match?.[1]) return null;
-  return match[1].trim();
-}
-
-function extractSiweIssuedAt(message: string): string | null {
-  const match = message.match(/^Issued At:\s*(.+)$/m);
-  if (!match?.[1]) return null;
-  return match[1].trim();
-}
-
-function debugSiwe(step: string, payload?: unknown): void {
-  if (!SIWE_DEBUG) return;
-  if (payload === undefined) {
-    console.info(`[SIWE LINK] ${step}`);
-    return;
-  }
-  console.info(`[SIWE LINK] ${step}`, payload);
-}
-
-function debugSiweError(step: string, error: unknown): void {
-  if (!SIWE_DEBUG) return;
-
-  if (error instanceof Error) {
-    const ownProps = Object.getOwnPropertyNames(error).reduce<Record<string, unknown>>(
-      (acc, key) => {
-        acc[key] = (error as unknown as Record<string, unknown>)[key];
-        return acc;
-      },
-      {},
-    );
-
-    console.error(`[SIWE LINK] ${step}`, {
-      name: error.name,
-      message: error.message,
-      stack: error.stack,
-      ...ownProps,
-    });
-    return;
-  }
-
-  console.error(`[SIWE LINK] ${step}`, { error });
-}
-
-function getPrivyErrorCode(error: unknown): string | null {
-  if (!error || typeof error !== "object") return null;
-  const value = (error as Record<string, unknown>).privyErrorCode;
-  return typeof value === "string" ? value : null;
-}
-
-function mapSiweLinkError(error: unknown): string {
-  const fallback =
-    "Linking failed. Make sure you signed with the correct wallet and try again.";
-
-  if (!(error instanceof Error)) {
-    return fallback;
-  }
-
-  const code = getPrivyErrorCode(error);
-  if (code === "linked_to_another_user" || /already linked this wallet/i.test(error.message)) {
-    return "This wallet is already linked to another account. Log in with that account and unlink it first, then try again.";
-  }
-
-  if (
-    error.message.includes("SIWE origin mismatch") ||
-    error.message.includes("Embedded Privy wallets are disabled")
-  ) {
-    return error.message;
-  }
-
-  return fallback;
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
 }
 
 export function useSiweWalletLink() {
-  const { authenticated, getAccessToken, login } = usePrivy();
-  const { requireWallet } = usePrivyBaseWallet();
-  const { generateSiweMessage, linkWithSiwe } = useLinkWithSiwe();
+  const { authenticated, getAccessToken, linkWallet, login } = usePrivy();
+  const { isOpen: isPrivyModalOpen } = useModalStatus();
+  const { wallets, refetch } = useUserWalletLinks(authenticated);
 
   const [isLinking, setIsLinking] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pendingWalletLink, setPendingWalletLink] = useState(false);
+  const [walletLinkModalOpened, setWalletLinkModalOpened] = useState(false);
+  const [walletCountBeforeLink, setWalletCountBeforeLink] = useState(0);
+  const pendingPromiseRef = useRef<{
+    resolve: (value: { didLinkWallet: boolean; walletCount: number | null }) => void;
+    reject: (reason?: unknown) => void;
+  } | null>(null);
+
+  const finishPendingPromise = useCallback(
+    (result: { didLinkWallet: boolean; walletCount: number | null } | null, failure?: unknown) => {
+      const pending = pendingPromiseRef.current;
+      pendingPromiseRef.current = null;
+
+      if (!pending) {
+        return;
+      }
+
+      if (failure !== undefined) {
+        pending.reject(failure);
+        return;
+      }
+
+      pending.resolve(
+        result ?? {
+          didLinkWallet: false,
+          walletCount: null,
+        },
+      );
+    },
+    [],
+  );
+
+  const syncLinkedWalletsFromPrivy = useCallback(async () => {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    const token = await getAccessToken();
+    if (!token) {
+      throw new Error("Authentication token unavailable");
+    }
+
+    headers.Authorization = `Bearer ${token}`;
+
+    const response = await fetch("/api/user/sync-wallets", {
+      method: "POST",
+      headers,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Request failed (${response.status})`);
+    }
+
+    const data = (await response.json().catch(() => null)) as {
+      wallets?: unknown;
+      error?: unknown;
+    } | null;
+    const apiError =
+      typeof data?.error === "string" && data.error.trim().length > 0
+        ? data.error
+        : null;
+
+    if (apiError) {
+      throw new Error(apiError);
+    }
+
+    const walletCount = Array.isArray(data?.wallets) ? data.wallets.length : null;
+    await refetch();
+    return walletCount;
+  }, [getAccessToken, refetch]);
+
+  const waitForLinkedWalletSync = useCallback(
+    async (previousCount: number) => {
+      let latestCount: number | null = null;
+      let lastError: unknown = null;
+
+      for (let attempt = 0; attempt < 6; attempt += 1) {
+        try {
+          latestCount = await syncLinkedWalletsFromPrivy();
+          if (typeof latestCount === "number" && latestCount > previousCount) {
+            return { didLinkWallet: true, walletCount: latestCount };
+          }
+        } catch (nextError) {
+          lastError = nextError;
+        }
+
+        if (attempt < 5) {
+          await wait(1_000);
+        }
+      }
+
+      if (lastError) {
+        throw lastError;
+      }
+
+      return { didLinkWallet: false, walletCount: latestCount };
+    },
+    [syncLinkedWalletsFromPrivy],
+  );
+
+  useEffect(() => {
+    if (!pendingWalletLink) {
+      return;
+    }
+
+    if (isPrivyModalOpen) {
+      if (!walletLinkModalOpened) {
+        setWalletLinkModalOpened(true);
+      }
+      return;
+    }
+
+    if (!walletLinkModalOpened) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const result = await waitForLinkedWalletSync(walletCountBeforeLink);
+        if (cancelled) {
+          return;
+        }
+
+        setStatus(
+          result.didLinkWallet
+            ? "Wallet linked successfully."
+            : "No new wallet was linked.",
+        );
+        setError(null);
+        finishPendingPromise(result);
+      } catch (nextError) {
+        if (cancelled) {
+          return;
+        }
+
+        const message =
+          nextError instanceof Error
+            ? nextError.message
+            : "Failed to sync linked wallets";
+        setError(message);
+        setStatus(null);
+        finishPendingPromise(null, new Error(message));
+      } finally {
+        if (!cancelled) {
+          setIsLinking(false);
+          setPendingWalletLink(false);
+          setWalletLinkModalOpened(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    finishPendingPromise,
+    isPrivyModalOpen,
+    pendingWalletLink,
+    waitForLinkedWalletSync,
+    walletCountBeforeLink,
+    walletLinkModalOpened,
+  ]);
+
+  useEffect(() => {
+    if (!pendingWalletLink || walletLinkModalOpened) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      const message =
+        "Wallet link modal did not open. Allow wallet popups and try again.";
+      setPendingWalletLink(false);
+      setIsLinking(false);
+      setStatus(null);
+      setError(message);
+      finishPendingPromise(null, new Error(message));
+    }, 8_000);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [finishPendingPromise, pendingWalletLink, walletLinkModalOpened]);
 
   const linkCurrentWallet = useCallback(async () => {
     if (!authenticated) {
@@ -220,128 +210,49 @@ export function useSiweWalletLink() {
       throw new Error("Login required");
     }
 
-    debugSiwe("linkCurrentWallet:start", {
-      href: typeof window !== "undefined" ? window.location.href : null,
+    if (pendingPromiseRef.current) {
+      throw new Error("Wallet linking is already in progress");
+    }
+
+    setError(null);
+    setStatus("Choose a wallet in Privy to link it.");
+    setWalletCountBeforeLink(wallets.length);
+    setPendingWalletLink(true);
+    setWalletLinkModalOpened(false);
+    setIsLinking(true);
+
+    const promise = new Promise<{
+      didLinkWallet: boolean;
+      walletCount: number | null;
+    }>((resolve, reject) => {
+      pendingPromiseRef.current = {
+        resolve,
+        reject,
+      };
     });
 
-    setIsLinking(true);
-    setError(null);
-    setStatus(null);
-
     try {
-      const { address, wallet } = await requireWallet();
-      debugSiwe("wallet:resolved", {
-        address,
-        chainId: wallet.chainId,
-        walletClientType: wallet.walletClientType,
-        connectorType: wallet.connectorType,
+      linkWallet({
+        walletChainType: getPrivyWalletChainType(),
+        walletList: getPrivyWalletList(),
       });
-
-      const walletClientType = (wallet.walletClientType ?? "").toLowerCase();
-      const connectorType = (wallet.connectorType ?? "").toLowerCase();
-      if (walletClientType.startsWith("privy") || connectorType === "embedded") {
-        throw new Error(
-          "Embedded Privy wallets are disabled. Connect an external wallet (MetaMask, Rainbow, etc.) to continue.",
-        );
-      }
-
-      const origin = getCurrentSiweOrigin();
-      debugSiwe("origin:resolved", origin);
-
-      const message = await generateSiweMessageForOrigin({
-        generateSiweMessage: generateSiweMessage as (input: unknown) => Promise<string>,
-        address,
-        chainId: CHAIN_ID,
-        origin,
-      });
-      debugSiwe("message:generated", {
-        domain: extractSiweDomain(message),
-        uri: extractSiweUri(message),
-        nonce: extractSiweNonce(message),
-        issuedAt: extractSiweIssuedAt(message),
-        chainId: CHAIN_ID,
-      });
-      assertSiweMessageMatchesCurrentOrigin(message, origin);
-
-      setStatus("Check your wallet — a signature request has been sent.");
-      debugSiwe("wallet:sign:requested");
-      const signature = await wallet.sign(message);
-      debugSiwe("wallet:sign:success", {
-        signatureLength: signature.length,
-        signaturePrefix: signature.slice(0, 12),
-      });
-
-      debugSiwe("privy:siwe-link:request", {
-        chainId: CHAIN_ID,
-        walletClientType: wallet.walletClientType,
-        connectorType: wallet.connectorType,
-      });
-      await linkWithSiwe({
-        signature,
-        message,
-        chainId: CHAIN_ID,
-        walletClientType: wallet.walletClientType,
-        connectorType: wallet.connectorType,
-      });
-      debugSiwe("privy:siwe-link:success");
-
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-      };
-      const token = await getAccessToken();
-      if (token) {
-        headers.Authorization = `Bearer ${token}`;
-      }
-
-      const response = await fetch("/api/user/link-wallet", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          address,
-          signature,
-          message,
-        }),
-      });
-
-      const data = (await response.json().catch(() => null)) as
-        | LinkWalletResponse
-        | null;
-      debugSiwe("backend:link-wallet:response", {
-        status: response.status,
-        ok: response.ok,
-        body: data,
-      });
-      const apiError =
-        typeof data?.error === "string" && data.error.trim().length > 0
-          ? data.error
-          : null;
-
-      if (!response.ok) {
-        throw new Error(apiError ?? `Request failed (${response.status})`);
-      }
-
-      setStatus("Wallet linked successfully.");
-      return {
-        address,
-        wallets: Array.isArray(data?.wallets) ? data.wallets : [],
-      };
-    } catch (error) {
-      const message = mapSiweLinkError(error);
-      debugSiweError("linkCurrentWallet:error", error);
-      setError(message);
-      setStatus(null);
-      throw new Error(message);
-    } finally {
+    } catch (nextError) {
       setIsLinking(false);
+      setPendingWalletLink(false);
+      setWalletLinkModalOpened(false);
+      setStatus(null);
+
+      const message =
+        nextError instanceof Error
+          ? nextError.message
+          : "Failed to open wallet link flow";
+      setError(message);
+      finishPendingPromise(null, new Error(message));
+      throw new Error(message);
     }
-  }, [
-    authenticated,
-    generateSiweMessage,
-    getAccessToken,
-    linkWithSiwe,
-    login,
-    requireWallet,
-  ]);
+
+    return promise;
+  }, [authenticated, finishPendingPromise, linkWallet, login, wallets.length]);
 
   return {
     linkCurrentWallet,

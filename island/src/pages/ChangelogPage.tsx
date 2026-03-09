@@ -70,6 +70,12 @@ export default function ChangelogPage() {
             direct slot editor was removed so bungalow additions come only from
             the Bodega flow.
           </li>
+          <li>
+            Mobile signing now only offers wallets that are both linked to the
+            user and currently connected in Privy on that device, and claimed
+            reward totals stay aligned with the actual signed payout instead of
+            jumping to a misleading identity-wide total after confirmation.
+          </li>
         </ul>
       </article>
 

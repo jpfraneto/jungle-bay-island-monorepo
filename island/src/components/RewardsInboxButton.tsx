@@ -24,6 +24,7 @@ interface CachedClaimedPeriod {
   periodId: string;
   amountJbm: string;
   periodEndMs: number;
+  payoutWallet: string | null;
 }
 
 function getBatchErrorMessage(error: unknown): string {
@@ -123,6 +124,10 @@ function readCachedClaimedPeriod(
       periodId: parsed.periodId,
       amountJbm: parsed.amountJbm,
       periodEndMs: parsed.periodEndMs,
+      payoutWallet:
+        typeof parsed.payoutWallet === "string" && parsed.payoutWallet.trim()
+          ? parsed.payoutWallet
+          : null,
     };
   } catch {
     window.localStorage.removeItem(key);
@@ -174,7 +179,12 @@ function getAmountJbmFromPayload(payload: ClaimSignaturePayload): string {
 
 export default function RewardsInboxButton() {
   const { authenticated, getAccessToken, login } = usePrivy();
-  const { publicClient, requireWallet, walletAddress } = usePrivyBaseWallet();
+  const {
+    publicClient,
+    requireWallet,
+    walletAddress,
+    wallets: connectedWallets,
+  } = usePrivyBaseWallet();
   const { wallets: linkedWalletRows, refetch: refetchLinkedWallets } =
     useUserWalletLinks(authenticated);
   const {
@@ -204,18 +214,45 @@ export default function RewardsInboxButton() {
     useState<CachedClaimedPeriod | null>(null);
 
   useEffect(() => {
-    setCachedClaimedPeriod(readCachedClaimedPeriod(walletAddress));
-  }, [walletAddress]);
-
-  useEffect(() => {
-    if (!walletAddress) return;
-    if (selectedPayoutWallet) return;
-    setSelectedPayoutWallet(walletAddress);
-  }, [selectedPayoutWallet, walletAddress]);
+    setCachedClaimedPeriod(readCachedClaimedPeriod(claimLookupWallet));
+  }, [claimLookupWallet]);
 
   const linkedWallets = linkedWalletRows.map((wallet) =>
     wallet.address.toLowerCase(),
   );
+  const connectedWalletAddresses = useMemo(
+    () => connectedWallets.map((wallet) => wallet.address.toLowerCase()),
+    [connectedWallets],
+  );
+  const signableWallets = useMemo(
+    () =>
+      linkedWalletRows
+        .map((wallet) => wallet.address)
+        .filter((address) =>
+          connectedWalletAddresses.includes(address.toLowerCase()),
+        ),
+    [connectedWalletAddresses, linkedWalletRows],
+  );
+
+  useEffect(() => {
+    if (selectedPayoutWallet) {
+      const selectedIsSignable = signableWallets.some(
+        (address) => address.toLowerCase() === selectedPayoutWallet.toLowerCase(),
+      );
+      if (selectedIsSignable) {
+        return;
+      }
+    }
+
+    if (signableWallets[0]) {
+      setSelectedPayoutWallet(signableWallets[0]);
+      return;
+    }
+
+    if (walletAddress) {
+      setSelectedPayoutWallet(walletAddress);
+    }
+  }, [selectedPayoutWallet, signableWallets, walletAddress]);
   const claimableItems = useMemo(
     () => claims?.items.filter((item) => item.can_claim) ?? [],
     [claims?.items],
@@ -249,6 +286,9 @@ export default function RewardsInboxButton() {
     : 0n;
   const effectiveClaimedTodayTotal =
     claimedTodayTotal > 0n ? claimedTodayTotal : optimisticClaimedTotal;
+  const displayedClaimedTodayTotal = cachedClaimIsActive
+    ? optimisticClaimedTotal
+    : effectiveClaimedTodayTotal;
   const hasClaimedToday = backendHasClaimedToday || cachedClaimIsActive;
   const effectivePeriodEndAt =
     claims?.period_end_at ??
@@ -257,11 +297,11 @@ export default function RewardsInboxButton() {
       : null);
 
   useEffect(() => {
-    if (!walletAddress || !cachedClaimedPeriod) return;
+    if (!claimLookupWallet || !cachedClaimedPeriod) return;
     if (cachedClaimIsActive) return;
-    writeCachedClaimedPeriod(walletAddress, null);
+    writeCachedClaimedPeriod(claimLookupWallet, null);
     setCachedClaimedPeriod(null);
-  }, [cachedClaimIsActive, cachedClaimedPeriod, walletAddress]);
+  }, [cachedClaimIsActive, cachedClaimedPeriod, claimLookupWallet]);
 
   const countdown = useMemo(
     () =>
@@ -274,7 +314,7 @@ export default function RewardsInboxButton() {
     ? "jungle bay memes claimed today"
     : "jungle bay memes to claim today";
   const summaryValue = hasClaimedToday
-    ? formatJbmCount(effectiveClaimedTodayTotal.toString())
+    ? formatJbmCount(displayedClaimedTodayTotal.toString())
     : !isLoading && claims
       ? formatJbmCount(claims.total_claimable_jbm)
       : "—";
@@ -282,6 +322,13 @@ export default function RewardsInboxButton() {
     selectedPayoutWallet || walletAddress || claims?.payout_wallet || "";
   const selectedClaimWalletLabel = selectedClaimWallet
     ? formatAddress(selectedClaimWallet)
+    : null;
+  const effectiveClaimWallet =
+    cachedClaimIsActive && cachedClaimedPeriod?.payoutWallet
+      ? cachedClaimedPeriod.payoutWallet
+      : claims?.payout_wallet || selectedClaimWallet || "";
+  const effectiveClaimWalletLabel = effectiveClaimWallet
+    ? formatAddress(effectiveClaimWallet)
     : null;
 
   useEffect(() => {
@@ -320,6 +367,15 @@ export default function RewardsInboxButton() {
 
     if (!linkedWallets.includes(payoutWallet.toLowerCase())) {
       setError("Link this wallet first to use it for transactions.");
+      return;
+    }
+
+    if (
+      !signableWallets.some(
+        (address) => address.toLowerCase() === payoutWallet.toLowerCase(),
+      )
+    ) {
+      setError("Connect this linked wallet in Privy on this device to sign with it here.");
       return;
     }
 
@@ -436,9 +492,16 @@ export default function RewardsInboxButton() {
           periodId,
           amountJbm: getAmountJbmFromPayload(signData),
           periodEndMs,
+          payoutWallet: claimedWallet,
         };
         setCachedClaimedPeriod(nextCachedClaim);
-        writeCachedClaimedPeriod(claimedWallet, nextCachedClaim);
+        writeCachedClaimedPeriod(claimLookupWallet, nextCachedClaim);
+        if (
+          claimLookupWallet &&
+          claimedWallet.toLowerCase() !== claimLookupWallet.toLowerCase()
+        ) {
+          writeCachedClaimedPeriod(claimedWallet, nextCachedClaim);
+        }
       }
 
       const confirmResponse = await fetch(
@@ -480,7 +543,7 @@ export default function RewardsInboxButton() {
       return;
     }
 
-    if (linkedWalletRows.length === 0) {
+    if (signableWallets.length === 0) {
       setShowWalletGate(true);
       setResumeAfterLink(true);
       return;
@@ -552,9 +615,11 @@ export default function RewardsInboxButton() {
               />
             ) : null}
             {!hasClaimedToday &&
-            (showWalletGate || linkedWalletRows.length === 0) ? (
+            (showWalletGate || signableWallets.length === 0) ? (
               <div className={styles.error}>
-                <strong>You need a linked wallet to continue.</strong>
+                <strong>
+                  Connect and link a wallet in this browser to sign the claim.
+                </strong>
                 <button
                   type="button"
                   className={styles.claimButton}
@@ -590,9 +655,12 @@ export default function RewardsInboxButton() {
                   <div className={styles.claimedNotice}>
                     <strong>
                       You already claimed{" "}
-                      {formatJbmCount(effectiveClaimedTodayTotal.toString())}{" "}
+                      {formatJbmCount(displayedClaimedTodayTotal.toString())}{" "}
                       jungle bay memes today.
                     </strong>
+                    {effectiveClaimWalletLabel ? (
+                      <span>Claimed with {effectiveClaimWalletLabel}</span>
+                    ) : null}
                     {countdown ? <span>Claim again in {countdown}</span> : null}
                   </div>
                 ) : (
@@ -646,7 +714,7 @@ export default function RewardsInboxButton() {
                 disabled={
                   isClaiming ||
                   hasClaimedToday ||
-                  linkedWalletRows.length === 0 ||
+                  signableWallets.length === 0 ||
                   (isLoading && !hasClaimedToday) ||
                   claimableItems.length === 0
                 }

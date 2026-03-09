@@ -760,6 +760,9 @@ claimsRoute.get("/claims/wallet/:address", async (c) => {
     .map((entry, index) => {
       const claimedToday = claimedStatuses[index] ?? false;
       const reservedJbm = getReservedJbm(entry.allocation.amount_wei);
+      const claimedThisEntry =
+        claimedToday &&
+        (reservedJbm > 0n || Boolean(entry.allocation.claimed_at));
       const periodRewardJbm =
         reservedJbm > 0n
           ? reservedJbm
@@ -780,8 +783,8 @@ claimsRoute.get("/claims/wallet/:address", async (c) => {
         claimable_jbm: claimableJbm.toString(),
         claimable_wei: (claimableJbm * WEI_PER_JBM).toString(),
         can_claim: Boolean(payoutWallet && claimableJbm > 0n && !claimedToday),
-        claimed_today: claimedToday,
-        last_claimed_at: claimedToday ? entry.allocation.claimed_at : null,
+        claimed_today: claimedThisEntry,
+        last_claimed_at: claimedThisEntry ? entry.allocation.claimed_at : null,
         claim_nonce: entry.allocation.claim_nonce,
         has_reservation: reservedJbm > 0n,
         deadline:
@@ -1403,6 +1406,7 @@ claimsRoute.post("/claims/:chain/:ca/confirm", requirePrivyAuth, async (c) => {
       claimant_wallet = ${payoutWallet}
     WHERE identity_key = ${identity.identity_key}
       AND period_id = ${periodId}
+      AND COALESCE(amount_wei, 0) > 0
     RETURNING claimed_at::text AS claimed_at
   `;
 

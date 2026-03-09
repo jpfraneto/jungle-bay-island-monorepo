@@ -14,7 +14,9 @@ import {
   CanvasTexture,
   DoubleSide,
   Group,
+  SRGBColorSpace,
   Texture,
+  TextureLoader,
 } from "three";
 import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
 import { useBungalowScene } from "../hooks/useBungalowScene";
@@ -206,64 +208,135 @@ function WallBeam({
   );
 }
 
+const ROOM_WALL_CENTER_Y = 3.3;
+const ROOM_WALL_HEIGHT = 6;
+const ROOM_APOTHEM = 7.4;
+const ROOM_CIRCUMRADIUS = ROOM_APOTHEM / Math.cos(Math.PI / 8);
+const ROOM_VERTEX_ANGLES = Array.from(
+  { length: 8 },
+  (_, index) => Math.PI / 8 - index * (Math.PI / 4),
+);
+const ROOM_VERTICES = ROOM_VERTEX_ANGLES.map((angle) => [
+  Number((Math.sin(angle) * ROOM_CIRCUMRADIUS).toFixed(3)),
+  ROOM_WALL_CENTER_Y,
+  Number((Math.cos(angle) * ROOM_CIRCUMRADIUS).toFixed(3)),
+] as [number, number, number]);
+const ROOM_WALL_EDGE_SPECS = [
+  { key: "front-left", start: 1, end: 2, color: "#d8c8a8" },
+  { key: "left", start: 2, end: 3, color: "#ddd0b3" },
+  { key: "back-left", start: 3, end: 4, color: "#e3d7bd" },
+  { key: "back", start: 4, end: 5, color: "#eadfc7" },
+  { key: "back-right", start: 5, end: 6, color: "#e3d7bd" },
+  { key: "right", start: 6, end: 7, color: "#ddd0b3" },
+  { key: "front-right", start: 7, end: 0, color: "#d8c8a8" },
+] as const;
+
+function getRoomWallSegments() {
+  return ROOM_WALL_EDGE_SPECS.map((segment) => {
+    const start = ROOM_VERTICES[segment.start];
+    const end = ROOM_VERTICES[segment.end];
+    const midpointX = Number(((start[0] + end[0]) / 2).toFixed(3));
+    const midpointZ = Number(((start[2] + end[2]) / 2).toFixed(3));
+    const width = Math.hypot(end[0] - start[0], end[2] - start[2]);
+
+    return {
+      ...segment,
+      position: [midpointX, ROOM_WALL_CENTER_Y, midpointZ] as [
+        number,
+        number,
+        number,
+      ],
+      rotation: [0, Math.atan2(-midpointX, -midpointZ), 0] as [
+        number,
+        number,
+        number,
+      ],
+      width: Number((width + 0.02).toFixed(3)),
+    };
+  });
+}
+
+function useArtworkTexture(
+  src: string | null | undefined,
+  fallbackSeed: string,
+): Texture | null {
+  const fallback = getFallbackTokenImage(fallbackSeed);
+  const [texture, setTexture] = useState<Texture | null>(null);
+  const textureRef = useRef<Texture | null>(null);
+
+  useEffect(() => {
+    textureRef.current = texture;
+  }, [texture]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let nextTexture: Texture | null = null;
+    const loader = new TextureLoader();
+    loader.setCrossOrigin("anonymous");
+
+    const loadTexture = (url: string) =>
+      new Promise<Texture>((resolve, reject) => {
+        loader.load(url, resolve, undefined, reject);
+      });
+
+    void (async () => {
+      const candidates =
+        src && src.trim() ? [src.trim(), fallback] : [fallback];
+
+      for (const candidate of candidates) {
+        try {
+          nextTexture = await loadTexture(candidate);
+          break;
+        } catch {
+          nextTexture = null;
+        }
+      }
+
+      if (!nextTexture) {
+        if (cancelled) {
+          return;
+        }
+        setTexture((current) => {
+          current?.dispose();
+          return null;
+        });
+        return;
+      }
+
+      nextTexture.colorSpace = SRGBColorSpace;
+      nextTexture.needsUpdate = true;
+
+      if (cancelled) {
+        nextTexture.dispose();
+        return;
+      }
+
+      setTexture((current) => {
+        if (current && current !== nextTexture) {
+          current.dispose();
+        }
+        return nextTexture;
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fallback, src]);
+
+  useEffect(() => {
+    return () => {
+      textureRef.current?.dispose();
+      textureRef.current = null;
+    };
+  }, []);
+
+  return texture;
+}
+
 function RoomShell({ floorTexture }: { floorTexture: Texture | null }) {
-  const wallSegments: Array<{
-    key: string;
-    position: [number, number, number];
-    rotation: [number, number, number];
-    width: number;
-    color: string;
-  }> = [
-    {
-      key: "back",
-      position: [0, 3.3, -6.25],
-      rotation: [0, 0, 0],
-      width: 8.8,
-      color: "#eadfc7",
-    },
-    {
-      key: "back-left",
-      position: [-5.75, 3.3, -5.02],
-      rotation: [0, Math.PI / 4, 0],
-      width: 5.1,
-      color: "#e3d7bd",
-    },
-    {
-      key: "left",
-      position: [-8.15, 3.3, 0],
-      rotation: [0, Math.PI / 2, 0],
-      width: 8.2,
-      color: "#ddd0b3",
-    },
-    {
-      key: "front-left",
-      position: [-5.75, 3.3, 5.02],
-      rotation: [0, (3 * Math.PI) / 4, 0],
-      width: 5.1,
-      color: "#d8c8a8",
-    },
-    {
-      key: "back-right",
-      position: [5.75, 3.3, -5.02],
-      rotation: [0, -Math.PI / 4, 0],
-      width: 5.1,
-      color: "#e3d7bd",
-    },
-    {
-      key: "right",
-      position: [8.15, 3.3, 0],
-      rotation: [0, -Math.PI / 2, 0],
-      width: 8.2,
-      color: "#ddd0b3",
-    },
-    {
-      key: "front-right",
-      position: [5.75, 3.3, 5.02],
-      rotation: [0, (-3 * Math.PI) / 4, 0],
-      width: 5.1,
-      color: "#d8c8a8",
-    },
-  ];
+  const wallSegments = getRoomWallSegments();
+  const cornerPosts = ROOM_VERTICES;
 
   return (
     <>
@@ -273,13 +346,13 @@ function RoomShell({ floorTexture }: { floorTexture: Texture | null }) {
           position={segment.position}
           rotation={segment.rotation}
         >
-          <planeGeometry args={[segment.width, 6]} />
-        <meshLambertMaterial color={segment.color} side={DoubleSide} />
+          <planeGeometry args={[segment.width, ROOM_WALL_HEIGHT]} />
+          <meshLambertMaterial color={segment.color} side={DoubleSide} />
         </mesh>
       ))}
 
       <mesh position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <circleGeometry args={[10.15, 8]} />
+        <circleGeometry args={[ROOM_CIRCUMRADIUS + 0.12, 8]} />
         <meshLambertMaterial
           color="#8B6914"
           map={floorTexture ?? undefined}
@@ -288,56 +361,46 @@ function RoomShell({ floorTexture }: { floorTexture: Texture | null }) {
       </mesh>
 
       <mesh position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <ringGeometry args={[9.75, 10.18, 8]} />
+        <ringGeometry args={[ROOM_CIRCUMRADIUS - 0.18, ROOM_CIRCUMRADIUS + 0.18, 8]} />
         <meshLambertMaterial color="#2a1709" side={DoubleSide} />
       </mesh>
 
       <mesh position={[0, 6, 0]} rotation={[Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[10.5, 8]} />
+        <circleGeometry args={[ROOM_CIRCUMRADIUS + 0.44, 8]} />
         <meshLambertMaterial color="#6b4c1a" side={DoubleSide} />
       </mesh>
 
       <mesh position={[0, 6.95, 0]}>
-        <cylinderGeometry args={[8.95, 10.8, 0.44, 8]} />
+        <cylinderGeometry
+          args={[ROOM_CIRCUMRADIUS + 0.72, ROOM_CIRCUMRADIUS + 1.8, 0.44, 8]}
+        />
         <meshLambertMaterial color="#220f05" />
       </mesh>
 
-      {[
-        [-4.15, 3.3, -9.1],
-        [4.15, 3.3, -9.1],
-        [-9.1, 3.3, -4.15],
-        [-9.1, 3.3, 4.15],
-        [9.1, 3.3, -4.15],
-        [9.1, 3.3, 4.15],
-        [-4.15, 3.3, 9.1],
-        [4.15, 3.3, 9.1],
-      ].map((position, index) => (
+      {cornerPosts.map((position, index) => (
         <WallBeam
           key={`corner-post-${index}`}
-          position={position as [number, number, number]}
+          position={position}
           args={[0.26, 6.64, 0.26]}
           color="#2b1408"
         />
       ))}
 
-      <WallBeam position={[0, 6.42, -6.52]} args={[8.92, 0.2, 0.2]} color="#2a1507" />
-      <WallBeam position={[0, 0.16, -6.52]} args={[8.92, 0.2, 0.2]} color="#7d5b26" />
-
-      {[
-        { key: "beam-left-back", position: [-5.75, 6.42, -5.02] as [number, number, number], rotation: [0, Math.PI / 4, 0] as [number, number, number] },
-        { key: "beam-left-side", position: [-8.15, 6.42, 0] as [number, number, number], rotation: [0, Math.PI / 2, 0] as [number, number, number] },
-        { key: "beam-left-front", position: [-5.75, 6.42, 5.02] as [number, number, number], rotation: [0, (3 * Math.PI) / 4, 0] as [number, number, number] },
-        { key: "beam-right-back", position: [5.75, 6.42, -5.02] as [number, number, number], rotation: [0, -Math.PI / 4, 0] as [number, number, number] },
-        { key: "beam-right-side", position: [8.15, 6.42, 0] as [number, number, number], rotation: [0, -Math.PI / 2, 0] as [number, number, number] },
-        { key: "beam-right-front", position: [5.75, 6.42, 5.02] as [number, number, number], rotation: [0, (-3 * Math.PI) / 4, 0] as [number, number, number] },
-      ].map((beam) => (
-        <WallBeam
-          key={beam.key}
-          position={beam.position}
-          args={[5.2, 0.14, 0.24]}
-          rotation={beam.rotation}
-          color="#2a1507"
-        />
+      {wallSegments.map((beam) => (
+        <group key={`${beam.key}-trim`}>
+          <WallBeam
+            position={[beam.position[0], 6.42, beam.position[2]]}
+            args={[beam.width + 0.08, 0.16, 0.24]}
+            rotation={beam.rotation}
+            color="#2a1507"
+          />
+          <WallBeam
+            position={[beam.position[0], 0.16, beam.position[2]]}
+            args={[beam.width + 0.08, 0.16, 0.24]}
+            rotation={beam.rotation}
+            color="#7d5b26"
+          />
+        </group>
       ))}
     </>
   );
@@ -375,38 +438,6 @@ function TokenImage({
   );
 }
 
-function PlaceholderImage({
-  title,
-  width,
-  height,
-}: {
-  title: string;
-  width: number;
-  height: number;
-}) {
-  return (
-    <div
-      style={{
-        width,
-        height,
-        borderRadius: 10,
-        display: "grid",
-        placeItems: "center",
-        background:
-          "linear-gradient(135deg, rgba(73, 124, 88, 0.8), rgba(49, 73, 55, 0.95))",
-        color: "#f4ead2",
-        textAlign: "center",
-        padding: 12,
-        boxSizing: "border-box",
-        fontSize: 12,
-        lineHeight: 1.3,
-      }}
-    >
-      {title}
-    </div>
-  );
-}
-
 function FloorIdentityRug({
   title,
   imageUrl,
@@ -417,13 +448,13 @@ function FloorIdentityRug({
   isMobile: boolean;
 }) {
   return (
-    <group position={[0, 0.06, 1.45]} rotation={[-Math.PI / 2, 0, 0]}>
+    <group position={[0, 0.06, 1.72]} rotation={[-Math.PI / 2, 0, 0]}>
       <mesh receiveShadow>
-        <planeGeometry args={[3.95, 3.05]} />
+        <planeGeometry args={[4.45, 3.45]} />
         <meshLambertMaterial color="#d6b874" side={DoubleSide} />
       </mesh>
       <mesh position={[0, 0, 0.02]} receiveShadow>
-        <planeGeometry args={[3.62, 2.72]} />
+        <planeGeometry args={[4.08, 3.08]} />
         <meshLambertMaterial color="#2c190a" side={DoubleSide} />
       </mesh>
       <Html
@@ -457,7 +488,7 @@ function FloorIdentityRug({
         </div>
       </Html>
       <Text
-        position={[0, -1.72, 0.04]}
+        position={[0, -1.98, 0.04]}
         fontSize={0.28}
         color="#f8efd7"
         anchorX="center"
@@ -481,7 +512,7 @@ function CommunityWallDisplay({
   useCursor(hovered, "pointer", "auto");
 
   return (
-    <group position={[0, 3.1, -6.28]}>
+    <group position={[0, 3.1, -(ROOM_APOTHEM - 0.74)]}>
       <mesh
         onClick={(event) => {
           event.stopPropagation();
@@ -493,11 +524,11 @@ function CommunityWallDisplay({
         }}
         onPointerOut={() => setHovered(false)}
       >
-        <planeGeometry args={[5.25, 3.65]} />
+        <planeGeometry args={[5.55, 3.75]} />
         <meshLambertMaterial color={hovered ? "#6d4d1a" : "#573a14"} />
       </mesh>
       <mesh position={[0, 0, 0.02]}>
-        <planeGeometry args={[4.78, 3.18]} />
+        <planeGeometry args={[5.02, 3.3]} />
         <meshLambertMaterial color="#1f1811" opacity={0.88} transparent />
       </mesh>
       <Text
@@ -571,58 +602,57 @@ function Bench({ position }: { position: [number, number, number] }) {
   );
 }
 
-function ImageDecoration({ slot }: { slot: SlotConfig }) {
+function ImageDecoration({
+  slot,
+  onFocus,
+}: {
+  slot: SlotConfig;
+  onFocus: (slot: SlotConfig) => void;
+}) {
   const imageUrl = slot.decoration?.imageUrl;
   const title = slot.decoration?.name ?? "Image";
   const placementMeta = formatPlacementAttribution(slot.decoration);
+  const texture = useArtworkTexture(imageUrl, title);
+  const [hovered, setHovered] = useState(false);
+  useCursor(hovered, "pointer", "auto");
 
   return (
-    <group>
-      <mesh position={[0, 0, -0.05]}>
-        <boxGeometry args={[1.52, 1.52, 0.08]} />
-        <meshLambertMaterial color="#5c3d1e" />
+    <group
+      onClick={(event) => {
+        event.stopPropagation();
+        onFocus(slot);
+      }}
+      onPointerOver={(event) => {
+        event.stopPropagation();
+        setHovered(true);
+      }}
+      onPointerOut={() => setHovered(false)}
+      scale={hovered ? 1.03 : 1}
+    >
+      <mesh position={[0, 0, -0.055]} castShadow receiveShadow>
+        <boxGeometry args={[1.48, 1.48, 0.08]} />
+        <meshLambertMaterial color={hovered ? "#6b4723" : "#5c3d1e"} />
       </mesh>
-      <Html transform occlude zIndexRange={[6, 0]} position={[0, 0, 0.05]}>
-        <div
-          style={{
-            width: 118,
-            borderRadius: 10,
-            overflow: "hidden",
-            background: "rgba(10,20,10,0.92)",
-            border: "1px solid rgba(255,255,255,0.14)",
-            boxShadow: "0 18px 32px rgba(0,0,0,0.24)",
-          }}
+      <mesh position={[0, 0, -0.01]} castShadow receiveShadow>
+        <planeGeometry args={[1.26, 1.26]} />
+        {texture ? (
+          <meshBasicMaterial map={texture} toneMapped={false} />
+        ) : (
+          <meshLambertMaterial color="#d9ccb7" />
+        )}
+      </mesh>
+      {placementMeta ? (
+        <Text
+          position={[0, -0.95, 0.02]}
+          fontSize={0.08}
+          color={hovered ? "#f3dfb1" : "#dbc79c"}
+          anchorX="center"
+          anchorY="middle"
+          maxWidth={1.4}
         >
-          {imageUrl ? (
-            <TokenImage
-              src={imageUrl}
-              alt={title}
-              fallbackSeed={title}
-              style={{
-                width: "100%",
-                height: 118,
-                objectFit: "cover",
-                display: "block",
-              }}
-            />
-          ) : (
-            <PlaceholderImage title={title} width={118} height={118} />
-          )}
-          {placementMeta ? (
-            <div
-              style={{
-                padding: "8px 10px 10px",
-                borderTop: "1px solid rgba(255,255,255,0.08)",
-                fontSize: 10,
-                lineHeight: 1.4,
-                color: "rgba(255,255,255,0.62)",
-              }}
-            >
-              {placementMeta}
-            </div>
-          ) : null}
-        </div>
-      </Html>
+          {placementMeta}
+        </Text>
+      ) : null}
     </group>
   );
 }
@@ -866,9 +896,11 @@ function DecorationCube({ slot }: { slot: SlotConfig }) {
 function SlotObject({
   slot,
   isMobile,
+  onFocusArt,
 }: {
   slot: SlotConfig;
   isMobile: boolean;
+  onFocusArt: (slot: SlotConfig) => void;
 }) {
   const decorationType = slot.decoration?.type;
   const scaledPosition: [number, number, number] = [
@@ -880,7 +912,7 @@ function SlotObject({
   return (
     <group position={scaledPosition} rotation={slot.rotation}>
       {slot.filled && decorationType === "image" ? (
-        <ImageDecoration slot={slot} />
+        <ImageDecoration slot={slot} onFocus={onFocusArt} />
       ) : null}
       {slot.filled &&
       (decorationType === "website-link" ||
@@ -1331,6 +1363,136 @@ function WallActivityOverlay({
   );
 }
 
+function FocusedArtworkOverlay({
+  open,
+  slot,
+  isMobile,
+  onClose,
+}: {
+  open: boolean;
+  slot: SlotConfig | null;
+  isMobile: boolean;
+  onClose: () => void;
+}) {
+  if (!open || !slot?.decoration) {
+    return null;
+  }
+
+  const title = slot.decoration.name || "Artwork";
+  const placementMeta = formatPlacementAttribution(slot.decoration);
+
+  return (
+    <div
+      onClick={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+      style={{
+        position: "absolute",
+        inset: 0,
+        zIndex: 14,
+        display: "grid",
+        placeItems: "center",
+        padding: isMobile ? 16 : 24,
+        background: "rgba(5, 8, 6, 0.74)",
+        backdropFilter: "blur(10px)",
+      }}
+    >
+      <div
+        onClick={(event) => event.stopPropagation()}
+        style={{
+          width: "min(560px, 100%)",
+          display: "grid",
+          gap: 14,
+          padding: isMobile ? 16 : 20,
+          borderRadius: 24,
+          border: "1px solid rgba(233, 206, 141, 0.18)",
+          background:
+            "linear-gradient(180deg, rgba(31, 21, 12, 0.96), rgba(14, 11, 7, 0.98))",
+          boxShadow: "0 28px 80px rgba(0,0,0,0.42)",
+          color: "#f6ead1",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            gap: 12,
+          }}
+        >
+          <div style={{ display: "grid", gap: 6 }}>
+            <span
+              style={{
+                fontSize: 11,
+                letterSpacing: "0.14em",
+                textTransform: "uppercase",
+                color: "rgba(246,234,209,0.58)",
+              }}
+            >
+              Installed Piece
+            </span>
+            <h3 style={{ margin: 0, fontSize: isMobile ? 24 : 30 }}>{title}</h3>
+            {placementMeta ? (
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                  color: "rgba(246,234,209,0.72)",
+                }}
+              >
+                {placementMeta}
+              </p>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              minWidth: 40,
+              height: 40,
+              borderRadius: 999,
+              border: "1px solid rgba(255,255,255,0.14)",
+              background: "rgba(255,255,255,0.06)",
+              color: "#f6ead1",
+              cursor: "pointer",
+              font: "inherit",
+              fontSize: 20,
+            }}
+            aria-label="Close artwork preview"
+          >
+            ×
+          </button>
+        </div>
+
+        <div
+          style={{
+            borderRadius: 20,
+            overflow: "hidden",
+            border: "1px solid rgba(255,255,255,0.08)",
+            background: "rgba(255,255,255,0.03)",
+          }}
+        >
+          <TokenImage
+            src={slot.decoration.imageUrl}
+            alt={title}
+            fallbackSeed={title}
+            style={{
+              width: "100%",
+              maxHeight: isMobile ? 320 : 520,
+              objectFit: "contain",
+              display: "block",
+              background: "#120c07",
+            }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function RoomScene({
   scene,
   loading,
@@ -1339,6 +1501,7 @@ function RoomScene({
   title,
   imageUrl,
   onOpenWall,
+  onFocusArt,
 }: {
   scene: { slots: SlotConfig[] } | null;
   loading: boolean;
@@ -1347,6 +1510,7 @@ function RoomScene({
   title: string;
   imageUrl: string | null;
   onOpenWall: () => void;
+  onFocusArt: (slot: SlotConfig) => void;
 }) {
   const floorTexture = useFloorTexture();
 
@@ -1389,16 +1553,16 @@ function RoomScene({
       <CommunityWallDisplay title={title} onOpen={onOpenWall} />
       <Bench position={[-5.8, 0, 5.1]} />
       <Bench position={[5.8, 0, 5.1]} />
-      <mesh position={[-3.9, 3.4, 6.05]}>
+      <mesh position={[-4.18, 3.4, 6.36]}>
         <cylinderGeometry args={[0.15, 0.2, 6, 8]} />
         <meshLambertMaterial color="#5c3d1e" />
       </mesh>
-      <mesh position={[3.9, 3.4, 6.05]}>
+      <mesh position={[4.18, 3.4, 6.36]}>
         <cylinderGeometry args={[0.15, 0.2, 6, 8]} />
         <meshLambertMaterial color="#5c3d1e" />
       </mesh>
-      <Planter position={[-7.25, 0, 3.8]} />
-      <Planter position={[7.25, 0, 3.8]} />
+      <Planter position={[-7.05, 0, 3.75]} />
+      <Planter position={[7.05, 0, 3.75]} />
 
       {error ? <SceneOverlay label={`Room failed to load: ${error}`} /> : null}
       {!loading && !error && !scene ? (
@@ -1411,6 +1575,7 @@ function RoomScene({
               key={slot.slotId}
               slot={slot}
               isMobile={isMobile}
+              onFocusArt={onFocusArt}
             />
           ))
         : null}
@@ -1543,6 +1708,7 @@ export default function BungalowScene({
   const [wallError, setWallError] = useState<string | null>(null);
   const [wallDraft, setWallDraft] = useState("");
   const [wallPosting, setWallPosting] = useState(false);
+  const [focusedArtSlot, setFocusedArtSlot] = useState<SlotConfig | null>(null);
   const canPlaceBodegaItems = true;
   const roomImageUrl = imageUrl || getTokenImageUrl(null, ca, symbol ?? title);
 
@@ -1793,6 +1959,7 @@ export default function BungalowScene({
             <button
               type="button"
               onClick={() => {
+                setFocusedArtSlot(null);
                 setSelectedBodegaSlotId(null);
                 setShowBodegaModal(true);
               }}
@@ -1830,7 +1997,11 @@ export default function BungalowScene({
               isMobile={isMobile}
               title={title}
               imageUrl={roomImageUrl}
-              onOpenWall={() => setWallOpen(true)}
+              onOpenWall={() => {
+                setFocusedArtSlot(null);
+                setWallOpen(true);
+              }}
+              onFocusArt={setFocusedArtSlot}
             />
           </Suspense>
         </Canvas>
@@ -1852,6 +2023,12 @@ export default function BungalowScene({
           posting={wallPosting}
           authenticated={authenticated}
           onLogin={() => login()}
+        />
+        <FocusedArtworkOverlay
+          open={focusedArtSlot !== null}
+          slot={focusedArtSlot}
+          isMobile={isMobile}
+          onClose={() => setFocusedArtSlot(null)}
         />
 
         <div

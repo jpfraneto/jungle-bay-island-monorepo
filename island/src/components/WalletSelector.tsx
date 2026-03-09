@@ -1,7 +1,11 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
 import { useUserWalletLinks } from "../hooks/useUserWalletLinks";
+import {
+  getPrivyWalletChainType,
+  getPrivyWalletList,
+} from "../utils/privyWalletOptions";
 import styles from "../styles/wallet-selector.module.css";
 
 interface WalletSelectorProps {
@@ -29,7 +33,11 @@ export default function WalletSelector({
   addWalletError = null,
 }: WalletSelectorProps) {
   const { authenticated, connectWallet, login } = usePrivy();
-  const { walletAddress, setActiveWallet } = usePrivyBaseWallet();
+  const {
+    walletAddress,
+    setActiveWallet,
+    wallets: connectedWallets,
+  } = usePrivyBaseWallet();
   const {
     wallets: linkedWalletRows,
     isLoading,
@@ -41,7 +49,18 @@ export default function WalletSelector({
     [linkedWalletRows],
   );
 
-  const options = linkedWallets;
+  const connectedWalletAddresses = useMemo(
+    () =>
+      new Set(connectedWallets.map((wallet) => wallet.address.toLowerCase())),
+    [connectedWallets],
+  );
+  const options = useMemo(
+    () =>
+      linkedWallets.filter((address) =>
+        connectedWalletAddresses.has(address.toLowerCase()),
+      ),
+    [connectedWalletAddresses, linkedWallets],
+  );
 
   const activeWalletAddress = walletAddress ?? "";
   const preferredWalletAddress = value?.trim() || "";
@@ -55,13 +74,13 @@ export default function WalletSelector({
 
   const activeWalletLinked =
     Boolean(activeWalletAddress) &&
-    linkedWallets.some(
+    options.some(
       (linkedWallet) =>
         linkedWallet.toLowerCase() === activeWalletAddress.toLowerCase(),
     );
   const displayedWalletLinked =
     Boolean(displayedWalletAddress) &&
-    linkedWallets.some(
+    options.some(
       (linkedWallet) =>
         linkedWallet.toLowerCase() === displayedWalletAddress.toLowerCase(),
     );
@@ -69,7 +88,20 @@ export default function WalletSelector({
     Boolean(activeWalletAddress) &&
     !activeWalletLinked &&
     !displayedWalletLinked;
+  const hasUnavailableLinkedWallets = linkedWallets.length > options.length;
   const showSelector = options.length > 1;
+
+  useEffect(() => {
+    if (!authenticated) return;
+    if (!selectorValue) return;
+
+    try {
+      setActiveWallet(selectorValue);
+      onSelect(selectorValue);
+    } catch {
+      // Keep the selector stable while Privy catches up.
+    }
+  }, [authenticated, onSelect, selectorValue, setActiveWallet]);
 
   if (!authenticated) {
     return (
@@ -97,7 +129,12 @@ export default function WalletSelector({
           <button
             type="button"
             className={styles.connectButton}
-            onClick={() => connectWallet({ walletChainType: "ethereum-only" })}
+            onClick={() =>
+              connectWallet({
+                walletChainType: getPrivyWalletChainType(),
+                walletList: getPrivyWalletList(),
+              })
+            }
           >
             Connect wallet
           </button>
@@ -149,6 +186,11 @@ export default function WalletSelector({
       )}
 
       {loadError ? <p className={styles.error}>{loadError}</p> : null}
+      {hasUnavailableLinkedWallets ? (
+        <p className={styles.warning}>
+          Only wallets currently connected in Privy can sign here.
+        </p>
+      ) : null}
       {activeWalletNotLinked ? (
         <div className={styles.actionRow}>
           <p className={styles.warning}>

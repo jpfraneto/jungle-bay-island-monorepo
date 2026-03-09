@@ -125,7 +125,11 @@ export default function WallItem({ item }: WallItemProps) {
             className={styles.walletLink}
             onClick={() => navigate(`/address/${item.placed_by}`)}
           >
-            {formatAddress(item.placed_by)}
+            {item.placed_by_username
+              ? item.placed_by_username.startsWith("@")
+                ? item.placed_by_username
+                : `@${item.placed_by_username.replace(/^@+/, "")}`
+              : formatAddress(item.placed_by)}
           </button>
           <span className={styles.separator}>-</span>
           <span>{formatHeat(item.placed_by_heat_degrees)}</span>

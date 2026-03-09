@@ -1878,106 +1878,94 @@ export default function BungalowScene({
           border: "1px solid rgba(255,255,255,0.08)",
         }}
       >
-        <button
-          type="button"
-          onClick={() => {
-            const canGoBack =
-              typeof window !== "undefined" && window.history.length > 1;
-            if (canGoBack) {
-              navigate(-1);
-              return;
-            }
-            navigate("/");
-          }}
-          style={{
-            position: "absolute",
-            top: 12,
-            left: 12,
-            background: "rgba(0,0,0,0.6)",
-            color: "white",
-            border: "1px solid rgba(255,255,255,0.2)",
-            borderRadius: 20,
-            padding: "6px 14px",
-            fontSize: 13,
-            cursor: "pointer",
-            zIndex: 10,
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-          }}
-        >
-          ← Island
-        </button>
-
         <div
           style={{
             position: "absolute",
             left: 12,
             right: 12,
-            top: 56,
+            top: 12,
             zIndex: 2,
             display: "flex",
-            flexDirection: isMobile ? "column" : "row",
             justifyContent: "space-between",
-            alignItems: isMobile ? "stretch" : "flex-start",
+            alignItems: "center",
             gap: 10,
-            pointerEvents: "none",
           }}
         >
-          <div
+          <button
+            type="button"
+            onClick={() => {
+              const canGoBack =
+                typeof window !== "undefined" && window.history.length > 1;
+              if (canGoBack) {
+                navigate(-1);
+                return;
+              }
+              navigate("/");
+            }}
             style={{
-              pointerEvents: "auto",
-              padding: "10px 12px",
-              borderRadius: 14,
-              border: "1px solid rgba(255,255,255,0.1)",
-              background: "rgba(10,16,10,0.6)",
-              backdropFilter: "blur(12px)",
-              color: "#f7efd6",
-              maxWidth: isMobile ? "100%" : 320,
+              background: "rgba(0,0,0,0.6)",
+              color: "white",
+              border: "1px solid rgba(255,255,255,0.2)",
+              borderRadius: 20,
+              padding: "6px 14px",
+              fontSize: 13,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
             }}
           >
-            <strong
-              style={{
-                display: "block",
-                marginTop: 5,
-                fontSize: 18,
-                lineHeight: 1.2,
-              }}
-            >
-              {title}
-            </strong>
-          </div>
+            ← Island
+          </button>
 
-          <div
+          <button
+            type="button"
+            onClick={() => {
+              setFocusedArtSlot(null);
+              setSelectedBodegaSlotId(null);
+              setShowBodegaModal(true);
+            }}
             style={{
-              display: "grid",
-              gap: 8,
-              pointerEvents: "auto",
-              justifyItems: isMobile ? "stretch" : "end",
+              minHeight: 42,
+              padding: "0 14px",
+              borderRadius: 999,
+              border: "1px solid rgba(255,255,255,0.14)",
+              background: "rgba(16, 31, 19, 0.86)",
+              color: "#f7efd6",
+              cursor: "pointer",
+              font: "inherit",
+              fontWeight: 600,
             }}
           >
-            <button
-              type="button"
-              onClick={() => {
-                setFocusedArtSlot(null);
-                setSelectedBodegaSlotId(null);
-                setShowBodegaModal(true);
-              }}
-              style={{
-                minHeight: 42,
-                padding: "0 14px",
-                borderRadius: 999,
-                border: "1px solid rgba(255,255,255,0.14)",
-                background: "rgba(16, 31, 19, 0.86)",
-                color: "#f7efd6",
-                cursor: "pointer",
-                font: "inherit",
-                fontWeight: 600,
-              }}
-            >
-              Shop Bodega
-            </button>
-          </div>
+            Shop Bodega
+          </button>
+        </div>
+
+        <div
+          style={{
+            position: "absolute",
+            top: 62,
+            left: 12,
+            zIndex: 2,
+            padding: "10px 12px",
+            borderRadius: 14,
+            border: "1px solid rgba(255,255,255,0.1)",
+            background: "rgba(10,16,10,0.6)",
+            backdropFilter: "blur(12px)",
+            color: "#f7efd6",
+            maxWidth: isMobile ? "calc(100% - 24px)" : 320,
+          }}
+        >
+          <strong
+            style={{
+              display: "block",
+              marginTop: 5,
+              fontSize: 18,
+              lineHeight: 1.2,
+            }}
+          >
+            {title}
+          </strong>
         </div>
 
         <Canvas

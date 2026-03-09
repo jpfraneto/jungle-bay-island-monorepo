@@ -214,19 +214,19 @@ function BungalowLoadingState({
   imageUrl,
   progress,
   status,
-  embedded = false,
+  overlay = false,
 }: {
   name: string;
   imageUrl?: string;
   progress: number;
   status: string;
-  embedded?: boolean;
+  overlay?: boolean;
 }) {
   const panel = (
     <div
       style={{
         width: "100%",
-        minHeight: embedded ? "100%" : "calc(100vh - 36px)",
+        minHeight: "calc(100vh - 36px)",
         display: "grid",
         alignContent: "center",
         justifyItems: "center",
@@ -277,15 +277,17 @@ function BungalowLoadingState({
     </div>
   );
 
-  if (embedded) {
+  if (overlay) {
     return (
       <div
         style={{
-          position: "absolute",
+          position: "fixed",
           inset: 0,
-          zIndex: 8,
-          background: "rgba(6, 10, 6, 0.94)",
-          backdropFilter: "blur(6px)",
+          zIndex: 30,
+          padding: 18,
+          background:
+            "radial-gradient(circle at 48% 26%, rgba(39, 92, 60, 0.24), rgba(8, 18, 12, 0.96) 60%)",
+          backdropFilter: "blur(8px)",
         }}
       >
         {panel}
@@ -349,6 +351,11 @@ export default function BungalowPage() {
   const loadingName = compactLoadingLabel(
     routeIdentifier ?? bungalow?.canonical_project?.symbol ?? bungalow?.symbol ?? ca,
   );
+  const loadingImageUrl = getTokenImageUrl(
+    bungalow?.image_url ?? null,
+    ca || routeCa || routeIdentifier || loadingName,
+    bungalow?.canonical_project?.symbol ?? bungalow?.symbol ?? loadingName,
+  );
 
   useEffect(() => {
     let active = true;
@@ -393,7 +400,7 @@ export default function BungalowPage() {
     return (
       <BungalowLoadingState
         name={loadingName}
-        imageUrl={bungalow?.image_url ?? undefined}
+        imageUrl={loadingImageUrl}
         progress={loadingProgress}
         status={loadingStatus}
       />
@@ -420,7 +427,7 @@ export default function BungalowPage() {
     return (
       <BungalowLoadingState
         name={loadingName}
-        imageUrl={bungalow?.image_url ?? undefined}
+        imageUrl={loadingImageUrl}
         progress={loadingProgress}
         status={loadingStatus}
       />
@@ -522,7 +529,7 @@ export default function BungalowPage() {
                 imageUrl={headerImage}
                 progress={0.96}
                 status="Loading bungalow scene"
-                embedded
+                overlay
               />
             ) : null}
           </div>

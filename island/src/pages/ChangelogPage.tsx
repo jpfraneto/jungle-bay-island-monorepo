@@ -76,6 +76,12 @@ export default function ChangelogPage() {
             reward totals stay aligned with the actual signed payout instead of
             jumping to a misleading identity-wide total after confirmation.
           </li>
+          <li>
+            Bungalow entry now holds one consistent full-page loading state
+            from island click through room-ready, and the in-room HUD was
+            simplified so primary navigation and Bodega access live on one top
+            row.
+          </li>
         </ul>
       </article>
 

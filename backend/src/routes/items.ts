@@ -37,6 +37,7 @@ interface BungalowItemRow {
     | "game";
   content: unknown;
   placed_by: string;
+  placed_by_username: string | null;
   placed_by_heat_degrees: string | null;
   tx_hash: string;
   jbm_amount: string;
@@ -354,6 +355,7 @@ itemsRoute.get("/bungalow/:chain/:ca/items", async (c) => {
         bi.item_type,
         bi.content,
         bi.placed_by,
+        COALESCE(u_a.x_username, wfp_a.username) AS placed_by_username,
         thh.heat_degrees::text AS placed_by_heat_degrees,
         bi.tx_hash,
         bi.jbm_amount::text AS jbm_amount,
@@ -365,6 +367,15 @@ itemsRoute.get("/bungalow/:chain/:ca/items", async (c) => {
       LEFT JOIN "${CONFIG.SCHEMA}".token_holder_heat thh
         ON thh.token_address = bi.token_address
         AND thh.wallet = bi.placed_by
+      LEFT JOIN "${CONFIG.SCHEMA}".wallet_farcaster_profiles wfp_a
+        ON LOWER(wfp_a.wallet) = LOWER(bi.placed_by)
+      LEFT JOIN LATERAL (
+        SELECT u.x_username
+        FROM "${CONFIG.SCHEMA}".user_wallets uw
+        JOIN "${CONFIG.SCHEMA}".users u ON u.privy_user_id = uw.privy_user_id
+        WHERE LOWER(uw.address) = LOWER(bi.placed_by)
+        LIMIT 1
+      ) u_a ON TRUE
       WHERE ${legacyFilter.clause}
         AND COALESCE(bi.active, TRUE) = TRUE`,
       legacyFilter.params,
@@ -377,6 +388,7 @@ itemsRoute.get("/bungalow/:chain/:ca/items", async (c) => {
         bc.asset_type AS item_type,
         bc.content,
         bi.installed_by_wallet AS placed_by,
+        COALESCE(u_a.x_username, wfp_a.username) AS placed_by_username,
         thh.heat_degrees::text AS placed_by_heat_degrees,
         bi.tx_hash,
         bi.jbm_amount::text AS jbm_amount,
@@ -390,6 +402,15 @@ itemsRoute.get("/bungalow/:chain/:ca/items", async (c) => {
       LEFT JOIN "${CONFIG.SCHEMA}".token_holder_heat thh
         ON thh.token_address = bi.installed_to_token_address
         AND thh.wallet = bi.installed_by_wallet
+      LEFT JOIN "${CONFIG.SCHEMA}".wallet_farcaster_profiles wfp_a
+        ON LOWER(wfp_a.wallet) = LOWER(bi.installed_by_wallet)
+      LEFT JOIN LATERAL (
+        SELECT u.x_username
+        FROM "${CONFIG.SCHEMA}".user_wallets uw
+        JOIN "${CONFIG.SCHEMA}".users u ON u.privy_user_id = uw.privy_user_id
+        WHERE LOWER(uw.address) = LOWER(bi.installed_by_wallet)
+        LIMIT 1
+      ) u_a ON TRUE
       WHERE ${installFilter.clause}
         AND bc.active = TRUE`,
       installFilter.params,

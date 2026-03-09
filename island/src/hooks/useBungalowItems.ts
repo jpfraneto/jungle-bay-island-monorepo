@@ -13,6 +13,7 @@ export interface BungalowItem {
     | "game";
   content: Record<string, unknown>;
   placed_by: string;
+  placed_by_username: string | null;
   placed_by_heat_degrees: number | null;
   tx_hash: string;
   jbm_amount: string;

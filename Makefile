@@ -48,45 +48,6 @@ git-upload:
 	fi; \
 	git push origin "$$branch"
 
-sync-railway-env:
-	@test -f "$(BACKEND_ENV_FILE)" || (echo "Missing $(BACKEND_ENV_FILE)" && exit 1)
-	@test -f "$(FRONTEND_ENV_FILE)" || (echo "Missing $(FRONTEND_ENV_FILE)" && exit 1)
-	@set -euo pipefail; \
-	get_var() { \
-		local key="$$1" file="$$2"; \
-		awk -F= -v key="$$key" '$$1 == key { sub(/^[^=]*=/, "", $$0); print $$0; exit }' "$$file"; \
-	}; \
-	set_required() { \
-		local key="$$1" file="$$2" value; \
-		value="$$(get_var "$$key" "$$file")"; \
-		if [ -z "$$value" ]; then \
-			echo "Missing required $$key in $$file"; \
-			exit 1; \
-		fi; \
-		printf '%s' "$$value" | railway variable set "$$key" --stdin -s "$(RAILWAY_SERVICE)" -e "$(RAILWAY_ENV)" --skip-deploys >/dev/null; \
-		echo "Synced $$key"; \
-	}; \
-	set_optional() { \
-		local key="$$1" file="$$2" value; \
-		value="$$(get_var "$$key" "$$file")"; \
-		if [ -n "$$value" ]; then \
-			printf '%s' "$$value" | railway variable set "$$key" --stdin -s "$(RAILWAY_SERVICE)" -e "$(RAILWAY_ENV)" --skip-deploys >/dev/null; \
-			echo "Synced $$key"; \
-		fi; \
-	}; \
-	for key in $(REQUIRED_BACKEND_VARS); do set_required "$$key" "$(BACKEND_ENV_FILE)"; done; \
-	for key in $(OPTIONAL_BACKEND_VARS); do set_optional "$$key" "$(BACKEND_ENV_FILE)"; done; \
-	for key in $(REQUIRED_FRONTEND_VARS); do set_required "$$key" "$(FRONTEND_ENV_FILE)"; done; \
-	jbm_value="$$(get_var JBM_TOKEN_ADDRESS "$(BACKEND_ENV_FILE)")"; \
-	if [ -z "$$jbm_value" ]; then \
-		jbm_value="$$(get_var VITE_JBM_ADDRESS "$(FRONTEND_ENV_FILE)")"; \
-	fi; \
-	if [ -z "$$jbm_value" ]; then \
-		echo "Missing JBM_TOKEN_ADDRESS in $(BACKEND_ENV_FILE) and VITE_JBM_ADDRESS in $(FRONTEND_ENV_FILE)"; \
-		exit 1; \
-	fi; \
-	printf '%s' "$$jbm_value" | railway variable set JBM_TOKEN_ADDRESS --stdin -s "$(RAILWAY_SERVICE)" -e "$(RAILWAY_ENV)" --skip-deploys >/dev/null; \
-	echo "Synced JBM_TOKEN_ADDRESS"
 
 railway-deploy:
 	@set -euo pipefail; \
@@ -112,4 +73,4 @@ railway-deploy:
 	echo "Timed out waiting for Railway deployment to become active."; \
 	exit 1
 
-deploy: check-tools build-frontend git-upload sync-railway-env railway-deploy
+deploy: check-tools build-frontend git-upload railway-deploy

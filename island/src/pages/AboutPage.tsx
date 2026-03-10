@@ -133,10 +133,9 @@ export default function AboutPage() {
           </li>
           <li>
             <strong>The Bodega closes the loop</strong> &mdash; builders can
-            publish an asset once through the full Bodega flow, or use{" "}
-            <strong>Quick Add</strong> from inside a bungalow as the shortcut
-            lane. Both create the same live inventory, and installs now matter
-            more than pure recency.
+            publish portable art and builds once through the full Bodega flow,
+            while bungalow walls now support their own paid local art and link
+            placements that stay inside that project&apos;s room.
           </li>
         </ol>
       </article>

@@ -254,7 +254,7 @@ export default function BodegaPage() {
     : "Choose any community bungalow on the island. You will pick the exact room spot there before paying.";
   const submitSelectionNote = publicDirectoryError
     ? `Bungalow list is unavailable right now: ${publicDirectoryError}`
-    : "Choose the bungalow this came from, or leave it blank. Quick Add inside a bungalow uses this same inventory automatically.";
+    : "Choose the bungalow this came from, or leave it blank. Local wall additions stay in their bungalow and do not publish here.";
 
   return (
     <section className={styles.page}>
@@ -263,9 +263,9 @@ export default function BodegaPage() {
           <p className={styles.kicker}>Island Bodega</p>
           <h1>The full browse and publish lane for items that can travel across the island.</h1>
           <p className={styles.summary}>
-            Quick Add inside a bungalow is the shortcut lane. The Bodega is the
-            full shelf: browse, publish, price, and install. Listings rise by
-            installs first, not just by recency.
+            The Bodega is for portable art and builds that can be installed
+            across many bungalows. Project-specific wall art and links now stay
+            local to the bungalow where they were added.
           </p>
           {effectivePreselectedBungalow ? (
             <div className={styles.targetChip}>

@@ -47,7 +47,17 @@ export default function BungalowNode({ bungalow, x, y, index }: BungalowNodeProp
       onMouseLeave={() => setIsHovered(false)}
       onFocus={() => setIsHovered(true)}
       onBlur={() => setIsHovered(false)}
-      onClick={() => navigate(bungalowPath)}
+      onClick={() =>
+        navigate(bungalowPath, {
+          state: {
+            preloadedBungalow: {
+              name: bungalow.name ?? null,
+              symbol: bungalow.symbol ?? null,
+              imageUrl: bungalow.image_url ?? null,
+            },
+          },
+        })
+      }
     >
       <span className={styles.glow} />
       <img

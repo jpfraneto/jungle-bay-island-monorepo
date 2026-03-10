@@ -6,6 +6,21 @@ import {
 } from "../utils/privyWalletOptions";
 import { useUserWalletLinks } from "./useUserWalletLinks";
 
+function asWalletAddress(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return /^0x[0-9a-fA-F]{40}$/.test(trimmed) ? trimmed : null;
+}
+
+export interface LinkedWalletResult {
+  didLinkWallet: boolean;
+  walletCount: number | null;
+  linkedAddress: string | null;
+}
+
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => {
     window.setTimeout(resolve, ms);
@@ -23,13 +38,16 @@ export function useSiweWalletLink() {
   const [pendingWalletLink, setPendingWalletLink] = useState(false);
   const [walletLinkModalOpened, setWalletLinkModalOpened] = useState(false);
   const [walletCountBeforeLink, setWalletCountBeforeLink] = useState(0);
+  const [linkedAddressesBeforeLink, setLinkedAddressesBeforeLink] = useState<
+    string[]
+  >([]);
   const pendingPromiseRef = useRef<{
-    resolve: (value: { didLinkWallet: boolean; walletCount: number | null }) => void;
+    resolve: (value: LinkedWalletResult) => void;
     reject: (reason?: unknown) => void;
   } | null>(null);
 
   const finishPendingPromise = useCallback(
-    (result: { didLinkWallet: boolean; walletCount: number | null } | null, failure?: unknown) => {
+    (result: LinkedWalletResult | null, failure?: unknown) => {
       const pending = pendingPromiseRef.current;
       pendingPromiseRef.current = null;
 
@@ -46,6 +64,7 @@ export function useSiweWalletLink() {
         result ?? {
           didLinkWallet: false,
           walletCount: null,
+          linkedAddress: null,
         },
       );
     },
@@ -85,21 +104,49 @@ export function useSiweWalletLink() {
       throw new Error(apiError);
     }
 
-    const walletCount = Array.isArray(data?.wallets) ? data.wallets.length : null;
+    const syncedWallets = Array.isArray(data?.wallets) ? data.wallets : [];
+    const linkedAddresses = syncedWallets
+      .map((wallet) =>
+        wallet && typeof wallet === "object"
+          ? asWalletAddress((wallet as { address?: unknown }).address)
+          : null,
+      )
+      .filter((address): address is string => Boolean(address));
+
     await refetch();
-    return walletCount;
+    return {
+      walletCount: linkedAddresses.length,
+      linkedAddresses,
+    };
   }, [getAccessToken, refetch]);
 
   const waitForLinkedWalletSync = useCallback(
-    async (previousCount: number) => {
+    async (previousCount: number, previousAddresses: string[]) => {
       let latestCount: number | null = null;
+      let latestLinkedAddress: string | null = null;
       let lastError: unknown = null;
+      const previousAddressSet = new Set(
+        previousAddresses.map((address) => address.toLowerCase()),
+      );
 
       for (let attempt = 0; attempt < 6; attempt += 1) {
         try {
-          latestCount = await syncLinkedWalletsFromPrivy();
-          if (typeof latestCount === "number" && latestCount > previousCount) {
-            return { didLinkWallet: true, walletCount: latestCount };
+          const syncResult = await syncLinkedWalletsFromPrivy();
+          latestCount = syncResult.walletCount;
+          latestLinkedAddress =
+            syncResult.linkedAddresses.find(
+              (address) => !previousAddressSet.has(address.toLowerCase()),
+            ) ?? null;
+
+          if (
+            (typeof latestCount === "number" && latestCount > previousCount) ||
+            latestLinkedAddress
+          ) {
+            return {
+              didLinkWallet: true,
+              walletCount: latestCount,
+              linkedAddress: latestLinkedAddress,
+            };
           }
         } catch (nextError) {
           lastError = nextError;
@@ -114,7 +161,11 @@ export function useSiweWalletLink() {
         throw lastError;
       }
 
-      return { didLinkWallet: false, walletCount: latestCount };
+      return {
+        didLinkWallet: false,
+        walletCount: latestCount,
+        linkedAddress: latestLinkedAddress,
+      };
     },
     [syncLinkedWalletsFromPrivy],
   );
@@ -139,7 +190,10 @@ export function useSiweWalletLink() {
 
     void (async () => {
       try {
-        const result = await waitForLinkedWalletSync(walletCountBeforeLink);
+        const result = await waitForLinkedWalletSync(
+          walletCountBeforeLink,
+          linkedAddressesBeforeLink,
+        );
         if (cancelled) {
           return;
         }
@@ -178,6 +232,7 @@ export function useSiweWalletLink() {
   }, [
     finishPendingPromise,
     isPrivyModalOpen,
+    linkedAddressesBeforeLink,
     pendingWalletLink,
     waitForLinkedWalletSync,
     walletCountBeforeLink,
@@ -217,14 +272,14 @@ export function useSiweWalletLink() {
     setError(null);
     setStatus("Choose a wallet in Privy to link it.");
     setWalletCountBeforeLink(wallets.length);
+    setLinkedAddressesBeforeLink(
+      wallets.map((wallet) => wallet.address.toLowerCase()),
+    );
     setPendingWalletLink(true);
     setWalletLinkModalOpened(false);
     setIsLinking(true);
 
-    const promise = new Promise<{
-      didLinkWallet: boolean;
-      walletCount: number | null;
-    }>((resolve, reject) => {
+    const promise = new Promise<LinkedWalletResult>((resolve, reject) => {
       pendingPromiseRef.current = {
         resolve,
         reject,

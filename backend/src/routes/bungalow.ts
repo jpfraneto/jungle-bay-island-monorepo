@@ -80,8 +80,10 @@ function persistActorIdentity(
   wallet: string,
   privyUserId: string,
   privyClaims: Record<string, unknown> | undefined,
+  clientTwitterUsername?: string | null,
 ): void {
-  const xUsername = privyClaims ? extractXUsernameFromClaims(privyClaims) : null;
+  const claimsUsername = privyClaims ? extractXUsernameFromClaims(privyClaims) : null;
+  const xUsername = clientTwitterUsername ?? claimsUsername;
   const walletKind: "privy_siwe" | "privy_siws" = normalizeAddress(wallet)
     ? "privy_siwe"
     : "privy_siws";

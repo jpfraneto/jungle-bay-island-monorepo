@@ -3,8 +3,6 @@ import { createPortal } from "react-dom";
 import { usePrivy } from "@privy-io/react-auth";
 import { useJBMTransfer } from "../hooks/useJBMTransfer";
 import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
-import { useSiweWalletLink } from "../hooks/useSiweWalletLink";
-import { useUserWalletLinks } from "../hooks/useUserWalletLinks";
 import type { DecorationConfig } from "../types/scene";
 import { formatJbmAmount } from "../utils/formatters";
 import {
@@ -12,7 +10,7 @@ import {
   getBodegaPreviewUrl,
   type BodegaCatalogItem,
 } from "../utils/bodega";
-import TransactionWalletSelector from "./TransactionWalletSelector";
+import WalletSelector, { type WalletSelectorState } from "./WalletSelector";
 
 interface BodegaPlacementModalProps {
   item: BodegaCatalogItem;
@@ -256,20 +254,19 @@ export default function BodegaPlacementModal({
 }: BodegaPlacementModalProps) {
   const { authenticated, getAccessToken, login } = usePrivy();
   const { walletAddress } = usePrivyBaseWallet();
-  const { wallets: linkedWalletRows, refetch: refetchLinkedWallets } =
-    useUserWalletLinks(authenticated);
-  const {
-    linkCurrentWallet,
-    isLinking: isLinkingWallet,
-    status: linkStatus,
-    error: linkError,
-  } = useSiweWalletLink();
   const { transfer, isTransferring } = useJBMTransfer();
 
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [showWalletGate, setShowWalletGate] = useState(false);
   const [selectedWallet, setSelectedWallet] = useState<string>("");
+  const [walletSelectorState, setWalletSelectorState] =
+    useState<WalletSelectorState>({
+      selectedWallet: null,
+      selectedWalletAvailable: false,
+      hasAvailableWallet: false,
+      availableWallets: [],
+      totalWallets: 0,
+    });
   const [confirmedPayment, setConfirmedPayment] =
     useState<ConfirmedPayment | null>(null);
   const [confirmedInstall, setConfirmedInstall] =
@@ -286,7 +283,6 @@ export default function BodegaPlacementModal({
 
     setStatus(null);
     setError(null);
-    setShowWalletGate(false);
     setSelectedWallet(recovered?.payment?.payer ?? walletAddress ?? "");
     setConfirmedPayment(recovered?.payment ?? null);
     setConfirmedInstall(recovered?.install ?? null);
@@ -327,23 +323,10 @@ export default function BodegaPlacementModal({
 
   const previewUrl = getBodegaPreviewUrl(item);
   const creatorLabel = formatCreatorLabel(item);
-  const linkedWallets = linkedWalletRows.map((wallet) =>
-    wallet.address.toLowerCase(),
-  );
   const canRetryWithoutPaying = Boolean(confirmedPayment);
   const canRetryPlacementOnly = Boolean(confirmedInstall);
   const isProcessing = Boolean(status) || isTransferring;
   const lockedPayer = confirmedPayment?.payer ?? null;
-
-  const handleLinkWallet = async () => {
-    try {
-      await linkCurrentWallet();
-      await refetchLinkedWallets();
-      setShowWalletGate(false);
-    } catch {
-      // Link hook exposes status/error feedback.
-    }
-  };
 
   const handlePlace = async () => {
     if (!authenticated) {
@@ -352,14 +335,11 @@ export default function BodegaPlacementModal({
     }
 
     const payoutWallet = selectedWallet || walletAddress;
-    if (!payoutWallet || linkedWalletRows.length === 0) {
-      setShowWalletGate(true);
-      setError("Link your wallet before placing this item.");
-      return;
-    }
-    if (!linkedWallets.includes(payoutWallet.toLowerCase())) {
-      setShowWalletGate(true);
-      setError("Link this wallet first to use it for transactions.");
+    if (
+      !confirmedPayment &&
+      (!payoutWallet || !walletSelectorState.selectedWalletAvailable)
+    ) {
+      setError("Choose a wallet that is available here or link a new one.");
       return;
     }
 
@@ -603,55 +583,16 @@ export default function BodegaPlacementModal({
             </span>
           </div>
         ) : (
-          <TransactionWalletSelector
+          <WalletSelector
             label="Sign with"
             value={selectedWallet}
             onSelect={(nextAddress) => {
               setSelectedWallet(nextAddress);
               setError(null);
-              setShowWalletGate(false);
             }}
-            onAddWallet={handleLinkWallet}
-            isAddingWallet={isLinkingWallet}
-            addWalletStatus={linkStatus}
-            addWalletError={linkError}
+            onStateChange={setWalletSelectorState}
           />
         )}
-
-        {showWalletGate ? (
-          <div
-            style={{
-              borderRadius: 10,
-              border: "1px solid rgba(255,255,255,0.08)",
-              background: "rgba(255,255,255,0.04)",
-              padding: "12px 14px",
-              display: "grid",
-              gap: 10,
-              fontSize: 12,
-            }}
-          >
-            <strong>You need a linked wallet to continue.</strong>
-            <button
-              type="button"
-              onClick={() => {
-                void handleLinkWallet();
-              }}
-              disabled={isLinkingWallet}
-              style={{
-                minHeight: 38,
-                border: 0,
-                borderRadius: 10,
-                background: "#2f6a2f",
-                color: "white",
-                cursor: "pointer",
-                font: "inherit",
-                fontWeight: 600,
-              }}
-            >
-              {isLinkingWallet ? "Linking..." : "Link wallet"}
-            </button>
-          </div>
-        ) : null}
 
         {status ? (
           <div style={{ color: "#9dd7a8", fontSize: 12 }}>{status}</div>

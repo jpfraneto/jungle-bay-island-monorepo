@@ -99,6 +99,11 @@ export default function BodegaInstallModal({
     navigate(`/bungalow/${selectedBungalow.token_address}?${params.toString()}`, {
       state: {
         pendingBodegaItem: item,
+        preloadedBungalow: {
+          name: selectedBungalow.name ?? null,
+          symbol: selectedBungalow.symbol ?? null,
+          imageUrl: selectedBungalow.image_url ?? null,
+        },
       },
     });
     onClose();

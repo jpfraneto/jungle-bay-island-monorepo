@@ -30,6 +30,13 @@ interface IslandMapProps {
   onOpenConstruction: () => void;
 }
 
+const OCEAN_FLOOR_COLOR = "#001a66";
+const OCEAN_SURFACE_COLOR = "#003FFF";
+const OCEAN_SCENE_COLOR = "#04164e";
+const LAGOON_SURFACE_COLOR = "#1d8fff";
+const LAGOON_EMISSIVE_COLOR = "#003ca8";
+const LAGOON_GLOW_COLOR = "#66b8ff";
+
 export interface RingPosition {
   x: number;
   z: number;
@@ -225,7 +232,7 @@ function TerrainLayers({ islandRadius }: { islandRadius: number }) {
         receiveShadow
       >
         <planeGeometry args={[400, 400]} />
-        <meshStandardMaterial color="#0a3a4a" roughness={0.8} />
+        <meshStandardMaterial color={OCEAN_FLOOR_COLOR} roughness={0.8} />
       </mesh>
 
       <mesh
@@ -236,7 +243,7 @@ function TerrainLayers({ islandRadius }: { islandRadius: number }) {
         <planeGeometry args={[400, 400]} />
         <meshStandardMaterial
           ref={oceanMaterialRef}
-          color="#0d5c6e"
+          color={OCEAN_SURFACE_COLOR}
           transparent
           opacity={0.82}
           roughness={0.1}
@@ -269,8 +276,8 @@ function TerrainLayers({ islandRadius }: { islandRadius: number }) {
       <mesh ref={lagoonRef} position={[0, 0.8, 0]} receiveShadow>
         <cylinderGeometry args={[lagoonInner, lagoonOuter, 1.4, 128]} />
         <meshStandardMaterial
-          color="#00c9b0"
-          emissive="#004433"
+          color={LAGOON_SURFACE_COLOR}
+          emissive={LAGOON_EMISSIVE_COLOR}
           emissiveIntensity={0.6}
           transparent
           opacity={0.92}
@@ -280,7 +287,7 @@ function TerrainLayers({ islandRadius }: { islandRadius: number }) {
       </mesh>
       <pointLight
         position={[0, 2.5, 0]}
-        color="#00ffcc"
+        color={LAGOON_GLOW_COLOR}
         intensity={3}
         distance={16}
       />
@@ -288,11 +295,11 @@ function TerrainLayers({ islandRadius }: { islandRadius: number }) {
       <Html position={[0, 2.5, 0]} center>
         <div
           style={{
-            color: "#00ffee",
+            color: "#8fd3ff",
             fontSize: "11px",
             letterSpacing: "0.15em",
             textTransform: "uppercase",
-            background: "rgba(0,20,20,0.6)",
+            background: "rgba(0, 24, 78, 0.6)",
             padding: "3px 8px",
             borderRadius: "4px",
             whiteSpace: "nowrap",
@@ -849,7 +856,7 @@ function IslandMap3D({
         overflow: "hidden",
         borderRadius: 24,
         background:
-          "radial-gradient(circle at 48% 38%, rgba(88, 190, 195, 0.24), transparent 28%), radial-gradient(circle at 50% 44%, rgba(59, 120, 72, 0.44), rgba(8, 18, 14, 0.96) 62%), linear-gradient(180deg, #0c2b2d 0%, #08140d 100%)",
+          "radial-gradient(circle at 48% 38%, rgba(72, 139, 255, 0.3), transparent 28%), radial-gradient(circle at 50% 44%, rgba(0, 63, 255, 0.34), rgba(4, 12, 48, 0.96) 62%), linear-gradient(180deg, #041b74 0%, #050b22 100%)",
         border: "1px solid rgba(255,255,255,0.08)",
       }}
     >
@@ -867,10 +874,10 @@ function IslandMap3D({
           resetView();
         }}
       >
-        <color attach="background" args={["#0c2222"]} />
+        <color attach="background" args={[OCEAN_SCENE_COLOR]} />
         <fog
           attach="fog"
-          args={["#0c2222", islandRadius * 1.1, islandRadius * 5]}
+          args={[OCEAN_SCENE_COLOR, islandRadius * 1.1, islandRadius * 5]}
         />
         <Suspense fallback={null}>
           <IslandScene
@@ -943,7 +950,7 @@ function IslandMapFallback({
         borderRadius: 24,
         overflow: "hidden",
         background:
-          "radial-gradient(circle at 50% 42%, rgba(76, 133, 87, 0.36), transparent 24%), radial-gradient(circle at 50% 44%, rgba(74, 185, 214, 0.18), transparent 16%), linear-gradient(180deg, #0c2b2d 0%, #08140d 100%)",
+          "radial-gradient(circle at 50% 42%, rgba(72, 139, 255, 0.24), transparent 24%), radial-gradient(circle at 50% 44%, rgba(0, 63, 255, 0.18), transparent 16%), linear-gradient(180deg, #041b74 0%, #050b22 100%)",
         border: "1px solid rgba(255,255,255,0.08)",
       }}
     >

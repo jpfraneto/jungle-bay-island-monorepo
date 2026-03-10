@@ -26,7 +26,7 @@ export default function WalletButton() {
 
   return (
     <button type="button" onClick={login} className={styles.connectButton}>
-      Connect
+      Login
     </button>
   );
 }

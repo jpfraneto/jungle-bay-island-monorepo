@@ -8,15 +8,54 @@ import {
   getUserWallets,
   getWalletTokenHeats,
   upsertBungalowSceneConfig,
+  upsertUser,
+  upsertUserWalletLinks,
 } from '../db/queries'
 import { requirePrivyAuth, requireWalletAuth } from '../middleware/auth'
 import { ApiError } from '../services/errors'
+import { getPrivyLinkedAccounts } from '../services/privyClaims'
 import type { AppEnv } from '../types'
+
+function extractXUsernameFromClaims(claims: Record<string, unknown> | undefined): string | null {
+  if (!claims) return null
+  const linkedAccounts = getPrivyLinkedAccounts(claims)
+  for (const account of linkedAccounts) {
+    const candidate = account as Record<string, unknown>
+    const type = typeof candidate.type === 'string' ? candidate.type : ''
+    if (type === 'twitter_oauth' || type === 'twitter') {
+      const raw =
+        typeof candidate.username === 'string'
+          ? candidate.username
+          : typeof candidate.screen_name === 'string'
+            ? candidate.screen_name
+            : ''
+      const clean = raw.trim().replace(/^@+/, '')
+      if (clean) return `@${clean}`
+    }
+  }
+  return null
+}
+
+function persistActorIdentity(
+  wallet: string,
+  privyUserId: string,
+  claims: Record<string, unknown> | undefined,
+): void {
+  const walletKind: 'privy_siwe' | 'privy_siws' = normalizeAddress(wallet)
+    ? 'privy_siwe'
+    : 'privy_siws'
+  void upsertUserWalletLinks(privyUserId, wallet, walletKind).catch(() => {})
+  const xUsername = extractXUsernameFromClaims(claims)
+  if (xUsername) {
+    void upsertUser(privyUserId, { x_username: xUsername }).catch(() => {})
+  }
+}
 
 type SlotType = 'wall-frame' | 'shelf' | 'portal' | 'floor' | 'link'
 type DecorationType = 'image' | 'portal' | 'furniture' | 'social-link' | 'website-link' | 'decoration'
 type SceneBungalowChain = 'base' | 'ethereum' | 'solana'
 type ScenePurchaseChain = 'base' | 'ethereum'
+type WallPlacementItemType = 'art' | 'link'
 
 interface DecorationConfig {
   type: DecorationType
@@ -48,6 +87,10 @@ interface SceneConfig {
 type WallSurface = 'back' | 'left' | 'right'
 
 const sceneRoute = new Hono<AppEnv>()
+const WALL_PLACEMENT_PRICES: Record<WallPlacementItemType, bigint> = {
+  art: 69_000n,
+  link: 111_000n,
+}
 
 const ASSET_CATALOG = [
   {
@@ -248,24 +291,65 @@ function getNextAutoSlotNumber(scene: SceneConfig, prefix: string): number {
 }
 
 function createAutoWallSlot(scene: SceneConfig): SlotConfig {
-  const surfaces: WallSurface[] = ['back', 'back', 'left', 'right', 'back', 'left', 'right']
-  const backXPositions = [-2.65, -1.65, -0.65, 0.4, 1.45, 2.45]
-  const sideZPositions = [-2.4, -1.4, -0.4, 0.6, 1.6, 2.6]
-  const yPositions = [1.35, 2.05, 2.75, 3.45]
-  const occupied = scene.slots.filter(
+  // All filled wall-type slots in the scene (includes both default and auto slots).
+  const wallSlots = scene.slots.filter(
     (slot) => slot.filled && slot.decoration && isWallDecorationType(slot.decoration.type),
-  ).length
-  const surface = surfaces[occupied % surfaces.length]
-  const surfaceIndex = Math.floor(occupied / surfaces.length)
-  const column = surfaceIndex % backXPositions.length
-  const row = Math.floor(surfaceIndex / backXPositions.length) % yPositions.length
-  const tilt = ((occupied % 5) - 2) * 0.04
+  )
+  const totalOccupied = wallSlots.length
+
+  // Rotation around Y identifies the wall:
+  //   back  → rotation[1] ≈ 0
+  //   left  → rotation[1] ≈ +π/2
+  //   right → rotation[1] ≈ -π/2
+  function wallSurfaceOf(slot: SlotConfig): WallSurface {
+    const ry = slot.rotation[1]
+    if (ry > 0.1) return 'left'
+    if (ry < -0.1) return 'right'
+    return 'back'
+  }
+
+  // Distribute new pieces with a 3-back / 2-left / 2-right cycle so the back
+  // wall fills up first, then the sides get used.
+  const surfaceOrder: WallSurface[] = ['back', 'back', 'left', 'right', 'back', 'left', 'right']
+  const surface = surfaceOrder[totalOccupied % surfaceOrder.length]
+
+  // Count how many pieces already sit on THIS surface — used to pick the next
+  // unique (column, row) pair so pieces never stack on the same spot.
+  const surfaceOccupied = wallSlots.filter((s) => wallSurfaceOf(s) === surface).length
+
+  // ── Back wall ──────────────────────────────────────────────────────────────
+  // Back wall face spans x ≈ ±3.064 (octagon apothem vertex).
+  // SlotObject scales stored XZ by 1.9, so max safe stored x = (3.064 - 0.74) / 1.9 ≈ 1.22.
+  // Four columns at ±0.9 / ±0.3 keeps every frame well clear of the corner posts.
+  const backXPositions = [-0.9, -0.3, 0.3, 0.9]
+
+  // ── Side walls ─────────────────────────────────────────────────────────────
+  // Left / right faces span z ≈ ±3.064.  Same frame-margin math → max stored |z| ≈ 1.22.
+  const sideZPositions = [-1.1, -0.4, 0.4, 1.1]
+
+  // ── Vertical ───────────────────────────────────────────────────────────────
+  // CommunityWallDisplay inner panel: y 1.45 – 4.75.
+  // Frame half-height 0.74; attribution label sits at y_centre – 0.95.
+  // Starting at 2.1 keeps the lowest label line (2.1 – 0.95 = 1.15) inside the panel.
+  const yPositions = [2.1, 2.9, 3.65]
+
+  // ── Depth relative to wall face ────────────────────────────────────────────
+  // CommunityWallDisplay centre is at z = -(ROOM_APOTHEM - 0.74) ≈ -6.66.
+  // stored_z × 1.9 ≈ -6.54  →  frame back-face at -6.63, just in front of the panel.
+  // Side walls sit at x ≈ ±7.4; stored_x × 1.9 ≈ ±7.30 puts frames ~0.1 in front.
+  const BACK_WALL_Z = -3.44
+  const SIDE_WALL_X = 3.84
+
+  const posArr = surface === 'back' ? backXPositions : sideZPositions
+  const column = surfaceOccupied % posArr.length
+  const row = Math.floor(surfaceOccupied / posArr.length) % yPositions.length
+  const tilt = ((totalOccupied % 5) - 2) * 0.04
 
   if (surface === 'back') {
     return {
       slotId: `auto-wall-${getNextAutoSlotNumber(scene, 'auto-wall')}`,
       slotType: 'wall-frame',
-      position: [backXPositions[column], yPositions[row], -2.96],
+      position: [backXPositions[column], yPositions[row], BACK_WALL_Z],
       rotation: [0, 0, tilt],
       filled: false,
     }
@@ -275,7 +359,7 @@ function createAutoWallSlot(scene: SceneConfig): SlotConfig {
   return {
     slotId: `auto-wall-${getNextAutoSlotNumber(scene, 'auto-wall')}`,
     slotType: 'wall-frame',
-    position: [isLeft ? -3.52 : 3.52, yPositions[row], sideZPositions[column]],
+    position: [isLeft ? -SIDE_WALL_X : SIDE_WALL_X, yPositions[row], sideZPositions[column]],
     rotation: [0, isLeft ? Math.PI / 2 : -Math.PI / 2, tilt],
     filled: false,
   }
@@ -411,15 +495,24 @@ function normalizeScene(raw: unknown, fallback: SceneConfig): SceneConfig {
 
 async function getConnectedUsername(wallet: string): Promise<string | null> {
   const rows = await db<Array<{ username: string | null }>>`
-    SELECT COALESCE(wfp.username, u.x_username) AS username
+    SELECT COALESCE(wfp.username, u_direct.x_username, u_linked.x_username) AS username
     FROM (SELECT ${wallet}::text AS wallet) AS input
+    -- Farcaster profile mapped directly to this wallet
     LEFT JOIN ${db(CONFIG.SCHEMA)}.wallet_farcaster_profiles wfp
       ON LOWER(wfp.wallet) = LOWER(input.wallet)
-    LEFT JOIN ${db(CONFIG.SCHEMA)}.user_wallets uw
-      ON LOWER(uw.address) = LOWER(input.wallet)
-    LEFT JOIN ${db(CONFIG.SCHEMA)}.users u
-      ON u.privy_user_id = uw.privy_user_id
-    WHERE COALESCE(wfp.username, u.x_username) IS NOT NULL
+    -- Privy-managed wallet → users row
+    LEFT JOIN ${db(CONFIG.SCHEMA)}.user_wallets uw_direct
+      ON LOWER(uw_direct.address) = LOWER(input.wallet)
+    LEFT JOIN ${db(CONFIG.SCHEMA)}.users u_direct
+      ON u_direct.privy_user_id = uw_direct.privy_user_id
+    -- SIWE-linked wallet: wallet is the linked_wallet; resolve via its primary_wallet
+    LEFT JOIN ${db(CONFIG.SCHEMA)}.user_wallet_links uwl
+      ON LOWER(uwl.linked_wallet) = LOWER(input.wallet)
+    LEFT JOIN ${db(CONFIG.SCHEMA)}.user_wallets uw_linked
+      ON LOWER(uw_linked.address) = LOWER(uwl.primary_wallet)
+    LEFT JOIN ${db(CONFIG.SCHEMA)}.users u_linked
+      ON u_linked.privy_user_id = uw_linked.privy_user_id
+    WHERE COALESCE(wfp.username, u_direct.x_username, u_linked.x_username) IS NOT NULL
     LIMIT 1
   `
 
@@ -476,6 +569,99 @@ function extractPrivyUserId(claims: Record<string, unknown> | undefined): string
   return privyUserId || null
 }
 
+function asTrimmedString(input: unknown): string {
+  return typeof input === 'string' ? input.trim() : ''
+}
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+function parseWholeJbmAmount(input: unknown, fieldName: string): bigint {
+  if (typeof input === 'bigint') {
+    if (input <= 0n) {
+      throw new ApiError(400, 'invalid_numeric', `${fieldName} must be a positive JBM amount`)
+    }
+    return input
+  }
+
+  if (typeof input === 'number') {
+    if (!Number.isFinite(input) || !Number.isInteger(input) || input <= 0) {
+      throw new ApiError(400, 'invalid_numeric', `${fieldName} must be a whole-number JBM amount`)
+    }
+    return BigInt(input)
+  }
+
+  const raw = asTrimmedString(input)
+  if (!/^\d+$/.test(raw)) {
+    throw new ApiError(400, 'invalid_numeric', `${fieldName} must be a whole-number JBM amount`)
+  }
+
+  try {
+    const value = BigInt(raw)
+    if (value <= 0n) {
+      throw new ApiError(400, 'invalid_numeric', `${fieldName} must be a positive JBM amount`)
+    }
+    return value
+  } catch {
+    throw new ApiError(400, 'invalid_numeric', `${fieldName} must be a whole-number JBM amount`)
+  }
+}
+
+function validateTxHash(input: unknown): string {
+  const txHash = asTrimmedString(input)
+  if (!/^0x[0-9a-fA-F]{64}$/.test(txHash)) {
+    throw new ApiError(400, 'invalid_tx_hash', 'tx_hash must be a valid transaction hash')
+  }
+  return txHash.toLowerCase()
+}
+
+function inferLinkDecorationType(url: string): DecorationType {
+  try {
+    const hostname = new URL(url).hostname.toLowerCase()
+    if (
+      hostname.includes('x.com') ||
+      hostname.includes('twitter.com') ||
+      hostname.includes('discord.com') ||
+      hostname.includes('telegram.me') ||
+      hostname.includes('t.me') ||
+      hostname.includes('farcaster')
+    ) {
+      return 'social-link'
+    }
+  } catch {
+    return 'website-link'
+  }
+
+  return 'website-link'
+}
+
+function deriveWallPlacementName(
+  itemType: WallPlacementItemType,
+  rawTitle: unknown,
+  url: string,
+): string {
+  const title = asTrimmedString(rawTitle)
+  if (title) {
+    return title.slice(0, 100)
+  }
+
+  if (itemType === 'art') {
+    return 'Wall Art'
+  }
+
+  try {
+    return new URL(url).hostname.replace(/^www\./i, '') || 'Project Link'
+  } catch {
+    return 'Project Link'
+  }
+}
+
 function toSceneBungalowChain(input: string): SceneBungalowChain | null {
   const chain = toSupportedChain(input)
   return chain
@@ -484,6 +670,121 @@ function toSceneBungalowChain(input: string): SceneBungalowChain | null {
 function toScenePurchaseChain(input: string): ScenePurchaseChain | null {
   const chain = toSupportedChain(input)
   return chain === 'base' || chain === 'ethereum' ? chain : null
+}
+
+async function resolveSceneActor(input: {
+  privyUserId: string
+  wallet: string | null
+  placedBy?: string | null
+}): Promise<{ actorWallet: string; scopedWallets: string[] }> {
+  const linkedWalletRows = await getUserWallets(input.privyUserId)
+  const linkedWallets = linkedWalletRows
+    .map((row) => normalizeAddress(row.address) ?? normalizeAddress(row.address, 'solana'))
+    .filter((address): address is string => Boolean(address))
+  const scopedWallets = [...new Set([
+    ...(input.wallet ? [input.wallet] : []),
+    ...linkedWallets,
+  ])]
+  const scopedWalletKeys = new Set(scopedWallets.map((address) => address.toLowerCase()))
+  const requestedPlacedBy = input.placedBy
+    ? normalizeAddress(input.placedBy) ?? normalizeAddress(input.placedBy, 'solana')
+    : null
+  const actorWallet =
+    (requestedPlacedBy && scopedWalletKeys.has(requestedPlacedBy.toLowerCase())
+      ? requestedPlacedBy
+      : null) ??
+    input.wallet ??
+    linkedWallets[0] ??
+    null
+
+  if (!actorWallet || scopedWallets.length === 0) {
+    throw new ApiError(401, 'wallet_required', 'Link a wallet before placing items in a bungalow')
+  }
+
+  return {
+    actorWallet,
+    scopedWallets,
+  }
+}
+
+function getWallEventType(decorationType: DecorationType): 'add_art' | 'add_build' | 'add_item' {
+  if (decorationType === 'image') {
+    return 'add_art'
+  }
+
+  if (
+    decorationType === 'website-link' ||
+    decorationType === 'social-link' ||
+    decorationType === 'portal'
+  ) {
+    return 'add_build'
+  }
+
+  return 'add_item'
+}
+
+async function persistSceneDecoration(input: {
+  chain: SceneBungalowChain
+  ca: string
+  slotId: string
+  decoration: DecorationConfig
+  actorWallet: string
+  scopedWallets: string[]
+}): Promise<{ scene: SceneConfig; resolvedSlotId: string }> {
+  const existing = await getBungalowSceneConfig(input.chain, input.ca)
+  const baseline = normalizeScene(existing?.scene_config, createDefaultScene(input.chain, input.ca))
+
+  let resolvedSlotId = input.slotId
+  let updatedSlots = [...baseline.slots]
+
+  if (input.slotId === 'auto') {
+    const nextSlot = createAutoPlacementSlot(baseline, input.decoration.type)
+    updatedSlots = [...updatedSlots, nextSlot]
+    resolvedSlotId = nextSlot.slotId
+  } else {
+    ensureSlot(baseline, input.slotId)
+  }
+
+  const updatedScene: SceneConfig = {
+    ...baseline,
+    slots: updatedSlots.map((slot) => {
+      if (slot.slotId !== resolvedSlotId) return slot
+      return {
+        ...slot,
+        filled: true,
+        decoration: input.decoration,
+      }
+    }),
+  }
+
+  const saved = await upsertBungalowSceneConfig({
+    chain: input.chain,
+    contractAddress: input.ca,
+    sceneConfig: updatedScene,
+    updatedBy: input.actorWallet,
+  })
+
+  const [aggregatedUser, tokenHeats] = await Promise.all([
+    getAggregatedUserByWallets(input.scopedWallets),
+    getWalletTokenHeats(input.ca, input.scopedWallets),
+  ])
+
+  await createBungalowWallEvent({
+    tokenAddress: input.ca,
+    chain: input.chain,
+    wallet: input.actorWallet,
+    eventType: getWallEventType(input.decoration.type),
+    detail: input.decoration.name,
+    islandHeat: aggregatedUser?.island_heat ?? 0,
+    tokenHeat: tokenHeats.reduce((sum, entry) => sum + entry.heat_degrees, 0),
+  })
+
+  return {
+    scene: await enrichSceneIdentities(
+      normalizeScene(saved.scene_config, updatedScene),
+    ),
+    resolvedSlotId,
+  }
 }
 
 sceneRoute.get('/bungalow/:chain/:ca/scene', async (c) => {
@@ -506,7 +807,7 @@ sceneRoute.get('/bungalow/:chain/:ca/scene', async (c) => {
 sceneRoute.put('/bungalow/:chain/:ca/scene', requirePrivyAuth, async (c) => {
   const chain = toSceneBungalowChain(c.req.param('chain'))
   const ca = chain ? normalizeAddress(c.req.param('ca'), chain) : null
-  const wallet = c.get('walletAddress')
+  const wallet = c.get('walletAddress') ?? null
   const claims = c.get('privyClaims') as Record<string, unknown> | undefined
   const privyUserId = c.get('privyUserId') ?? extractPrivyUserId(claims)
 
@@ -532,33 +833,14 @@ sceneRoute.put('/bungalow/:chain/:ca/scene', requirePrivyAuth, async (c) => {
     throw new ApiError(400, 'invalid_decoration', 'decoration requires type and name')
   }
 
-  const linkedWalletRows = await getUserWallets(privyUserId)
-  const linkedWallets = linkedWalletRows
-    .map((row) => normalizeAddress(row.address) ?? normalizeAddress(row.address, 'solana'))
-    .filter((address): address is string => Boolean(address))
-  const scopedWallets = [...new Set([
-    ...(wallet ? [wallet] : []),
-    ...linkedWallets,
-  ])]
-  const scopedWalletKeys = new Set(scopedWallets.map((address) => address.toLowerCase()))
-  const requestedPlacedBy =
-    typeof body.decoration.placedBy === 'string'
-      ? normalizeAddress(body.decoration.placedBy) ?? normalizeAddress(body.decoration.placedBy, 'solana')
-      : null
-  const actorWallet =
-    (requestedPlacedBy && scopedWalletKeys.has(requestedPlacedBy.toLowerCase())
-      ? requestedPlacedBy
-      : null) ??
-    wallet ??
-    linkedWallets[0] ??
-    null
-
-  if (!actorWallet || scopedWallets.length === 0) {
-    throw new ApiError(401, 'wallet_required', 'Link a wallet before placing items in a bungalow')
-  }
-
-  const existing = await getBungalowSceneConfig(chain, ca)
-  const baseline = normalizeScene(existing?.scene_config, createDefaultScene(chain, ca))
+  const { actorWallet, scopedWallets } = await resolveSceneActor({
+    privyUserId,
+    wallet,
+    placedBy:
+      typeof body.decoration.placedBy === 'string'
+        ? body.decoration.placedBy
+        : null,
+  })
 
   const now = new Date().toISOString()
 
@@ -573,64 +855,126 @@ sceneRoute.put('/bungalow/:chain/:ca/scene', requirePrivyAuth, async (c) => {
     jbmBurned: Number(body.decoration.jbmBurned ?? 0),
   }
 
-  let resolvedSlotId = slotId
-  let updatedSlots = [...baseline.slots]
+  const { scene } = await persistSceneDecoration({
+    chain,
+    ca,
+    slotId,
+    decoration,
+    actorWallet,
+    scopedWallets,
+  })
 
-  if (slotId === 'auto') {
-    const nextSlot = createAutoPlacementSlot(baseline, decoration.type)
-    updatedSlots = [...updatedSlots, nextSlot]
-    resolvedSlotId = nextSlot.slotId
-  } else {
-    ensureSlot(baseline, slotId)
+  return c.json({ scene })
+})
+
+sceneRoute.post('/bungalow/:chain/:ca/wall-item', requirePrivyAuth, async (c) => {
+  const chain = toSceneBungalowChain(c.req.param('chain'))
+  const ca = chain ? normalizeAddress(c.req.param('ca'), chain) : null
+  const wallet = c.get('walletAddress') ?? null
+  const claims = c.get('privyClaims') as Record<string, unknown> | undefined
+  const privyUserId = c.get('privyUserId') ?? extractPrivyUserId(claims)
+
+  if (!chain || !ca || !privyUserId) {
+    throw new ApiError(400, 'invalid_params', 'Invalid chain, contract address, or authenticated user')
   }
 
-  const updatedScene: SceneConfig = {
-    ...baseline,
-    slots: updatedSlots.map((slot) => {
-      if (slot.slotId !== resolvedSlotId) return slot
-      return {
-        ...slot,
-        filled: true,
-        decoration,
-      }
-    }),
+  const body = await c.req.json<{
+    item_type?: unknown
+    title?: unknown
+    url?: unknown
+    placed_by?: unknown
+    tx_hash?: unknown
+    jbm_amount?: unknown
+  }>()
+
+  const itemType = asTrimmedString(body.item_type).toLowerCase() as WallPlacementItemType
+  if (!(itemType in WALL_PLACEMENT_PRICES)) {
+    throw new ApiError(400, 'invalid_item_type', 'item_type must be art or link')
   }
 
-  const saved = await upsertBungalowSceneConfig({
+  const url = asTrimmedString(body.url)
+  if (!url || !isHttpUrl(url)) {
+    throw new ApiError(400, 'invalid_url', 'url must be a valid http(s) URL')
+  }
+
+  const txHash = validateTxHash(body.tx_hash)
+  const jbmAmount = parseWholeJbmAmount(body.jbm_amount, 'jbm_amount')
+  const expectedAmount = WALL_PLACEMENT_PRICES[itemType]
+  if (jbmAmount !== expectedAmount) {
+    throw new ApiError(
+      400,
+      'invalid_jbm_amount',
+      `jbm_amount must equal ${expectedAmount.toString()} for ${itemType} wall placements`,
+    )
+  }
+
+  await db`
+    CREATE TABLE IF NOT EXISTS ${db(CONFIG.SCHEMA)}.asset_purchases (
+      id BIGSERIAL PRIMARY KEY,
+      chain TEXT NOT NULL,
+      contract_address TEXT NOT NULL,
+      slot_id TEXT NOT NULL,
+      asset_id TEXT NOT NULL,
+      wallet TEXT NOT NULL,
+      tx_hash TEXT,
+      purchased_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `
+
+  const existingPurchases = await db<Array<{ id: string }>>`
+    SELECT id::text AS id
+    FROM ${db(CONFIG.SCHEMA)}.asset_purchases
+    WHERE tx_hash = ${txHash}
+    LIMIT 1
+  `
+
+  if (existingPurchases.length > 0) {
+    const fallback = createDefaultScene(chain, ca)
+    const existing = await getBungalowSceneConfig(chain, ca)
+    const scene = await enrichSceneIdentities(
+      normalizeScene(existing?.scene_config, fallback),
+    )
+    return c.json({ scene, idempotent: true }, 200)
+  }
+
+  const { actorWallet, scopedWallets } = await resolveSceneActor({
+    privyUserId,
+    wallet,
+    placedBy: asTrimmedString(body.placed_by) || null,
+  })
+
+  // Persist the actor's wallet→identity link so username lookup works immediately.
+  persistActorIdentity(actorWallet, privyUserId, claims)
+
+  const decoration: DecorationConfig = {
+    type: itemType === 'art' ? 'image' : inferLinkDecorationType(url),
+    name: deriveWallPlacementName(itemType, body.title, url),
+    imageUrl: itemType === 'art' ? url : undefined,
+    linkUrl: itemType === 'link' ? url : undefined,
+    placedBy: actorWallet,
+    placedAt: new Date().toISOString(),
+    jbmBurned: Number(expectedAmount),
+  }
+
+  const { scene, resolvedSlotId } = await persistSceneDecoration({
+    chain,
+    ca,
+    slotId: 'auto',
+    decoration,
+    actorWallet,
+    scopedWallets,
+  })
+
+  await createAssetPurchase({
     chain,
     contractAddress: ca,
-    sceneConfig: updatedScene,
-    updatedBy: actorWallet,
-  })
-
-  const [aggregatedUser, tokenHeats] = await Promise.all([
-    getAggregatedUserByWallets(scopedWallets),
-    getWalletTokenHeats(ca, scopedWallets),
-  ])
-  const wallEventType =
-    decoration.type === 'image'
-      ? 'add_art'
-      : decoration.type === 'website-link' ||
-          decoration.type === 'social-link' ||
-          decoration.type === 'portal'
-        ? 'add_build'
-        : 'add_item'
-
-  await createBungalowWallEvent({
-    tokenAddress: ca,
-    chain,
+    slotId: resolvedSlotId,
+    assetId: itemType === 'art' ? 'wall-art' : 'wall-link',
     wallet: actorWallet,
-    eventType: wallEventType,
-    detail: decoration.name,
-    islandHeat: aggregatedUser?.island_heat ?? 0,
-    tokenHeat: tokenHeats.reduce((sum, entry) => sum + entry.heat_degrees, 0),
+    txHash,
   })
 
-  return c.json({
-    scene: await enrichSceneIdentities(
-      normalizeScene(saved.scene_config, updatedScene),
-    ),
-  })
+  return c.json({ scene, idempotent: false }, 201)
 })
 
 sceneRoute.get('/assets/catalog', async (c) => {

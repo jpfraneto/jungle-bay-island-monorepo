@@ -276,6 +276,70 @@
   font-size: 12px;
 }
 
+.eligibilityCard {
+  margin: 0 14px;
+  display: grid;
+  gap: 8px;
+  border-radius: 14px;
+  border: 1px solid rgba(121, 181, 138, 0.14);
+  background: rgba(9, 20, 14, 0.56);
+  padding: 11px 12px;
+}
+
+.eligibilityChecking {
+  border-color: rgba(216, 179, 106, 0.26);
+  background: rgba(46, 33, 18, 0.58);
+}
+
+.eligibilityReady {
+  border-color: rgba(109, 202, 137, 0.28);
+  background: rgba(18, 43, 27, 0.64);
+}
+
+.eligibilityBlocked {
+  border-color: rgba(225, 124, 124, 0.26);
+  background: rgba(44, 22, 20, 0.6);
+}
+
+.eligibilityHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.eligibilityHeader strong {
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.eligibilityHeader span {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.eligibilityStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.eligibilityStats strong {
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.eligibilityBody {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.45;
+  font-size: 12px;
+}
+
 .successActions {
   display: flex;
   flex-wrap: wrap;
@@ -402,6 +466,7 @@
 
   .header,
   .stepRail,
+  .eligibilityCard,
   .typeGrid,
   .formGrid,
   .previewSection,
@@ -409,6 +474,11 @@
   .footer {
     padding-left: 10px;
     padding-right: 10px;
+  }
+
+  .eligibilityCard {
+    margin-left: 10px;
+    margin-right: 10px;
   }
 
   .typeGrid {

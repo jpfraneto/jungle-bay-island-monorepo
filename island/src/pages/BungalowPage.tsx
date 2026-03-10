@@ -204,7 +204,13 @@ function compactLoadingLabel(value: string | null | undefined): string {
   const trimmed = value?.trim() ?? "";
   if (!trimmed) return "bungalow";
   if (/^0x[a-f0-9]{40}$/i.test(trimmed)) {
-    return `${trimmed.slice(0, 6)}...${trimmed.slice(-4)}`;
+    return "bungalow";
+  }
+  if (/^[1-9A-HJ-NP-Za-km-z]{28,60}$/.test(trimmed)) {
+    return "bungalow";
+  }
+  if (/^[a-z0-9]{18,}$/i.test(trimmed)) {
+    return "bungalow";
   }
   return trimmed.replace(/[-_]+/g, " ");
 }
@@ -214,13 +220,11 @@ function BungalowLoadingState({
   imageUrl,
   progress,
   status,
-  overlay = false,
 }: {
   name: string;
   imageUrl?: string;
   progress: number;
   status: string;
-  overlay?: boolean;
 }) {
   const panel = (
     <div
@@ -277,33 +281,30 @@ function BungalowLoadingState({
     </div>
   );
 
-  if (overlay) {
-    return (
-      <div
-        style={{
-          position: "fixed",
-          inset: 0,
-          zIndex: 30,
-          padding: 18,
-          background:
-            "radial-gradient(circle at 48% 26%, rgba(39, 92, 60, 0.24), rgba(8, 18, 12, 0.96) 60%)",
-          backdropFilter: "blur(8px)",
-        }}
-      >
-        {panel}
-      </div>
-    );
-  }
-
   return (
-    <div className={styles.page}>
-      {panel}
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 30,
+        padding: 18,
+        background:
+          "radial-gradient(circle at 48% 26%, rgba(39, 92, 60, 0.24), rgba(8, 18, 12, 0.96) 60%)",
+        backdropFilter: "blur(8px)",
+      }}
+    >
+      <div className={styles.page}>{panel}</div>
     </div>
   );
 }
 
 interface BungalowPageLocationState {
   pendingBodegaItem?: unknown;
+  preloadedBungalow?: {
+    name?: string | null;
+    symbol?: string | null;
+    imageUrl?: string | null;
+  } | null;
 }
 
 export default function BungalowPage() {
@@ -321,6 +322,7 @@ export default function BungalowPage() {
   const navigate = useNavigate();
   const locationState =
     (location.state as BungalowPageLocationState | null) ?? null;
+  const preloadedBungalow = locationState?.preloadedBungalow ?? null;
   const pendingBodegaItem = normalizeBodegaCatalogItem(
     locationState?.pendingBodegaItem,
   );
@@ -349,12 +351,22 @@ export default function BungalowPage() {
   const [sceneModuleReady, setSceneModuleReady] = useState(false);
   const [sceneReady, setSceneReady] = useState(false);
   const loadingName = compactLoadingLabel(
-    routeIdentifier ?? bungalow?.canonical_project?.symbol ?? bungalow?.symbol ?? ca,
+    preloadedBungalow?.symbol ??
+      preloadedBungalow?.name ??
+      routeIdentifier ??
+      bungalow?.canonical_project?.symbol ??
+      bungalow?.symbol ??
+      bungalow?.canonical_project?.name ??
+      bungalow?.name ??
+      "bungalow",
   );
   const loadingImageUrl = getTokenImageUrl(
-    bungalow?.image_url ?? null,
+    preloadedBungalow?.imageUrl ?? bungalow?.image_url ?? null,
     ca || routeCa || routeIdentifier || loadingName,
-    bungalow?.canonical_project?.symbol ?? bungalow?.symbol ?? loadingName,
+    preloadedBungalow?.symbol ??
+      bungalow?.canonical_project?.symbol ??
+      bungalow?.symbol ??
+      loadingName,
   );
 
   useEffect(() => {
@@ -529,7 +541,6 @@ export default function BungalowPage() {
                 imageUrl={headerImage}
                 progress={0.96}
                 status="Loading bungalow scene"
-                overlay
               />
             ) : null}
           </div>

@@ -23,7 +23,7 @@ export default function IslandPage() {
               placeItems: "center",
               borderRadius: 24,
               background:
-                "radial-gradient(circle at 50% 42%, rgba(76, 133, 87, 0.45), rgba(12, 30, 20, 0.96) 58%), linear-gradient(180deg, #0d2115 0%, #08140d 100%)",
+                "radial-gradient(circle at 50% 42%, rgba(72, 139, 255, 0.34), rgba(4, 12, 48, 0.96) 58%), linear-gradient(180deg, #041b74 0%, #050b22 100%)",
               color: "#d7e6d5",
             }}
           >

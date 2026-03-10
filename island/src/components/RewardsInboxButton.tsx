@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import ChainIcon from "./ChainIcon";
-import WalletSelector from "./WalletSelector";
+import WalletSelector, { type WalletSelectorState } from "./WalletSelector";
 import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
-import { useSiweWalletLink } from "../hooks/useSiweWalletLink";
-import { useUserWalletLinks } from "../hooks/useUserWalletLinks";
 import { useWalletClaims } from "../hooks/useWalletClaims";
 import { CLAIM_CONTRACT_ADDRESS } from "../utils/constants";
 import {
@@ -183,18 +181,9 @@ export default function RewardsInboxButton() {
     publicClient,
     requireWallet,
     walletAddress,
-    wallets: connectedWallets,
   } = usePrivyBaseWallet();
-  const { wallets: linkedWalletRows, refetch: refetchLinkedWallets } =
-    useUserWalletLinks(authenticated);
-  const {
-    linkCurrentWallet,
-    isLinking: isLinkingWallet,
-    status: linkStatus,
-    error: linkError,
-  } = useSiweWalletLink();
-  const claimLookupWallet =
-    linkedWalletRows[0]?.address ?? walletAddress ?? undefined;
+  const [selectedPayoutWallet, setSelectedPayoutWallet] = useState<string>("");
+  const claimLookupWallet = selectedPayoutWallet || walletAddress || undefined;
   const {
     claims,
     isLoading,
@@ -207,9 +196,14 @@ export default function RewardsInboxButton() {
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [clockMs, setClockMs] = useState(() => Date.now());
-  const [selectedPayoutWallet, setSelectedPayoutWallet] = useState<string>("");
-  const [showWalletGate, setShowWalletGate] = useState(false);
-  const [resumeAfterLink, setResumeAfterLink] = useState(false);
+  const [walletSelectorState, setWalletSelectorState] =
+    useState<WalletSelectorState>({
+      selectedWallet: null,
+      selectedWalletAvailable: false,
+      hasAvailableWallet: false,
+      availableWallets: [],
+      totalWallets: 0,
+    });
   const [cachedClaimedPeriod, setCachedClaimedPeriod] =
     useState<CachedClaimedPeriod | null>(null);
 
@@ -217,42 +211,11 @@ export default function RewardsInboxButton() {
     setCachedClaimedPeriod(readCachedClaimedPeriod(claimLookupWallet));
   }, [claimLookupWallet]);
 
-  const linkedWallets = linkedWalletRows.map((wallet) =>
-    wallet.address.toLowerCase(),
-  );
-  const connectedWalletAddresses = useMemo(
-    () => connectedWallets.map((wallet) => wallet.address.toLowerCase()),
-    [connectedWallets],
-  );
-  const signableWallets = useMemo(
-    () =>
-      linkedWalletRows
-        .map((wallet) => wallet.address)
-        .filter((address) =>
-          connectedWalletAddresses.includes(address.toLowerCase()),
-        ),
-    [connectedWalletAddresses, linkedWalletRows],
-  );
-
   useEffect(() => {
-    if (selectedPayoutWallet) {
-      const selectedIsSignable = signableWallets.some(
-        (address) => address.toLowerCase() === selectedPayoutWallet.toLowerCase(),
-      );
-      if (selectedIsSignable) {
-        return;
-      }
-    }
-
-    if (signableWallets[0]) {
-      setSelectedPayoutWallet(signableWallets[0]);
-      return;
-    }
-
-    if (walletAddress) {
+    if (!selectedPayoutWallet && walletAddress) {
       setSelectedPayoutWallet(walletAddress);
     }
-  }, [selectedPayoutWallet, signableWallets, walletAddress]);
+  }, [selectedPayoutWallet, walletAddress]);
   const claimableItems = useMemo(
     () => claims?.items.filter((item) => item.can_claim) ?? [],
     [claims?.items],
@@ -347,8 +310,6 @@ export default function RewardsInboxButton() {
   const handleOpen = () => {
     setStatus(null);
     setError(null);
-    setShowWalletGate(false);
-    setResumeAfterLink(false);
     setOpen(true);
     void refetch();
   };
@@ -365,17 +326,8 @@ export default function RewardsInboxButton() {
       return;
     }
 
-    if (!linkedWallets.includes(payoutWallet.toLowerCase())) {
-      setError("Link this wallet first to use it for transactions.");
-      return;
-    }
-
-    if (
-      !signableWallets.some(
-        (address) => address.toLowerCase() === payoutWallet.toLowerCase(),
-      )
-    ) {
-      setError("Connect this linked wallet in Privy on this device to sign with it here.");
+    if (!walletSelectorState.selectedWalletAvailable) {
+      setError("Choose a wallet that is available here or link a new one.");
       return;
     }
 
@@ -543,27 +495,12 @@ export default function RewardsInboxButton() {
       return;
     }
 
-    if (signableWallets.length === 0) {
-      setShowWalletGate(true);
-      setResumeAfterLink(true);
+    if (!walletSelectorState.hasAvailableWallet) {
+      setError("Choose a wallet that is available here or link a new one.");
       return;
     }
 
     await executeClaimAll();
-  };
-
-  const handleAddWallet = async () => {
-    try {
-      await linkCurrentWallet();
-      await refetchLinkedWallets();
-      setShowWalletGate(false);
-      if (resumeAfterLink) {
-        setResumeAfterLink(false);
-        await executeClaimAll();
-      }
-    } catch {
-      // Hook error state already contains user-friendly messaging.
-    }
   };
 
   return (
@@ -611,32 +548,12 @@ export default function RewardsInboxButton() {
             {!hasClaimedToday ? (
               <WalletSelector
                 value={selectedPayoutWallet}
-                onSelect={setSelectedPayoutWallet}
+                onSelect={(address) => {
+                  setSelectedPayoutWallet(address);
+                  setError(null);
+                }}
+                onStateChange={setWalletSelectorState}
               />
-            ) : null}
-            {!hasClaimedToday &&
-            (showWalletGate || signableWallets.length === 0) ? (
-              <div className={styles.error}>
-                <strong>
-                  Connect and link a wallet in this browser to sign the claim.
-                </strong>
-                <button
-                  type="button"
-                  className={styles.claimButton}
-                  onClick={() => {
-                    void handleAddWallet();
-                  }}
-                  disabled={isLinkingWallet}
-                >
-                  {isLinkingWallet ? "Linking..." : "Add wallet"}
-                </button>
-                {linkStatus ? (
-                  <div className={styles.status}>{linkStatus}</div>
-                ) : null}
-                {linkError ? (
-                  <div className={styles.error}>{linkError}</div>
-                ) : null}
-              </div>
             ) : null}
 
             <div className={styles.list}>
@@ -714,7 +631,7 @@ export default function RewardsInboxButton() {
                 disabled={
                   isClaiming ||
                   hasClaimedToday ||
-                  signableWallets.length === 0 ||
+                  !walletSelectorState.hasAvailableWallet ||
                   (isLoading && !hasClaimedToday) ||
                   claimableItems.length === 0
                 }

@@ -18,6 +18,124 @@ export default function ChangelogPage() {
 
       <article className={styles.entry}>
         <div className={styles.entryHeader}>
+          <span className={styles.date}>March 10, 2026</span>
+          <h2 className={styles.heading}>Bodega Publishing Now Checks Heat Before It Lets You Pay</h2>
+        </div>
+        <p>
+          The Bodega submission flow now blocks the publishing fee until the
+          selected wallet actually qualifies to publish.
+        </p>
+        <ul className={styles.list}>
+          <li>
+            The submit modal now checks the selected wallet cluster&apos;s live
+            island heat as soon as you choose a signer.
+          </li>
+          <li>
+            Current heat and required heat are shown inside the modal before the
+            payment step, so the publish threshold is visible from the start.
+          </li>
+          <li>
+            If the wallet is below the threshold or the app cannot verify heat,
+            the pay-and-submit button stays blocked instead of charging the fee
+            and failing afterward.
+          </li>
+        </ul>
+      </article>
+
+      <article className={styles.entry}>
+        <div className={styles.entryHeader}>
+          <span className={styles.date}>March 10, 2026</span>
+          <h2 className={styles.heading}>Wall Art Placement Fixed — Contained, Smooth, And Username-Attributed</h2>
+        </div>
+        <p>
+          Three bugs in the bungalow wall art flow were corrected.
+        </p>
+        <ul className={styles.list}>
+          <li>
+            Art frames placed via the wall modal now stay inside the visible
+            wall panel. The auto-placement grid was starting too low (y=1.35),
+            causing frames to fall below the panel edge and look detached from
+            the wall. Y positions now start at 2.1 and x/z extents are clipped
+            to stay inside the physical wall boundaries.
+          </li>
+          <li>
+            After placing art, the bungalow no longer does a full scene reload.
+            A silent background refresh updates only the slot list, so the new
+            piece appears in place without the scene flashing to a loading state.
+          </li>
+          <li>
+            Art attribution now resolves usernames for SIWE-linked wallets. The
+            username lookup was only checking Privy-managed wallets; it now also
+            follows the user_wallet_links chain to surface the X handle for wallets
+            linked via the custom SIWE flow.
+          </li>
+        </ul>
+      </article>
+
+      <article className={styles.entry}>
+        <div className={styles.entryHeader}>
+          <span className={styles.date}>March 10, 2026</span>
+          <h2 className={styles.heading}>Wallet Picking Was Unified Into One Availability-Aware Chooser</h2>
+        </div>
+        <p>
+          Every pay and signing flow now uses the same wallet chooser instead of
+          a native dropdown with partial wallet visibility.
+        </p>
+        <ul className={styles.list}>
+          <li>
+            The chooser now shows the user&apos;s connected and linked wallets in
+            one place instead of hiding anything that is not immediately usable.
+          </li>
+          <li>
+            Each wallet is labeled by whether it is available here now, still
+            needs linking, or needs to be reconnected in the current browser
+            context.
+          </li>
+          <li>
+            Linking a new wallet now happens directly inside that chooser, and a
+            newly linked wallet is promoted into the active default pay/sign
+            slot when it becomes usable.
+          </li>
+          <li>
+            The chooser now opens as an opaque wallet card panel with clearer
+            spacing and availability badges, so it stays readable even inside
+            art-heavy payment and signing modals.
+          </li>
+        </ul>
+      </article>
+
+      <article className={styles.entry}>
+        <div className={styles.entryHeader}>
+          <span className={styles.date}>March 10, 2026</span>
+          <h2 className={styles.heading}>Bungalow Walls And The Bodega Were Split Back Into Two Clear Lanes</h2>
+        </div>
+        <p>
+          The app no longer treats inside-bungalow additions as a shortcut into
+          the same marketplace inventory. Wall additions and Bodega listings now
+          serve different jobs.
+        </p>
+        <ul className={styles.list}>
+          <li>
+            Bungalow walls now have their own paid local add flow for one piece
+            of art or one link, opened from inside the wall itself.
+          </li>
+          <li>
+            Local wall art costs 69,000 JBM and local wall links cost 111,000
+            JBM.
+          </li>
+          <li>
+            These wall additions stay inside the current bungalow instead of
+            automatically becoming Bodega listings.
+          </li>
+          <li>
+            The Bodega is now framed more explicitly as the portable marketplace
+            for reusable art and builds that can travel across the island.
+          </li>
+        </ul>
+      </article>
+
+      <article className={styles.entry}>
+        <div className={styles.entryHeader}>
           <span className={styles.date}>March 9, 2026</span>
           <h2 className={styles.heading}>Map Entry, Reward Signing, and Build Submission Were Simplified</h2>
         </div>

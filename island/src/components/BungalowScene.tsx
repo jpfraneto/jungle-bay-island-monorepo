@@ -24,6 +24,7 @@ import type { SlotConfig } from "../types/scene";
 import BodegaModal from "./BodegaModal";
 import BodegaPlacementModal from "./BodegaPlacementModal";
 import CanvasErrorBoundary from "./CanvasErrorBoundary";
+import WallPlacementModal from "./WallPlacementModal";
 import { formatAddress, formatTimeAgo } from "../utils/formatters";
 import type { BodegaCatalogItem } from "../utils/bodega";
 import { getFallbackTokenImage, getTokenImageUrl } from "../utils/tokenImage";
@@ -216,11 +217,14 @@ const ROOM_VERTEX_ANGLES = Array.from(
   { length: 8 },
   (_, index) => Math.PI / 8 - index * (Math.PI / 4),
 );
-const ROOM_VERTICES = ROOM_VERTEX_ANGLES.map((angle) => [
-  Number((Math.sin(angle) * ROOM_CIRCUMRADIUS).toFixed(3)),
-  ROOM_WALL_CENTER_Y,
-  Number((Math.cos(angle) * ROOM_CIRCUMRADIUS).toFixed(3)),
-] as [number, number, number]);
+const ROOM_VERTICES = ROOM_VERTEX_ANGLES.map(
+  (angle) =>
+    [
+      Number((Math.sin(angle) * ROOM_CIRCUMRADIUS).toFixed(3)),
+      ROOM_WALL_CENTER_Y,
+      Number((Math.cos(angle) * ROOM_CIRCUMRADIUS).toFixed(3)),
+    ] as [number, number, number],
+);
 const ROOM_WALL_EDGE_SPECS = [
   { key: "front-left", start: 1, end: 2, color: "#d8c8a8" },
   { key: "left", start: 2, end: 3, color: "#ddd0b3" },
@@ -271,6 +275,7 @@ function useArtworkTexture(
   useEffect(() => {
     let cancelled = false;
     let nextTexture: Texture | null = null;
+
     const loader = new TextureLoader();
     loader.setCrossOrigin("anonymous");
 
@@ -279,35 +284,34 @@ function useArtworkTexture(
         loader.load(url, resolve, undefined, reject);
       });
 
+    // Wrap a direct URL so it passes through our backend proxy, which re-serves
+    // the image with Access-Control-Allow-Origin: * so WebGL can load it.
+    const toProxied = (url: string) => {
+      // Don't proxy relative or already-proxied URLs
+      if (!url.startsWith("http://") && !url.startsWith("https://")) return url;
+      return `/api/proxy-image?url=${encodeURIComponent(url)}`;
+    };
+
     void (async () => {
-      const candidates =
-        src && src.trim() ? [src.trim(), fallback] : [fallback];
+      const artSrc = src?.trim();
+      // Try: proxied art, fallback (token image — already same-origin or proxy-friendly)
+      const candidates = artSrc
+        ? [toProxied(artSrc), fallback]
+        : [fallback];
 
       for (const candidate of candidates) {
         try {
           nextTexture = await loadTexture(candidate);
+          nextTexture.colorSpace = SRGBColorSpace;
+          nextTexture.needsUpdate = true;
           break;
         } catch {
           nextTexture = null;
         }
       }
 
-      if (!nextTexture) {
-        if (cancelled) {
-          return;
-        }
-        setTexture((current) => {
-          current?.dispose();
-          return null;
-        });
-        return;
-      }
-
-      nextTexture.colorSpace = SRGBColorSpace;
-      nextTexture.needsUpdate = true;
-
       if (cancelled) {
-        nextTexture.dispose();
+        nextTexture?.dispose();
         return;
       }
 
@@ -361,7 +365,9 @@ function RoomShell({ floorTexture }: { floorTexture: Texture | null }) {
       </mesh>
 
       <mesh position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <ringGeometry args={[ROOM_CIRCUMRADIUS - 0.18, ROOM_CIRCUMRADIUS + 0.18, 8]} />
+        <ringGeometry
+          args={[ROOM_CIRCUMRADIUS - 0.18, ROOM_CIRCUMRADIUS + 0.18, 8]}
+        />
         <meshLambertMaterial color="#2a1709" side={DoubleSide} />
       </mesh>
 
@@ -549,7 +555,8 @@ function CommunityWallDisplay({
         anchorY="middle"
         maxWidth={4.05}
       >
-        Click to zoom in, write, and read what people are doing in {title}
+        Click to zoom in, write, add wall art or links, and read what people are
+        doing in {title}
       </Text>
       <Text
         position={[0, -1.08, 0.04]}
@@ -984,6 +991,7 @@ function WallActivityOverlay({
   onDraftChange,
   onClose,
   onPost,
+  onOpenPlacement,
   posting,
   authenticated,
   onLogin,
@@ -999,6 +1007,7 @@ function WallActivityOverlay({
   onDraftChange: (value: string) => void;
   onClose: () => void;
   onPost: () => void;
+  onOpenPlacement: () => void;
   posting: boolean;
   authenticated: boolean;
   onLogin: () => void;
@@ -1015,18 +1024,20 @@ function WallActivityOverlay({
         position: "absolute",
         inset: 0,
         zIndex: 12,
-        display: "grid",
-        placeItems: "center",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
         padding: isMobile ? 14 : 24,
         background: "rgba(9, 10, 7, 0.62)",
         backdropFilter: "blur(8px)",
+        overflow: "hidden",
       }}
     >
       <div
         style={{
           width: "100%",
           maxWidth: 860,
-          maxHeight: "100%",
+          height: "100%",
           display: "grid",
           gridTemplateRows: "auto auto minmax(0, 1fr)",
           gap: 14,
@@ -1056,22 +1067,8 @@ function WallActivityOverlay({
                 color: "rgba(246,234,209,0.6)",
               }}
             >
-              Zoomed Wall
+              {title} Bungalow
             </span>
-            <h3 style={{ margin: 0, fontSize: isMobile ? 24 : 30 }}>
-              {title} community wall
-            </h3>
-            <p
-              style={{
-                margin: 0,
-                fontSize: 13,
-                lineHeight: 1.5,
-                color: "rgba(246,234,209,0.72)",
-              }}
-            >
-              People can leave a note here and the wall also tracks visits,
-              art, and builds tied to this bungalow.
-            </p>
           </div>
           <button
             type="button"
@@ -1137,52 +1134,81 @@ function WallActivityOverlay({
                 color: "rgba(246,234,209,0.66)",
               }}
             >
-              Need 10+ {bungalowHeatLabel} heat to write. Visits and installs
-              appear automatically.
+              Need 10+ {bungalowHeatLabel} heat to write. Paid wall art and
+              links stay local to this bungalow.
             </span>
-            {authenticated ? (
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                flexWrap: "wrap",
+              }}
+            >
               <button
                 type="button"
-                onClick={onPost}
-                disabled={posting || draft.trim().length === 0}
+                onClick={onOpenPlacement}
                 style={{
                   minHeight: 40,
                   padding: "0 16px",
                   borderRadius: 999,
                   border: "1px solid rgba(255,255,255,0.14)",
-                  background:
-                    posting || draft.trim().length === 0
-                      ? "rgba(255,255,255,0.08)"
-                      : "rgba(216, 179, 106, 0.92)",
-                  color:
-                    posting || draft.trim().length === 0 ? "#c4b597" : "#201508",
-                  cursor:
-                    posting || draft.trim().length === 0 ? "default" : "pointer",
-                  font: "inherit",
-                  fontWeight: 700,
-                }}
-              >
-                {posting ? "Posting..." : "Write on wall"}
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={onLogin}
-                style={{
-                  minHeight: 40,
-                  padding: "0 16px",
-                  borderRadius: 999,
-                  border: "1px solid rgba(255,255,255,0.14)",
-                  background: "rgba(216, 179, 106, 0.92)",
-                  color: "#201508",
+                  background: "rgba(255,255,255,0.08)",
+                  color: "#f6ead1",
                   cursor: "pointer",
                   font: "inherit",
                   fontWeight: 700,
                 }}
               >
-                Connect wallet to write
+                Add art or link
               </button>
-            )}
+              {authenticated ? (
+                <button
+                  type="button"
+                  onClick={onPost}
+                  disabled={posting || draft.trim().length === 0}
+                  style={{
+                    minHeight: 40,
+                    padding: "0 16px",
+                    borderRadius: 999,
+                    border: "1px solid rgba(255,255,255,0.14)",
+                    background:
+                      posting || draft.trim().length === 0
+                        ? "rgba(255,255,255,0.08)"
+                        : "rgba(216, 179, 106, 0.92)",
+                    color:
+                      posting || draft.trim().length === 0
+                        ? "#c4b597"
+                        : "#201508",
+                    cursor:
+                      posting || draft.trim().length === 0
+                        ? "default"
+                        : "pointer",
+                    font: "inherit",
+                    fontWeight: 700,
+                  }}
+                >
+                  {posting ? "Posting..." : "Write on wall"}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onLogin}
+                  style={{
+                    minHeight: 40,
+                    padding: "0 16px",
+                    borderRadius: 999,
+                    border: "1px solid rgba(255,255,255,0.14)",
+                    background: "rgba(216, 179, 106, 0.92)",
+                    color: "#201508",
+                    cursor: "pointer",
+                    font: "inherit",
+                    fontWeight: 700,
+                  }}
+                >
+                  Connect wallet to write
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -1690,12 +1716,10 @@ export default function BungalowScene({
   const isMobile = useIsMobile(768);
   const navigate = useNavigate();
   const initialBodegaItemAppliedRef = useRef(false);
-  const { authenticated, getAccessToken, login } = usePrivy();
+  const { authenticated, getAccessToken, login, user } = usePrivy();
   const { walletAddress } = usePrivyBaseWallet();
-  const { scene, loading, error, updateSlot, refetch } = useBungalowScene(
-    chain,
-    ca,
-  );
+  const { scene, loading, error, updateSlot, refetch, silentRefetch } =
+    useBungalowScene(chain, ca);
   const [showBodegaModal, setShowBodegaModal] = useState(false);
   const [selectedBodegaItem, setSelectedBodegaItem] =
     useState<BodegaCatalogItem | null>(null);
@@ -1708,6 +1732,7 @@ export default function BungalowScene({
   const [wallError, setWallError] = useState<string | null>(null);
   const [wallDraft, setWallDraft] = useState("");
   const [wallPosting, setWallPosting] = useState(false);
+  const [wallPlacementOpen, setWallPlacementOpen] = useState(false);
   const [focusedArtSlot, setFocusedArtSlot] = useState<SlotConfig | null>(null);
   const canPlaceBodegaItems = true;
   const roomImageUrl = imageUrl || getTokenImageUrl(null, ca, symbol ?? title);
@@ -1717,14 +1742,18 @@ export default function BungalowScene({
     setWallError(null);
 
     try {
-      const response = await fetch(`/api/bungalow/${chain}/${ca}/wall?limit=40`, {
-        cache: "no-store",
-      });
+      const response = await fetch(
+        `/api/bungalow/${chain}/${ca}/wall?limit=40`,
+        {
+          cache: "no-store",
+        },
+      );
       if (!response.ok) {
         throw new Error(await readResponseMessage(response));
       }
 
       const data = (await response.json()) as { items?: WallFeedItem[] };
+      console.log("THE WALL FEED DATA IS", data);
       setWallItems(Array.isArray(data.items) ? data.items : []);
     } catch (fetchError: unknown) {
       setWallError(
@@ -1755,6 +1784,7 @@ export default function BungalowScene({
 
   useEffect(() => {
     if (!wallOpen) {
+      setWallPlacementOpen(false);
       return;
     }
 
@@ -1775,7 +1805,9 @@ export default function BungalowScene({
         return;
       }
 
-      const headers: Record<string, string> = {};
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
       if (authenticated) {
         try {
           const token = await getAccessToken();
@@ -1787,10 +1819,17 @@ export default function BungalowScene({
         }
       }
 
+      const twitterUsername =
+        typeof user?.twitter?.username === "string"
+          ? user.twitter.username.trim().replace(/^@+/, "")
+          : null;
+      console.log("IN HERE THE TWITTER USERNAME IS", twitterUsername);
+
       try {
         const response = await fetch(`/api/bungalow/${chain}/${ca}/visit`, {
           method: "POST",
           headers,
+          body: JSON.stringify({ twitter_username: twitterUsername }),
           cache: "no-store",
         });
 
@@ -1807,7 +1846,7 @@ export default function BungalowScene({
     return () => {
       cancelled = true;
     };
-  }, [authenticated, ca, chain, getAccessToken, walletAddress]);
+  }, [authenticated, ca, chain, getAccessToken, user, walletAddress]);
 
   const handleWallPost = useCallback(async () => {
     const content = wallDraft.trim();
@@ -1853,7 +1892,15 @@ export default function BungalowScene({
     } finally {
       setWallPosting(false);
     }
-  }, [authenticated, ca, chain, getAccessToken, loadWallFeed, login, wallDraft]);
+  }, [
+    authenticated,
+    ca,
+    chain,
+    getAccessToken,
+    loadWallFeed,
+    login,
+    wallDraft,
+  ]);
 
   return (
     <CanvasErrorBoundary
@@ -2008,9 +2055,23 @@ export default function BungalowScene({
           onPost={() => {
             void handleWallPost();
           }}
+          onOpenPlacement={() => setWallPlacementOpen(true)}
           posting={wallPosting}
           authenticated={authenticated}
           onLogin={() => login()}
+        />
+        <WallPlacementModal
+          open={wallOpen && wallPlacementOpen}
+          chain={chain}
+          ca={ca}
+          bungalowName={title}
+          onClose={() => setWallPlacementOpen(false)}
+          onPlaced={() => {
+            setWallPlacementOpen(false);
+            setWallOpen(false); // reveal the scene so the user sees the new art
+            void silentRefetch();
+            void loadWallFeed();
+          }}
         />
         <FocusedArtworkOverlay
           open={focusedArtSlot !== null}

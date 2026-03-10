@@ -3,11 +3,9 @@ import { usePrivy } from "@privy-io/react-auth";
 import { useNavigate } from "react-router-dom";
 import BodegaCard from "./BodegaCard";
 import BungalowOptionPicker from "./BungalowOptionPicker";
-import WalletSelector from "./WalletSelector";
+import WalletSelector, { type WalletSelectorState } from "./WalletSelector";
 import { useJBMTransfer } from "../hooks/useJBMTransfer";
 import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
-import { useSiweWalletLink } from "../hooks/useSiweWalletLink";
-import { useUserWalletLinks } from "../hooks/useUserWalletLinks";
 import { formatJbmAmount } from "../utils/formatters";
 import styles from "../styles/bodega-submit-modal.module.css";
 import {
@@ -52,6 +50,14 @@ interface BuildMetadata {
   description: string;
   image: string;
   missingFields: Array<"title" | "description" | "image">;
+}
+
+interface PublishEligibility {
+  wallet: string;
+  linked_wallets: string[];
+  island_heat: number;
+  minimum_heat: number;
+  can_publish: boolean;
 }
 
 /**
@@ -253,14 +259,6 @@ export default function BodegaSubmitModal({
   const navigate = useNavigate();
   const { authenticated, getAccessToken, login } = usePrivy();
   const { walletAddress } = usePrivyBaseWallet();
-  const { wallets: linkedWalletRows, refetch: refetchLinkedWallets } =
-    useUserWalletLinks(authenticated);
-  const {
-    linkCurrentWallet,
-    isLinking: isLinkingWallet,
-    status: linkStatus,
-    error: linkError,
-  } = useSiweWalletLink();
   const { transfer, isTransferring } = useJBMTransfer();
 
   const [step, setStep] = useState<ModalStep>(1);
@@ -291,13 +289,24 @@ export default function BodegaSubmitModal({
     null,
   );
   const [selectedPayWallet, setSelectedPayWallet] = useState<string>("");
-  const [showWalletGate, setShowWalletGate] = useState(false);
-  const [resumeAfterLink, setResumeAfterLink] = useState(false);
+  const [walletSelectorState, setWalletSelectorState] =
+    useState<WalletSelectorState>({
+      selectedWallet: null,
+      selectedWalletAvailable: false,
+      hasAvailableWallet: false,
+      availableWallets: [],
+      totalWallets: 0,
+    });
+  const [publishEligibility, setPublishEligibility] =
+    useState<PublishEligibility | null>(null);
+  const [isEligibilityLoading, setIsEligibilityLoading] = useState(false);
+  const [eligibilityError, setEligibilityError] = useState<string | null>(null);
   const [shareStatus, setShareStatus] = useState<string | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const priceInputRef = useRef<HTMLInputElement | null>(null);
   const previewUrlInputRef = useRef<HTMLInputElement | null>(null);
   const urlInputRef = useRef<HTMLInputElement | null>(null);
+  const creatorWallet = selectedPayWallet || walletAddress || "";
 
   useEffect(() => {
     if (!open) return;
@@ -328,8 +337,6 @@ export default function BodegaSubmitModal({
     setIsSubmitting(false);
     setPendingFocusField(null);
     setSubmittedItem(null);
-    setShowWalletGate(false);
-    setResumeAfterLink(false);
     setShareStatus(null);
   }, [bungalowOptions, defaultOriginBungalow, isWalletScoped, open]);
 
@@ -351,6 +358,84 @@ export default function BodegaSubmitModal({
   useEffect(() => {
     writePendingSubmissionPayment(pendingPayment);
   }, [pendingPayment]);
+
+  useEffect(() => {
+    if (!open || !creatorWallet) {
+      setPublishEligibility(null);
+      setEligibilityError(null);
+      setIsEligibilityLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    setIsEligibilityLoading(true);
+    setEligibilityError(null);
+
+    async function loadEligibility() {
+      try {
+        const response = await fetch(
+          `/api/bodega/publish-eligibility/${encodeURIComponent(creatorWallet)}`,
+          {
+            cache: "no-store",
+            signal: controller.signal,
+          },
+        );
+
+        const data = (await response.json().catch(() => null)) as
+          | Partial<PublishEligibility> & { error?: unknown }
+          | null;
+        const apiError =
+          typeof data?.error === "string" && data.error.trim().length > 0
+            ? data.error
+            : null;
+
+        if (!response.ok) {
+          throw new Error(
+            apiError ?? `Could not verify island heat (${response.status})`,
+          );
+        }
+
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        setPublishEligibility({
+          wallet:
+            typeof data?.wallet === "string" && data.wallet.trim()
+              ? data.wallet
+              : creatorWallet,
+          linked_wallets: Array.isArray(data?.linked_wallets)
+            ? data.linked_wallets.filter(
+                (entry): entry is string =>
+                  typeof entry === "string" && entry.trim().length > 0,
+              )
+            : [creatorWallet],
+          island_heat: Number(data?.island_heat ?? 0),
+          minimum_heat: Number(data?.minimum_heat ?? 25),
+          can_publish: Boolean(data?.can_publish),
+        });
+      } catch (loadError) {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        setPublishEligibility(null);
+        setEligibilityError(
+          loadError instanceof Error
+            ? loadError.message
+            : "Could not verify island heat right now.",
+        );
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsEligibilityLoading(false);
+        }
+      }
+    }
+
+    void loadEligibility();
+
+    return () => controller.abort();
+  }, [creatorWallet, open]);
 
   useEffect(() => {
     if (!open || listingType !== "miniapp") {
@@ -478,7 +563,6 @@ export default function BodegaSubmitModal({
     setSelectedPayWallet(walletAddress);
   }, [selectedPayWallet, walletAddress]);
 
-  const creatorWallet = selectedPayWallet || walletAddress || "";
   const assetType: BodegaAssetType =
     listingType === "art" ? "decoration" : "miniapp";
   const isBuildListing = assetType === "miniapp";
@@ -585,6 +669,19 @@ export default function BodegaSubmitModal({
     () => getBodegaListingPath(submittedItem?.submission_tx_hash),
     [submittedItem?.submission_tx_hash],
   );
+  const hasCreatorWallet = creatorWallet.length > 0;
+  const minimumPublishHeat = publishEligibility?.minimum_heat ?? 25;
+  const eligibilitySummary = publishEligibility
+    ? `Current heat: ${publishEligibility.island_heat.toFixed(1)}. Required: ${publishEligibility.minimum_heat.toFixed(0)}.`
+    : null;
+  const submitBlockedByEligibility =
+    step === 3 &&
+    !submittedItem &&
+    (!hasCreatorWallet ||
+      isEligibilityLoading ||
+      Boolean(eligibilityError) ||
+      !publishEligibility ||
+      !publishEligibility.can_publish);
 
   if (!open) return null;
 
@@ -621,18 +718,17 @@ export default function BodegaSubmitModal({
       return;
     }
 
-    const linkedWallets = linkedWalletRows.map((wallet) =>
-      wallet.address.toLowerCase(),
+    const reusablePayment = Boolean(
+      pendingPayment &&
+        pendingPayment.draftFingerprint === draftFingerprint &&
+        /^0x[0-9a-fA-F]{64}$/.test(pendingPayment.txHash),
     );
     const payoutWallet = selectedPayWallet || walletAddress;
-    if (!payoutWallet || linkedWalletRows.length === 0) {
-      setShowWalletGate(true);
-      setResumeAfterLink(true);
-      return;
-    }
-    if (!linkedWallets.includes(payoutWallet.toLowerCase())) {
-      setError("Link this wallet first to use it for transactions.");
-      setShowWalletGate(true);
+    if (
+      !reusablePayment &&
+      (!payoutWallet || !walletSelectorState.selectedWalletAvailable)
+    ) {
+      setError("Choose a wallet that is available here or link a new one.");
       return;
     }
 
@@ -652,6 +748,29 @@ export default function BodegaSubmitModal({
       return;
     }
 
+    if (isEligibilityLoading) {
+      setError("Checking island heat for this wallet. Try again in a moment.");
+      return;
+    }
+
+    if (!publishEligibility) {
+      setError(
+        eligibilityError ??
+          "Could not verify island heat for this wallet. Try again before paying.",
+      );
+      return;
+    }
+
+    if (!publishEligibility.can_publish) {
+      const baseMessage = `You need at least ${publishEligibility.minimum_heat.toFixed(0)} island heat to publish live listings. Current heat: ${publishEligibility.island_heat.toFixed(1)}.`;
+      setError(
+        reusablePayment
+          ? `${baseMessage} Your publishing fee is already recorded and can be reused once this wallet cluster qualifies.`
+          : baseMessage,
+      );
+      return;
+    }
+
     setFieldErrors({});
     setIsSubmitting(true);
     setError(null);
@@ -663,11 +782,6 @@ export default function BodegaSubmitModal({
     let confirmedPayment: PendingSubmissionPayment | null = null;
 
     try {
-      const reusablePayment =
-        pendingPayment &&
-        pendingPayment.draftFingerprint === draftFingerprint &&
-        /^0x[0-9a-fA-F]{64}$/.test(pendingPayment.txHash);
-
       if (reusablePayment) {
         usedExistingPayment = true;
         confirmedPayment = pendingPayment;
@@ -748,20 +862,6 @@ export default function BodegaSubmitModal({
     }
   };
 
-  const handleAddWallet = async () => {
-    try {
-      await linkCurrentWallet();
-      await refetchLinkedWallets();
-      setShowWalletGate(false);
-      if (resumeAfterLink) {
-        setResumeAfterLink(false);
-        await handleSubmit();
-      }
-    } catch {
-      // Hook already exposes a user-friendly error message.
-    }
-  };
-
   const handleShareListing = async () => {
     if (!submittedItemPath) {
       setShareStatus("This listing does not have a shareable URL yet.");
@@ -813,26 +913,65 @@ export default function BodegaSubmitModal({
         <WalletSelector
           label="Sign with"
           value={selectedPayWallet}
-          onSelect={setSelectedPayWallet}
+          onSelect={(address) => {
+            setSelectedPayWallet(address);
+            setError(null);
+          }}
+          onStateChange={setWalletSelectorState}
         />
-        {showWalletGate || linkedWalletRows.length === 0 ? (
-          <div className={styles.error}>
-            <strong>You need a linked wallet to continue.</strong>
-            <button
-              type="button"
-              className={styles.primaryButton}
-              onClick={() => {
-                void handleAddWallet();
-              }}
-              disabled={isLinkingWallet}
-            >
-              {isLinkingWallet ? "Linking..." : "Add wallet"}
-            </button>
-            {linkStatus ? (
-              <div className={styles.status}>{linkStatus}</div>
-            ) : null}
-            {linkError ? <div className={styles.error}>{linkError}</div> : null}
-          </div>
+
+        {!submittedItem ? (
+          <section
+            className={`${styles.eligibilityCard} ${
+              !hasCreatorWallet
+                ? styles.eligibilityBlocked
+                : isEligibilityLoading
+                ? styles.eligibilityChecking
+                : publishEligibility?.can_publish
+                  ? styles.eligibilityReady
+                  : styles.eligibilityBlocked
+            }`}
+          >
+            <div className={styles.eligibilityHeader}>
+              <strong>Publishing gate</strong>
+              <span>
+                {!hasCreatorWallet
+                  ? "Choose wallet"
+                  : isEligibilityLoading
+                  ? "Checking heat..."
+                  : publishEligibility?.can_publish
+                    ? "Ready to publish"
+                    : eligibilityError
+                      ? "Could not verify"
+                      : "Heat too low"}
+              </span>
+            </div>
+            <div className={styles.eligibilityStats}>
+              <span>
+                Current heat{" "}
+                <strong>
+                  {publishEligibility
+                    ? publishEligibility.island_heat.toFixed(1)
+                    : "—"}
+                </strong>
+              </span>
+              <span>
+                Required{" "}
+                <strong>{minimumPublishHeat.toFixed(0)}</strong>
+              </span>
+            </div>
+            <p className={styles.eligibilityBody}>
+              {!hasCreatorWallet
+                ? "Choose a wallet first so the Bodega can verify the heat gate before any publishing fee is charged."
+                : isEligibilityLoading
+                ? "Checking whether the selected wallet cluster can publish before any JBM fee is charged."
+                : eligibilityError
+                  ? `${eligibilityError} The publishing fee stays blocked until this check succeeds.`
+                  : publishEligibility?.can_publish
+                    ? "This wallet cluster clears the live-publishing threshold, so the Bodega fee can be charged safely."
+                    : "This wallet cluster is below the live-publishing threshold. The publish fee button stays blocked until the required island heat is reached."}
+            </p>
+          </section>
         ) : null}
 
         {submittedItem ? (
@@ -1179,6 +1318,9 @@ export default function BodegaSubmitModal({
             <div className={styles.feedback}>
               {status ? <span className={styles.status}>{status}</span> : null}
               {error ? <span className={styles.error}>{error}</span> : null}
+              {!status && !error && step === 3 && eligibilitySummary ? (
+                <span className={styles.status}>{eligibilitySummary}</span>
+              ) : null}
             </div>
             <div className={styles.actions}>
               {step > 1 ? (
@@ -1201,16 +1343,28 @@ export default function BodegaSubmitModal({
                 type="button"
                 className={styles.primaryButton}
                 onClick={step === 3 ? handleSubmit : handleStepAdvance}
-                disabled={isSubmitting || isTransferring}
+                disabled={
+                  isSubmitting || isTransferring || submitBlockedByEligibility
+                }
               >
                 {isSubmitting || isTransferring
                   ? "Submitting..."
-                  : step === 3
-                    ? pendingPayment &&
-                      pendingPayment.draftFingerprint === draftFingerprint
-                      ? "Retry Save"
-                      : `Pay ${formatJbmAmount(BODEGA_SUBMISSION_FEE)} & Submit`
-                    : "Continue"}
+                  : step === 3 && isEligibilityLoading
+                    ? "Checking heat..."
+                    : step === 3 && !hasCreatorWallet
+                      ? "Choose wallet first"
+                    : step === 3 && eligibilityError
+                      ? "Verify heat first"
+                      : step === 3 &&
+                          publishEligibility &&
+                          !publishEligibility.can_publish
+                        ? `Need ${minimumPublishHeat.toFixed(0)} Heat`
+                        : step === 3
+                          ? pendingPayment &&
+                            pendingPayment.draftFingerprint === draftFingerprint
+                            ? "Retry Save"
+                            : `Pay ${formatJbmAmount(BODEGA_SUBMISSION_FEE)} & Submit`
+                          : "Continue"}
               </button>
             </div>
           </footer>

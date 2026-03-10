@@ -1,10 +1,8 @@
 import { useEffect, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
-import WalletSelector from "./WalletSelector";
+import WalletSelector, { type WalletSelectorState } from "./WalletSelector";
 import { useClaimable } from "../hooks/useClaimable";
 import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
-import { useSiweWalletLink } from "../hooks/useSiweWalletLink";
-import { useUserWalletLinks } from "../hooks/useUserWalletLinks";
 import { CLAIM_CONTRACT_ADDRESS } from "../utils/constants";
 import {
   claimEscrowAbi,
@@ -78,14 +76,6 @@ export default function ClaimPanel({
 }: ClaimPanelProps) {
   const { authenticated, login, getAccessToken } = usePrivy();
   const { publicClient, requireWallet, walletAddress } = usePrivyBaseWallet();
-  const { wallets: linkedWalletRows, refetch: refetchLinkedWallets } =
-    useUserWalletLinks(authenticated);
-  const {
-    linkCurrentWallet,
-    isLinking: isLinkingWallet,
-    status: linkStatus,
-    error: linkError,
-  } = useSiweWalletLink();
 
   const [selectedPayoutWallet, setSelectedPayoutWallet] = useState<string>("");
   const claimLookupWallet = selectedPayoutWallet || walletAddress || undefined;
@@ -98,13 +88,16 @@ export default function ClaimPanel({
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isClaiming, setIsClaiming] = useState(false);
-  const [resumeAfterLink, setResumeAfterLink] = useState(false);
-  const [showWalletGate, setShowWalletGate] = useState(false);
+  const [walletSelectorState, setWalletSelectorState] =
+    useState<WalletSelectorState>({
+      selectedWallet: null,
+      selectedWalletAvailable: false,
+      hasAvailableWallet: false,
+      availableWallets: [],
+      totalWallets: 0,
+    });
   const nextClaimText = getNextClaimCountdown(claimable?.claimed_today);
   const panelClassName = `${styles.panel} ${!sticky ? styles.panelStatic : ""}`;
-  const linkedWallets = linkedWalletRows.map((wallet) =>
-    wallet.address.toLowerCase(),
-  );
 
   useEffect(() => {
     if (!walletAddress) return;
@@ -128,8 +121,8 @@ export default function ClaimPanel({
       return;
     }
 
-    if (!linkedWallets.includes(payoutWallet.toLowerCase())) {
-      setError("Link this wallet first to use it for transactions.");
+    if (!walletSelectorState.selectedWalletAvailable) {
+      setError("Choose a wallet that is available here or link a new one.");
       return;
     }
 
@@ -267,27 +260,12 @@ export default function ClaimPanel({
       return;
     }
 
-    if (linkedWalletRows.length === 0) {
-      setShowWalletGate(true);
-      setResumeAfterLink(true);
+    if (!walletSelectorState.hasAvailableWallet) {
+      setError("Choose a wallet that is available here or link a new one.");
       return;
     }
 
     await runClaim();
-  };
-
-  const handleAddWallet = async () => {
-    try {
-      await linkCurrentWallet();
-      await refetchLinkedWallets();
-      setShowWalletGate(false);
-      if (resumeAfterLink) {
-        setResumeAfterLink(false);
-        await runClaim();
-      }
-    } catch {
-      // Hook state already exposes a user-friendly error.
-    }
   };
 
   if (!authenticated) {
@@ -334,25 +312,8 @@ export default function ClaimPanel({
           setSelectedPayoutWallet(address);
           setError(null);
         }}
+        onStateChange={setWalletSelectorState}
       />
-
-      {showWalletGate || linkedWalletRows.length === 0 ? (
-        <div className={styles.error}>
-          <strong>You need a linked wallet to continue.</strong>
-          <button
-            type="button"
-            className={styles.actionButton}
-            onClick={handleAddWallet}
-            disabled={isLinkingWallet}
-          >
-            {isLinkingWallet ? "Linking..." : "Add wallet"}
-          </button>
-          {linkStatus ? (
-            <div className={styles.status}>{linkStatus}</div>
-          ) : null}
-          {linkError ? <div className={styles.error}>{linkError}</div> : null}
-        </div>
-      ) : null}
 
       <div className={styles.metric}>
         <span>Your heat</span>
@@ -372,7 +333,9 @@ export default function ClaimPanel({
         type="button"
         className={styles.actionButton}
         disabled={
-          !claimable.can_claim || isClaiming || linkedWalletRows.length === 0
+          !claimable.can_claim ||
+          isClaiming ||
+          !walletSelectorState.hasAvailableWallet
         }
         onClick={() => {
           void handleClaim();

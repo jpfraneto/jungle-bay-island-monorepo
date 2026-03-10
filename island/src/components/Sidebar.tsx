@@ -119,7 +119,15 @@ export default function Sidebar({
                     type="button"
                     className={styles.bungalowButton}
                     onClick={() => {
-                      navigate(bungalowPath);
+                      navigate(bungalowPath, {
+                        state: {
+                          preloadedBungalow: {
+                            name: bungalow.name ?? null,
+                            symbol: bungalow.symbol ?? null,
+                            imageUrl: bungalow.image_url ?? null,
+                          },
+                        },
+                      });
                       onClose();
                     }}
                   >

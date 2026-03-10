@@ -1716,15 +1716,23 @@ async function getWallIdentityMeta(wallet: string): Promise<{
 }> {
   const rows = await db<Array<{ username: string | null; pfp_url: string | null }>>`
     SELECT
-      COALESCE(u.x_username, wfp.username) AS username,
+      COALESCE(u_direct.x_username, u_linked.x_username, wfp.username) AS username,
       wfp.pfp_url
     FROM (SELECT ${wallet}::text AS wallet) AS input
     LEFT JOIN ${db(CONFIG.SCHEMA)}.wallet_farcaster_profiles wfp
       ON LOWER(wfp.wallet) = LOWER(input.wallet)
-    LEFT JOIN ${db(CONFIG.SCHEMA)}.user_wallets uw
-      ON LOWER(uw.address) = LOWER(input.wallet)
-    LEFT JOIN ${db(CONFIG.SCHEMA)}.users u
-      ON u.privy_user_id = uw.privy_user_id
+    -- Direct Privy-managed wallet
+    LEFT JOIN ${db(CONFIG.SCHEMA)}.user_wallets uw_direct
+      ON LOWER(uw_direct.address) = LOWER(input.wallet)
+    LEFT JOIN ${db(CONFIG.SCHEMA)}.users u_direct
+      ON u_direct.privy_user_id = uw_direct.privy_user_id
+    -- SIWE-linked wallet: linked_wallet → primary_wallet → users
+    LEFT JOIN ${db(CONFIG.SCHEMA)}.user_wallet_links uwl
+      ON LOWER(uwl.linked_wallet) = LOWER(input.wallet)
+    LEFT JOIN ${db(CONFIG.SCHEMA)}.user_wallets uw_linked
+      ON LOWER(uw_linked.address) = LOWER(uwl.primary_wallet)
+    LEFT JOIN ${db(CONFIG.SCHEMA)}.users u_linked
+      ON u_linked.privy_user_id = uw_linked.privy_user_id
     LIMIT 1
   `
 

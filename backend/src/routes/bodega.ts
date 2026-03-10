@@ -584,6 +584,23 @@ async function upsertCreatorClaimAllocation(input: {
 
 // ── Submit ───────────────────────────────────────────────────
 
+bodegaRoute.get('/publish-eligibility/:wallet', async (c) => {
+  const wallet = normalizeWallet(c.req.param('wallet'))
+  if (!wallet) {
+    throw new ApiError(400, 'invalid_wallet', 'Invalid wallet address')
+  }
+
+  const { islandHeat, wallets } = await getIslandHeatForWallet(wallet)
+
+  return c.json({
+    wallet,
+    linked_wallets: wallets,
+    island_heat: Number(islandHeat.toFixed(2)),
+    minimum_heat: COMMUNITY_POLICY.bungalow_submit_min_heat,
+    can_publish: islandHeat >= COMMUNITY_POLICY.bungalow_submit_min_heat,
+  })
+})
+
 bodegaRoute.post('/submit', requirePrivyAuth, async (c) => {
   await ensureBodegaCatalogShape()
 

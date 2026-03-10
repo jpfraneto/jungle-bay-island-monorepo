@@ -32,6 +32,19 @@ export function useBungalowScene(chain: string | undefined, ca: string | undefin
     }
   }, [ca, chain]);
 
+  // Refreshes the scene in the background without clearing existing slots,
+  // so newly placed items animate in smoothly rather than causing a full remount.
+  const silentRefetch = useCallback(async () => {
+    if (!chain || !ca) return;
+    try {
+      const response = await fetch(`/api/bungalow/${chain}/${ca}/scene`);
+      const data = (await response.json()) as { scene?: SceneConfig };
+      if (data.scene) setScene(data.scene);
+    } catch {
+      // Best-effort: existing scene stays visible
+    }
+  }, [ca, chain]);
+
   useEffect(() => {
     void refetch();
   }, [refetch]);
@@ -65,5 +78,5 @@ export function useBungalowScene(chain: string | undefined, ca: string | undefin
     [chain, ca],
   );
 
-  return { scene, loading, error, updateSlot, refetch };
+  return { scene, loading, error, updateSlot, refetch, silentRefetch };
 }

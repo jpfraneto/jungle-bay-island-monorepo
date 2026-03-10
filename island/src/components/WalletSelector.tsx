@@ -1,21 +1,46 @@
-import { useEffect, useMemo } from "react";
-import { usePrivy } from "@privy-io/react-auth";
-import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
-import { useUserWalletLinks } from "../hooks/useUserWalletLinks";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { usePrivy, type ConnectedWallet } from "@privy-io/react-auth";
 import {
   getPrivyWalletChainType,
   getPrivyWalletList,
 } from "../utils/privyWalletOptions";
+import {
+  useSiweWalletLink,
+  type LinkedWalletResult,
+} from "../hooks/useSiweWalletLink";
+import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
+import { useUserWalletLinks } from "../hooks/useUserWalletLinks";
 import styles from "../styles/wallet-selector.module.css";
+
+export interface WalletSelectorState {
+  selectedWallet: string | null;
+  selectedWalletAvailable: boolean;
+  hasAvailableWallet: boolean;
+  availableWallets: string[];
+  totalWallets: number;
+}
 
 interface WalletSelectorProps {
   onSelect: (address: string) => void;
   value?: string | null;
   label?: string;
-  onAddWallet?: () => void | Promise<void>;
-  isAddingWallet?: boolean;
-  addWalletStatus?: string | null;
-  addWalletError?: string | null;
+  onStateChange?: (state: WalletSelectorState) => void;
+  onWalletLinked?: (result: LinkedWalletResult) => void | Promise<void>;
+}
+
+interface WalletOption {
+  address: string;
+  sourceLabel: string | null;
+  isConnected: boolean;
+  isLinked: boolean;
+  isActive: boolean;
+  isAvailable: boolean;
+  connectedAt: number;
+  linkedAt: number;
+}
+
+function isHexAddress(value: string): boolean {
+  return /^0x[0-9a-fA-F]{40}$/.test(value);
 }
 
 function truncateAddress(address: string): string {
@@ -23,14 +48,89 @@ function truncateAddress(address: string): string {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
+function formatSourceLabel(value: string | null | undefined): string | null {
+  if (!value) return null;
+
+  const normalized = value
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!normalized) return null;
+
+  return normalized.replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
+function getWalletStatus(option: WalletOption): string {
+  if (option.isAvailable) {
+    return "Available here";
+  }
+
+  if (option.isConnected) {
+    return "Connected, link needed";
+  }
+
+  if (option.isLinked) {
+    return "Linked, reconnect here";
+  }
+
+  return "Unavailable";
+}
+
+function getWalletContextLabel(option: WalletOption): string {
+  if (option.isAvailable) {
+    return "Connected + linked";
+  }
+
+  if (option.isConnected) {
+    return "Connected in browser";
+  }
+
+  if (option.isLinked) {
+    return "Linked on profile";
+  }
+
+  return "Unavailable";
+}
+
+function compareWalletOptions(
+  left: WalletOption,
+  right: WalletOption,
+  preferredAddress: string,
+): number {
+  const leftKey = left.address.toLowerCase();
+  const rightKey = right.address.toLowerCase();
+
+  if (leftKey === preferredAddress && rightKey !== preferredAddress) return -1;
+  if (rightKey === preferredAddress && leftKey !== preferredAddress) return 1;
+
+  if (left.isAvailable !== right.isAvailable) {
+    return left.isAvailable ? -1 : 1;
+  }
+
+  if (left.isConnected !== right.isConnected) {
+    return left.isConnected ? -1 : 1;
+  }
+
+  if (left.isActive !== right.isActive) {
+    return left.isActive ? -1 : 1;
+  }
+
+  const leftRecency = Math.max(left.connectedAt, left.linkedAt);
+  const rightRecency = Math.max(right.connectedAt, right.linkedAt);
+  if (leftRecency !== rightRecency) {
+    return rightRecency - leftRecency;
+  }
+
+  return left.address.localeCompare(right.address);
+}
+
 export default function WalletSelector({
   onSelect,
   value = null,
   label = "Sign with",
-  onAddWallet,
-  isAddingWallet = false,
-  addWalletStatus = null,
-  addWalletError = null,
+  onStateChange,
+  onWalletLinked,
 }: WalletSelectorProps) {
   const { authenticated, connectWallet, login } = usePrivy();
   const {
@@ -42,66 +142,266 @@ export default function WalletSelector({
     wallets: linkedWalletRows,
     isLoading,
     error: loadError,
+    refetch: refetchLinkedWallets,
   } = useUserWalletLinks(authenticated);
+  const {
+    linkCurrentWallet,
+    isLinking,
+    status: linkStatus,
+    error: linkError,
+  } = useSiweWalletLink();
 
-  const linkedWallets = useMemo(
-    () => linkedWalletRows.map((wallet) => wallet.address),
-    [linkedWalletRows],
-  );
-
-  const connectedWalletAddresses = useMemo(
-    () =>
-      new Set(connectedWallets.map((wallet) => wallet.address.toLowerCase())),
-    [connectedWallets],
-  );
-  const options = useMemo(
-    () =>
-      linkedWallets.filter((address) =>
-        connectedWalletAddresses.has(address.toLowerCase()),
-      ),
-    [connectedWalletAddresses, linkedWallets],
-  );
-
-  const activeWalletAddress = walletAddress ?? "";
-  const preferredWalletAddress = value?.trim() || "";
-  const displayedWalletAddress =
-    preferredWalletAddress || activeWalletAddress || options[0] || "";
-  const selectorValue = options.some(
-    (address) => address.toLowerCase() === displayedWalletAddress.toLowerCase(),
-  )
-    ? displayedWalletAddress
-    : (options[0] ?? "");
-
-  const activeWalletLinked =
-    Boolean(activeWalletAddress) &&
-    options.some(
-      (linkedWallet) =>
-        linkedWallet.toLowerCase() === activeWalletAddress.toLowerCase(),
-    );
-  const displayedWalletLinked =
-    Boolean(displayedWalletAddress) &&
-    options.some(
-      (linkedWallet) =>
-        linkedWallet.toLowerCase() === displayedWalletAddress.toLowerCase(),
-    );
-  const activeWalletNotLinked =
-    Boolean(activeWalletAddress) &&
-    !activeWalletLinked &&
-    !displayedWalletLinked;
-  const hasUnavailableLinkedWallets = linkedWallets.length > options.length;
-  const showSelector = options.length > 1;
+  const [open, setOpen] = useState(false);
+  const [pendingPreferredWallet, setPendingPreferredWallet] = useState<
+    string | null
+  >(null);
+  const [promoteNewestAvailableWallet, setPromoteNewestAvailableWallet] =
+    useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const preferredAddress = value?.trim().toLowerCase() ?? "";
 
   useEffect(() => {
-    if (!authenticated) return;
-    if (!selectorValue) return;
+    if (!open) {
+      return;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+
+      if (!rootRef.current?.contains(target)) {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [open]);
+
+  const options = useMemo(() => {
+    const optionMap = new Map<string, WalletOption>();
+
+    const upsert = (address: string, patch: Partial<WalletOption>) => {
+      if (!isHexAddress(address)) {
+        return;
+      }
+
+      const key = address.toLowerCase();
+      const current =
+        optionMap.get(key) ??
+        ({
+          address,
+          sourceLabel: null,
+          isConnected: false,
+          isLinked: false,
+          isActive: false,
+          isAvailable: false,
+          connectedAt: 0,
+          linkedAt: 0,
+        } satisfies WalletOption);
+
+      const next: WalletOption = {
+        ...current,
+        ...patch,
+        address: current.address,
+      };
+
+      next.isAvailable = next.isConnected && next.isLinked;
+      optionMap.set(key, next);
+    };
+
+    linkedWalletRows.forEach((wallet) => {
+      upsert(wallet.address, {
+        address: wallet.address,
+        sourceLabel: formatSourceLabel(wallet.source),
+        isLinked: true,
+        linkedAt: Date.parse(wallet.linked_at) || 0,
+      });
+    });
+
+    connectedWallets.forEach((wallet: ConnectedWallet) => {
+      upsert(wallet.address, {
+        address: wallet.address,
+        sourceLabel:
+          formatSourceLabel(wallet.connectorType) ??
+          formatSourceLabel(wallet.walletClientType),
+        isConnected: true,
+        isActive:
+          walletAddress?.toLowerCase() === wallet.address.toLowerCase(),
+        connectedAt: wallet.connectedAt,
+      });
+    });
+
+    return [...optionMap.values()].sort((left, right) =>
+      compareWalletOptions(left, right, preferredAddress),
+    );
+  }, [connectedWallets, linkedWalletRows, preferredAddress, walletAddress]);
+
+  const selectedOption = useMemo(() => {
+    if (!preferredAddress) {
+      return null;
+    }
+
+    return (
+      options.find(
+        (option) => option.address.toLowerCase() === preferredAddress,
+      ) ?? null
+    );
+  }, [options, preferredAddress]);
+
+  const firstAvailableOption = useMemo(
+    () => options.find((option) => option.isAvailable) ?? null,
+    [options],
+  );
+  const selectedOrFallbackOption =
+    selectedOption ?? firstAvailableOption ?? options[0] ?? null;
+  const availableWalletCount = options.filter(
+    (option) => option.isAvailable,
+  ).length;
+  const newestAvailableOption = useMemo(() => {
+    const availableOptions = options.filter((option) => option.isAvailable);
+    if (availableOptions.length === 0) {
+      return null;
+    }
+
+    return [...availableOptions].sort(
+      (left, right) =>
+        Math.max(right.connectedAt, right.linkedAt) -
+        Math.max(left.connectedAt, left.linkedAt),
+    )[0];
+  }, [options]);
+
+  useEffect(() => {
+    if (!authenticated) {
+      return;
+    }
+
+    if (selectedOption) {
+      return;
+    }
+
+    const fallbackOption =
+      firstAvailableOption ??
+      options.find((option) => option.isConnected) ??
+      options[0] ??
+      null;
+
+    if (!fallbackOption) {
+      return;
+    }
+
+    if (fallbackOption.isAvailable) {
+      try {
+        setActiveWallet(fallbackOption.address);
+      } catch {
+        // Privy wallet state can lag briefly after a reconnect.
+      }
+    }
+
+    onSelect(fallbackOption.address);
+  }, [
+    authenticated,
+    firstAvailableOption,
+    onSelect,
+    options,
+    selectedOption,
+    setActiveWallet,
+  ]);
+
+  useEffect(() => {
+    if (!pendingPreferredWallet) {
+      return;
+    }
+
+    const nextOption = options.find(
+      (option) =>
+        option.address.toLowerCase() === pendingPreferredWallet.toLowerCase() &&
+        option.isAvailable,
+    );
+    if (!nextOption) {
+      return;
+    }
 
     try {
-      setActiveWallet(selectorValue);
-      onSelect(selectorValue);
+      setActiveWallet(nextOption.address);
     } catch {
-      // Keep the selector stable while Privy catches up.
+      // Privy wallet state can lag briefly after a reconnect.
     }
-  }, [authenticated, onSelect, selectorValue, setActiveWallet]);
+
+    onSelect(nextOption.address);
+    setPendingPreferredWallet(null);
+    setPromoteNewestAvailableWallet(false);
+    setOpen(false);
+  }, [onSelect, options, pendingPreferredWallet, setActiveWallet]);
+
+  useEffect(() => {
+    if (!promoteNewestAvailableWallet || !newestAvailableOption) {
+      return;
+    }
+
+    try {
+      setActiveWallet(newestAvailableOption.address);
+    } catch {
+      // Privy wallet state can lag briefly after a reconnect.
+    }
+
+    onSelect(newestAvailableOption.address);
+    setPromoteNewestAvailableWallet(false);
+    setOpen(false);
+  }, [
+    newestAvailableOption,
+    onSelect,
+    promoteNewestAvailableWallet,
+    setActiveWallet,
+  ]);
+
+  useEffect(() => {
+    onStateChange?.({
+      selectedWallet: selectedOption?.address ?? null,
+      selectedWalletAvailable: Boolean(selectedOption?.isAvailable),
+      hasAvailableWallet: options.some((option) => option.isAvailable),
+      availableWallets: options
+        .filter((option) => option.isAvailable)
+        .map((option) => option.address),
+      totalWallets: options.length,
+    });
+  }, [onStateChange, options, selectedOption]);
+
+  const handleChooseWallet = (option: WalletOption) => {
+    if (!option.isAvailable) {
+      return;
+    }
+
+    try {
+      setActiveWallet(option.address);
+    } catch {
+      // Privy wallet state can lag briefly after a reconnect.
+    }
+
+    onSelect(option.address);
+    setOpen(false);
+  };
+
+  const handleLinkWallet = async () => {
+    try {
+      const result = await linkCurrentWallet();
+      await refetchLinkedWallets();
+
+      if (result.didLinkWallet) {
+        if (result.linkedAddress) {
+          setPendingPreferredWallet(result.linkedAddress);
+        } else {
+          setPromoteNewestAvailableWallet(true);
+        }
+      }
+
+      await onWalletLinked?.(result);
+    } catch {
+      // The hook already surfaces a user-facing error message.
+    }
+  };
 
   if (!authenticated) {
     return (
@@ -120,100 +420,178 @@ export default function WalletSelector({
     );
   }
 
-  if (!walletAddress) {
-    return (
-      <div className={styles.selectorWrap}>
-        <label className={styles.selectorLabel}>{label}</label>
-        <div className={styles.actionRow}>
-          <p className={styles.warning}>Connect a wallet to continue.</p>
+  return (
+    <div ref={rootRef} className={styles.selectorWrap}>
+      <label className={styles.selectorLabel}>{label}</label>
+
+      {options.length > 0 ? (
+        <div className={styles.chooser}>
           <button
             type="button"
-            className={styles.connectButton}
-            onClick={() =>
-              connectWallet({
-                walletChainType: getPrivyWalletChainType(),
-                walletList: getPrivyWalletList(),
-              })
-            }
+            className={styles.trigger}
+            onClick={() => setOpen((current) => !current)}
+            aria-expanded={open}
           >
-            Connect wallet
+            <div className={styles.triggerCopy}>
+              <div className={styles.triggerTopline}>
+                <strong>
+                  {truncateAddress(selectedOrFallbackOption?.address ?? "")}
+                </strong>
+                {selectedOrFallbackOption?.isActive ? (
+                  <span className={`${styles.badge} ${styles.badgeMuted}`}>
+                    Current
+                  </span>
+                ) : null}
+              </div>
+              <div className={styles.triggerMeta}>
+                <span className={styles.triggerSource}>
+                  {selectedOrFallbackOption?.sourceLabel ?? "External wallet"}
+                </span>
+                {selectedOrFallbackOption ? (
+                  <span
+                    className={`${styles.badge} ${
+                      selectedOrFallbackOption.isAvailable
+                        ? styles.badgeAvailable
+                        : selectedOrFallbackOption.isConnected
+                          ? styles.badgeAttention
+                          : styles.badgeReconnect
+                    }`}
+                  >
+                    {getWalletStatus(selectedOrFallbackOption)}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+            <span className={styles.chevron}>{open ? "−" : "+"}</span>
           </button>
-        </div>
-        {loadError ? <p className={styles.error}>{loadError}</p> : null}
-        {addWalletStatus ? (
-          <p className={styles.status}>{addWalletStatus}</p>
-        ) : null}
-        {addWalletError ? (
-          <p className={styles.error}>{addWalletError}</p>
-        ) : null}
-      </div>
-    );
-  }
 
-  return (
-    <div className={styles.selectorWrap}>
-      <label className={styles.selectorLabel}>{label}</label>
-      {showSelector ? (
-        <select
-          className={styles.selector}
-          value={selectorValue}
-          onChange={(event) => {
-            const nextAddress = event.target.value;
-            try {
-              setActiveWallet(nextAddress);
-            } catch {
-              // Keep selector responsive even if Privy wallet sync lags.
-            }
-            onSelect(nextAddress);
-          }}
-          disabled={isLoading || options.length === 0}
-        >
-          {options.length === 0 ? (
-            <option value="">No linked wallets</option>
-          ) : (
-            options.map((address) => (
-              <option key={address} value={address}>
-                {truncateAddress(address)}
-              </option>
-            ))
-          )}
-        </select>
+          {open ? (
+            <div className={styles.panel}>
+              <div className={styles.panelHeader}>
+                <div className={styles.panelHeaderCopy}>
+                  <strong>Choose wallet</strong>
+                  <span>
+                    {availableWalletCount} available of {options.length} linked
+                    or connected
+                  </span>
+                </div>
+              </div>
+              <div className={styles.optionList}>
+                {options.map((option) => {
+                  const isSelected =
+                    selectedOption?.address.toLowerCase() ===
+                    option.address.toLowerCase();
+
+                  return (
+                    <button
+                      key={option.address.toLowerCase()}
+                      type="button"
+                      className={`${styles.option} ${
+                        isSelected ? styles.optionSelected : ""
+                      } ${!option.isAvailable ? styles.optionUnavailable : ""}`}
+                      onClick={() => handleChooseWallet(option)}
+                      aria-disabled={!option.isAvailable}
+                      aria-pressed={isSelected}
+                    >
+                      <div className={styles.optionCopy}>
+                        <div className={styles.optionTopline}>
+                          <strong>{truncateAddress(option.address)}</strong>
+                          {option.isActive ? (
+                            <span
+                              className={`${styles.badge} ${styles.badgeMuted}`}
+                            >
+                              Current
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className={styles.optionDetails}>
+                          <span>{option.sourceLabel ?? "External wallet"}</span>
+                          <span className={styles.optionDivider} />
+                          <span>{getWalletContextLabel(option)}</span>
+                        </div>
+                      </div>
+                      <div className={styles.optionMeta}>
+                        <span
+                          className={`${styles.badge} ${
+                            option.isAvailable
+                              ? styles.badgeAvailable
+                              : option.isConnected
+                                ? styles.badgeAttention
+                                : styles.badgeReconnect
+                          }`}
+                        >
+                          {getWalletStatus(option)}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className={styles.panelFooter}>
+                <button
+                  type="button"
+                  className={styles.linkButton}
+                  onClick={() => {
+                    void handleLinkWallet();
+                  }}
+                  disabled={isLinking}
+                >
+                  {isLinking ? "Linking..." : "Link new wallet"}
+                </button>
+                {loadError ? <p className={styles.error}>{loadError}</p> : null}
+                {linkStatus ? <p className={styles.status}>{linkStatus}</p> : null}
+                {linkError ? <p className={styles.error}>{linkError}</p> : null}
+              </div>
+            </div>
+          ) : null}
+        </div>
       ) : (
-        <div className={styles.walletDisplay}>
-          <strong>{truncateAddress(displayedWalletAddress)}</strong>
-          <span>
-            {displayedWalletLinked ? "Linked wallet" : "Current wallet"}
-          </span>
+        <div className={styles.emptyState}>
+          {isLoading ? (
+            <p className={styles.warning}>Loading wallets...</p>
+          ) : (
+            <p className={styles.warning}>
+              No connected wallets yet. Link one to pay or sign here.
+            </p>
+          )}
+          <button
+            type="button"
+            className={styles.linkButton}
+            onClick={() => {
+              void handleLinkWallet();
+            }}
+            disabled={isLinking}
+          >
+            {isLinking ? "Linking..." : "Link new wallet"}
+          </button>
+          {loadError ? <p className={styles.error}>{loadError}</p> : null}
+          {linkStatus ? <p className={styles.status}>{linkStatus}</p> : null}
+          {linkError ? <p className={styles.error}>{linkError}</p> : null}
         </div>
       )}
 
-      {loadError ? <p className={styles.error}>{loadError}</p> : null}
-      {hasUnavailableLinkedWallets ? (
-        <p className={styles.warning}>
-          Only wallets currently connected in Privy can pay here.
+      {options.length === 0 ? null : (
+        <p className={styles.hint}>
+          Available wallets can sign here now. Others stay visible so you can
+          see what needs linking or reconnecting.
         </p>
+      )}
+
+      {!walletAddress ? (
+        <button
+          type="button"
+          className={styles.connectButton}
+          onClick={() =>
+            connectWallet({
+              walletChainType: getPrivyWalletChainType(),
+              walletList: getPrivyWalletList(),
+            })
+          }
+        >
+          Connect another wallet
+        </button>
       ) : null}
-      {activeWalletNotLinked ? (
-        <div className={styles.actionRow}>
-          <p className={styles.warning}>
-            Link this wallet to use it for transactions.
-          </p>
-          {onAddWallet ? (
-            <button
-              type="button"
-              className={styles.connectButton}
-              onClick={onAddWallet}
-              disabled={isAddingWallet}
-            >
-              {isAddingWallet ? "Linking..." : "Link wallet"}
-            </button>
-          ) : null}
-        </div>
-      ) : null}
-      {addWalletStatus ? (
-        <p className={styles.status}>{addWalletStatus}</p>
-      ) : null}
-      {addWalletError ? <p className={styles.error}>{addWalletError}</p> : null}
     </div>
   );
 }

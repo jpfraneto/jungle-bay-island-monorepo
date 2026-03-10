@@ -199,8 +199,10 @@ export async function findTokenDeploymentsByAddress(
 }
 
 export async function getBungalow(tokenAddress: string, chain: string): Promise<BungalowRow | null> {
+  await ensureBungalowClaimIdentityColumns()
+
   const rows = await db<BungalowRow[]>`
-    SELECT token_address, chain, name, symbol, ipfs_hash, current_owner, verified_admin,
+    SELECT token_address, chain, name, symbol, ipfs_hash, current_owner, claimed_by_privy_user_id, verified_admin,
            is_verified, is_claimed, description, origin_story, holder_count, total_supply,
            link_x, link_farcaster, link_telegram, link_website, link_dexscreener,
            image_url, price_usd::text AS price_usd, market_cap::text AS market_cap,
@@ -1473,9 +1475,20 @@ export async function getUserByWalletAddress(address: string): Promise<UserRow |
       u.email,
       u.created_at::text AS created_at
     FROM ${db(CONFIG.SCHEMA)}.users u
-    INNER JOIN ${db(CONFIG.SCHEMA)}.user_wallets uw
-      ON uw.privy_user_id = u.privy_user_id
-    WHERE uw.address = ${address}
+    WHERE EXISTS (
+      SELECT 1
+      FROM ${db(CONFIG.SCHEMA)}.user_wallets uw
+      WHERE uw.privy_user_id = u.privy_user_id
+        AND LOWER(uw.address) = LOWER(${address})
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM ${db(CONFIG.SCHEMA)}.user_wallet_links uwl
+      INNER JOIN ${db(CONFIG.SCHEMA)}.user_wallets uw
+        ON LOWER(uw.address) = LOWER(uwl.primary_wallet)
+      WHERE uw.privy_user_id = u.privy_user_id
+        AND LOWER(uwl.linked_wallet) = LOWER(${address})
+    )
     LIMIT 1
   `
 
@@ -1634,19 +1647,24 @@ export async function getBulletinPosts(
   limit: number,
   offset: number,
 ): Promise<{ posts: (BulletinPostRow & { poster_username: string | null; poster_pfp: string | null })[]; total: number }> {
-  const posts = await db<(BulletinPostRow & { poster_username: string | null; poster_pfp: string | null })[]>`
+  const posts = await db<BulletinPostRow[]>`
     SELECT bp.id, bp.token_address, bp.chain, bp.wallet, bp.content, bp.image_url,
-           bp.created_at::text AS created_at,
-           wfp.username AS poster_username,
-           wfp.pfp_url AS poster_pfp
+           bp.created_at::text AS created_at
     FROM ${db(CONFIG.SCHEMA)}.bulletin_posts bp
-    LEFT JOIN ${db(CONFIG.SCHEMA)}.wallet_farcaster_profiles wfp
-      ON wfp.wallet = bp.wallet
     WHERE bp.token_address = ${tokenAddress}
     ORDER BY bp.created_at DESC
     LIMIT ${limit}
     OFFSET ${offset}
   `
+
+  const displayMap = new Map<string, { username: string | null; pfp_url: string | null }>()
+  await Promise.all(
+    [...new Set(posts.map((post) => post.wallet))]
+      .filter((wallet): wallet is string => Boolean(wallet))
+      .map(async (wallet) => {
+        displayMap.set(wallet, await getWalletDisplayIdentity(wallet))
+      }),
+  )
 
   const totalRows = await db<{ cnt: string }[]>`
     SELECT COUNT(*)::text AS cnt
@@ -1655,7 +1673,14 @@ export async function getBulletinPosts(
   `
 
   return {
-    posts,
+    posts: posts.map((post) => {
+      const display = displayMap.get(post.wallet)
+      return {
+        ...post,
+        poster_username: display?.username ?? null,
+        poster_pfp: display?.pfp_url ?? null,
+      }
+    }),
     total: Number(totalRows[0]?.cnt ?? 0),
   }
 }
@@ -1714,32 +1739,7 @@ async function getWallIdentityMeta(wallet: string): Promise<{
   username: string | null
   pfp_url: string | null
 }> {
-  const rows = await db<Array<{ username: string | null; pfp_url: string | null }>>`
-    SELECT
-      COALESCE(u_direct.x_username, u_linked.x_username, wfp.username) AS username,
-      wfp.pfp_url
-    FROM (SELECT ${wallet}::text AS wallet) AS input
-    LEFT JOIN ${db(CONFIG.SCHEMA)}.wallet_farcaster_profiles wfp
-      ON LOWER(wfp.wallet) = LOWER(input.wallet)
-    -- Direct Privy-managed wallet
-    LEFT JOIN ${db(CONFIG.SCHEMA)}.user_wallets uw_direct
-      ON LOWER(uw_direct.address) = LOWER(input.wallet)
-    LEFT JOIN ${db(CONFIG.SCHEMA)}.users u_direct
-      ON u_direct.privy_user_id = uw_direct.privy_user_id
-    -- SIWE-linked wallet: linked_wallet → primary_wallet → users
-    LEFT JOIN ${db(CONFIG.SCHEMA)}.user_wallet_links uwl
-      ON LOWER(uwl.linked_wallet) = LOWER(input.wallet)
-    LEFT JOIN ${db(CONFIG.SCHEMA)}.user_wallets uw_linked
-      ON LOWER(uw_linked.address) = LOWER(uwl.primary_wallet)
-    LEFT JOIN ${db(CONFIG.SCHEMA)}.users u_linked
-      ON u_linked.privy_user_id = uw_linked.privy_user_id
-    LIMIT 1
-  `
-
-  return {
-    username: rows[0]?.username ?? null,
-    pfp_url: rows[0]?.pfp_url ?? null,
-  }
+  return getWalletDisplayIdentity(wallet)
 }
 
 export async function createBungalowWallEvent(input: {
@@ -1976,24 +1976,29 @@ export async function getGlobalBulletinFeed(
   limit: number,
   offset: number,
 ): Promise<{ posts: GlobalFeedPost[]; total: number }> {
-  const posts = await db<GlobalFeedPost[]>`
+  const posts = await db<Array<Omit<GlobalFeedPost, 'poster_username' | 'poster_pfp'>>>`
     SELECT bp.id, bp.wallet, bp.content, bp.image_url,
            bp.created_at::text AS created_at,
            bp.token_address, bp.chain,
            b.name AS token_name,
            b.symbol AS token_symbol,
-           b.image_url AS bungalow_image_url,
-           wfp.username AS poster_username,
-           wfp.pfp_url AS poster_pfp
+           b.image_url AS bungalow_image_url
     FROM ${db(CONFIG.SCHEMA)}.bulletin_posts bp
     LEFT JOIN ${db(CONFIG.SCHEMA)}.bungalows b
       ON b.token_address = bp.token_address
-    LEFT JOIN ${db(CONFIG.SCHEMA)}.wallet_farcaster_profiles wfp
-      ON wfp.wallet = bp.wallet
     ORDER BY bp.created_at DESC
     LIMIT ${limit}
     OFFSET ${offset}
   `
+
+  const displayMap = new Map<string, { username: string | null; pfp_url: string | null }>()
+  await Promise.all(
+    [...new Set(posts.map((post) => post.wallet))]
+      .filter((wallet): wallet is string => Boolean(wallet))
+      .map(async (wallet) => {
+        displayMap.set(wallet, await getWalletDisplayIdentity(wallet))
+      }),
+  )
 
   const totalRows = await db<{ cnt: string }[]>`
     SELECT COUNT(*)::text AS cnt
@@ -2001,7 +2006,14 @@ export async function getGlobalBulletinFeed(
   `
 
   return {
-    posts,
+    posts: posts.map((post) => {
+      const display = displayMap.get(post.wallet)
+      return {
+        ...post,
+        poster_username: display?.username ?? null,
+        poster_pfp: display?.pfp_url ?? null,
+      }
+    }),
     total: Number(totalRows[0]?.cnt ?? 0),
   }
 }
@@ -2090,11 +2102,19 @@ export async function updateBungalowCuration(
 
 export async function getBungalowOwnerRecord(tokenAddress: string, chain: string): Promise<{
   current_owner: string | null
+  claimed_by_privy_user_id: string | null
   verified_admin: string | null
   is_claimed: boolean
 } | null> {
-  const rows = await db<Array<{ current_owner: string | null; verified_admin: string | null; is_claimed: boolean }>>`
-    SELECT current_owner, verified_admin, COALESCE(is_claimed, FALSE) AS is_claimed
+  await ensureBungalowClaimIdentityColumns()
+
+  const rows = await db<Array<{
+    current_owner: string | null
+    claimed_by_privy_user_id: string | null
+    verified_admin: string | null
+    is_claimed: boolean
+  }>>`
+    SELECT current_owner, claimed_by_privy_user_id, verified_admin, COALESCE(is_claimed, FALSE) AS is_claimed
     FROM ${db(CONFIG.SCHEMA)}.bungalows
     WHERE token_address = ${tokenAddress} AND chain = ${chain}
     LIMIT 1
@@ -2102,13 +2122,31 @@ export async function getBungalowOwnerRecord(tokenAddress: string, chain: string
   return rows[0] ?? null
 }
 
+let bungalowClaimIdentityColumnsPromise: Promise<void> | null = null
+
+async function ensureBungalowClaimIdentityColumns(): Promise<void> {
+  if (!bungalowClaimIdentityColumnsPromise) {
+    bungalowClaimIdentityColumnsPromise = (async () => {
+      await db`
+        ALTER TABLE ${db(CONFIG.SCHEMA)}.bungalows
+        ADD COLUMN IF NOT EXISTS claimed_by_privy_user_id TEXT
+      `
+    })()
+  }
+
+  await bungalowClaimIdentityColumnsPromise
+}
+
 export async function upsertClaimedBungalow(input: {
   tokenAddress: string
   chain: string
-  owner: string
+  owner: string | null
+  claimedByPrivyUserId?: string | null
   name?: string
   symbol?: string
 }): Promise<void> {
+  await ensureBungalowClaimIdentityColumns()
+
   await db`
     INSERT INTO ${db(CONFIG.SCHEMA)}.bungalows (
       token_address,
@@ -2116,6 +2154,7 @@ export async function upsertClaimedBungalow(input: {
       name,
       symbol,
       current_owner,
+      claimed_by_privy_user_id,
       is_claimed,
       updated_at
     )
@@ -2125,6 +2164,7 @@ export async function upsertClaimedBungalow(input: {
       ${input.name ?? null},
       ${input.symbol ?? null},
       ${input.owner},
+      ${input.claimedByPrivyUserId ?? null},
       TRUE,
       NOW()
     )
@@ -2133,10 +2173,68 @@ export async function upsertClaimedBungalow(input: {
       chain = EXCLUDED.chain,
       name = COALESCE(EXCLUDED.name, ${db(CONFIG.SCHEMA)}.bungalows.name),
       symbol = COALESCE(EXCLUDED.symbol, ${db(CONFIG.SCHEMA)}.bungalows.symbol),
-      current_owner = EXCLUDED.current_owner,
+      current_owner = COALESCE(
+        EXCLUDED.current_owner,
+        ${db(CONFIG.SCHEMA)}.bungalows.current_owner
+      ),
+      claimed_by_privy_user_id = COALESCE(
+        EXCLUDED.claimed_by_privy_user_id,
+        ${db(CONFIG.SCHEMA)}.bungalows.claimed_by_privy_user_id
+      ),
       is_claimed = TRUE,
       updated_at = NOW()
   `
+}
+
+export async function getWalletDisplayIdentity(wallet: string): Promise<{
+  username: string | null
+  pfp_url: string | null
+}> {
+  const normalizedWallet =
+    normalizeAddress(wallet) ?? normalizeAddress(wallet, 'solana')
+  if (!normalizedWallet) {
+    return {
+      username: null,
+      pfp_url: null,
+    }
+  }
+
+  const identity = await getIdentityClusterByWallet(normalizedWallet)
+  const scopedWallets = identity?.wallets.length
+    ? identity.wallets.map((entry) => entry.wallet)
+    : [normalizedWallet]
+  const scopedWalletKeys = [...new Set(scopedWallets.map((entry) => entry.toLowerCase()))]
+
+  const directRows = await db<Array<{ username: string | null; pfp_url: string | null }>>`
+    SELECT username, pfp_url
+    FROM ${db(CONFIG.SCHEMA)}.wallet_farcaster_profiles
+    WHERE LOWER(wallet) = LOWER(${normalizedWallet})
+    LIMIT 1
+  `
+
+  const clusterRows =
+    scopedWalletKeys.length > 1
+      ? await db<Array<{ username: string | null; pfp_url: string | null }>>`
+          SELECT username, pfp_url
+          FROM ${db(CONFIG.SCHEMA)}.wallet_farcaster_profiles
+          WHERE LOWER(wallet) IN ${db(scopedWalletKeys)}
+            AND (username IS NOT NULL OR pfp_url IS NOT NULL)
+          ORDER BY CASE
+            WHEN LOWER(wallet) = LOWER(${normalizedWallet}) THEN 0
+            ELSE 1
+          END ASC
+          LIMIT 1
+        `
+      : []
+
+  return {
+    username:
+      identity?.x_username ??
+      directRows[0]?.username ??
+      clusterRows[0]?.username ??
+      null,
+    pfp_url: directRows[0]?.pfp_url ?? clusterRows[0]?.pfp_url ?? null,
+  }
 }
 
 export async function getBungalowSceneConfig(
@@ -2449,7 +2547,7 @@ export interface ActivityEvent {
 }
 
 export async function getRecentActivity(limit: number = 20): Promise<ActivityEvent[]> {
-  const rows = await db<ActivityEvent[]>`
+  const rows = await db<Array<ActivityEvent & { wallet: string | null }>>`
     (
       SELECT
         'post' AS type,
@@ -2457,11 +2555,11 @@ export async function getRecentActivity(limit: number = 20): Promise<ActivityEve
         bp.chain,
         bp.token_address,
         b.name AS token_name,
-        wfp.username,
-        LEFT(bp.content, 80) AS detail
+        NULL AS username,
+        LEFT(bp.content, 80) AS detail,
+        bp.wallet
       FROM ${db(CONFIG.SCHEMA)}.bulletin_posts bp
       LEFT JOIN ${db(CONFIG.SCHEMA)}.bungalows b ON b.token_address = bp.token_address
-      LEFT JOIN ${db(CONFIG.SCHEMA)}.wallet_farcaster_profiles wfp ON wfp.wallet = bp.wallet
       ORDER BY bp.created_at DESC
       LIMIT ${limit}
     )
@@ -2474,7 +2572,8 @@ export async function getRecentActivity(limit: number = 20): Promise<ActivityEve
         sl.token_address,
         tr.name AS token_name,
         NULL AS username,
-        sl.holders_found::text AS detail
+        sl.holders_found::text AS detail,
+        NULL AS wallet
       FROM ${db(CONFIG.SCHEMA)}.scan_log sl
       LEFT JOIN ${db(CONFIG.SCHEMA)}.token_registry tr ON tr.token_address = sl.token_address
       WHERE sl.scan_status = 'complete' AND sl.completed_at IS NOT NULL
@@ -2484,7 +2583,21 @@ export async function getRecentActivity(limit: number = 20): Promise<ActivityEve
     ORDER BY timestamp DESC
     LIMIT ${limit}
   `
-  return rows
+
+  const displayMap = new Map<string, string | null>()
+  await Promise.all(
+    [...new Set(rows.map((row) => row.wallet))]
+      .filter((wallet): wallet is string => Boolean(wallet))
+      .map(async (wallet) => {
+        const display = await getWalletDisplayIdentity(wallet)
+        displayMap.set(wallet, display.username)
+      }),
+  )
+
+  return rows.map(({ wallet, ...row }) => ({
+    ...row,
+    username: wallet ? displayMap.get(wallet) ?? null : row.username,
+  }))
 }
 
 export async function getCustomBungalow(tokenAddress: string, chain: string): Promise<{ html: string } | null> {

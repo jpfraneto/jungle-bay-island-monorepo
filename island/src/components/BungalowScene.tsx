@@ -38,6 +38,14 @@ interface BungalowSceneProps {
   symbol: string | null;
   imageUrl: string | null;
   description: string | null;
+  viewerContext: {
+    wallet: string;
+    is_owner: boolean;
+    holds_token: boolean;
+    token_heat_degrees: number;
+    island_heat: number;
+    tier: string;
+  } | null;
   visibleChains: string[];
   onOpenBodega: () => void;
   initialBodegaItem?: BodegaCatalogItem | null;
@@ -994,6 +1002,8 @@ function WallActivityOverlay({
   onOpenPlacement,
   posting,
   authenticated,
+  canContribute,
+  viewerTokenHeat,
   onLogin,
 }: {
   open: boolean;
@@ -1010,6 +1020,8 @@ function WallActivityOverlay({
   onOpenPlacement: () => void;
   posting: boolean;
   authenticated: boolean;
+  canContribute: boolean;
+  viewerTokenHeat: number | null;
   onLogin: () => void;
 }) {
   if (!open) {
@@ -1017,6 +1029,11 @@ function WallActivityOverlay({
   }
 
   const bungalowHeatLabel = symbol?.trim() || title;
+  const viewerHeatLabel =
+    viewerTokenHeat === null || !Number.isFinite(viewerTokenHeat)
+      ? "—"
+      : viewerTokenHeat.toFixed(1);
+  const actionBlocked = authenticated && !canContribute;
 
   return (
     <div
@@ -1134,8 +1151,10 @@ function WallActivityOverlay({
                 color: "rgba(246,234,209,0.66)",
               }}
             >
-              Need 10+ {bungalowHeatLabel} heat to write. Paid wall art and
-              links stay local to this bungalow.
+              Need 10+ {bungalowHeatLabel} heat to write or add wall items.
+              {authenticated
+                ? ` Current ${bungalowHeatLabel} heat: ${viewerHeatLabel}.`
+                : " Connect a wallet to check your heat here."}
             </span>
             <div
               style={{
@@ -1147,40 +1166,43 @@ function WallActivityOverlay({
               <button
                 type="button"
                 onClick={onOpenPlacement}
+                disabled={actionBlocked}
                 style={{
                   minHeight: 40,
                   padding: "0 16px",
                   borderRadius: 999,
                   border: "1px solid rgba(255,255,255,0.14)",
-                  background: "rgba(255,255,255,0.08)",
-                  color: "#f6ead1",
-                  cursor: "pointer",
+                  background: actionBlocked
+                    ? "rgba(255,255,255,0.05)"
+                    : "rgba(255,255,255,0.08)",
+                  color: actionBlocked ? "#c4b597" : "#f6ead1",
+                  cursor: actionBlocked ? "default" : "pointer",
                   font: "inherit",
                   fontWeight: 700,
                 }}
               >
-                Add art or link
+                {actionBlocked ? "Need 10 Heat" : "Add art or link"}
               </button>
               {authenticated ? (
                 <button
                   type="button"
                   onClick={onPost}
-                  disabled={posting || draft.trim().length === 0}
+                  disabled={posting || draft.trim().length === 0 || !canContribute}
                   style={{
                     minHeight: 40,
                     padding: "0 16px",
                     borderRadius: 999,
                     border: "1px solid rgba(255,255,255,0.14)",
                     background:
-                      posting || draft.trim().length === 0
+                      posting || draft.trim().length === 0 || !canContribute
                         ? "rgba(255,255,255,0.08)"
                         : "rgba(216, 179, 106, 0.92)",
                     color:
-                      posting || draft.trim().length === 0
+                      posting || draft.trim().length === 0 || !canContribute
                         ? "#c4b597"
                         : "#201508",
                     cursor:
-                      posting || draft.trim().length === 0
+                      posting || draft.trim().length === 0 || !canContribute
                         ? "default"
                         : "pointer",
                     font: "inherit",
@@ -1709,6 +1731,7 @@ export default function BungalowScene({
   title,
   symbol,
   imageUrl,
+  viewerContext,
   initialBodegaItem = null,
   onInitialBodegaItemConsumed,
   onSceneReadyChange,
@@ -1736,6 +1759,8 @@ export default function BungalowScene({
   const [focusedArtSlot, setFocusedArtSlot] = useState<SlotConfig | null>(null);
   const canPlaceBodegaItems = true;
   const roomImageUrl = imageUrl || getTokenImageUrl(null, ca, symbol ?? title);
+  const viewerTokenHeat = Number(viewerContext?.token_heat_degrees ?? 0);
+  const canContributeToWall = viewerTokenHeat >= 10;
 
   const loadWallFeed = useCallback(async () => {
     setWallLoading(true);
@@ -1753,7 +1778,6 @@ export default function BungalowScene({
       }
 
       const data = (await response.json()) as { items?: WallFeedItem[] };
-      console.log("THE WALL FEED DATA IS", data);
       setWallItems(Array.isArray(data.items) ? data.items : []);
     } catch (fetchError: unknown) {
       setWallError(
@@ -1823,7 +1847,6 @@ export default function BungalowScene({
         typeof user?.twitter?.username === "string"
           ? user.twitter.username.trim().replace(/^@+/, "")
           : null;
-      console.log("IN HERE THE TWITTER USERNAME IS", twitterUsername);
 
       try {
         const response = await fetch(`/api/bungalow/${chain}/${ca}/visit`, {
@@ -1856,6 +1879,13 @@ export default function BungalowScene({
 
     if (!authenticated) {
       login();
+      return;
+    }
+
+    if (!canContributeToWall) {
+      setWallError(
+        `You need at least 10 ${symbol?.trim() || title} heat to write here. Current heat: ${viewerTokenHeat.toFixed(1)}`,
+      );
       return;
     }
 
@@ -1899,6 +1929,10 @@ export default function BungalowScene({
     getAccessToken,
     loadWallFeed,
     login,
+    canContributeToWall,
+    symbol,
+    title,
+    viewerTokenHeat,
     wallDraft,
   ]);
 
@@ -2055,9 +2089,26 @@ export default function BungalowScene({
           onPost={() => {
             void handleWallPost();
           }}
-          onOpenPlacement={() => setWallPlacementOpen(true)}
+          onOpenPlacement={() => {
+            if (!authenticated) {
+              login();
+              return;
+            }
+
+            if (!canContributeToWall) {
+              setWallError(
+                `You need at least 10 ${symbol?.trim() || title} heat to add wall art or links. Current heat: ${viewerTokenHeat.toFixed(1)}`,
+              );
+              return;
+            }
+
+            setWallError(null);
+            setWallPlacementOpen(true);
+          }}
           posting={wallPosting}
           authenticated={authenticated}
+          canContribute={canContributeToWall}
+          viewerTokenHeat={viewerTokenHeat}
           onLogin={() => login()}
         />
         <WallPlacementModal

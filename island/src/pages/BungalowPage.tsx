@@ -517,6 +517,7 @@ export default function BungalowPage() {
                 }
                 imageUrl={headerImage}
                 description={bungalow.description}
+                viewerContext={bungalow.viewer_context ?? null}
                 visibleChains={visibleChains}
                 initialBodegaItem={pendingBodegaItem}
                 onInitialBodegaItemConsumed={() => {

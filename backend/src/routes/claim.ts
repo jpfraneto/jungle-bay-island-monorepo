@@ -7,6 +7,10 @@ import {
 } from '../db/queries'
 import { requireWalletAuth } from '../middleware/auth'
 import { isBaylaConfigured, signClaimBungalow } from '../services/bayla'
+import {
+  getBungalowOwnershipState,
+  resolveBungalowIdentity,
+} from '../services/bungalowOwnership'
 import { ensureClaimHeatScan, getClaimWalletHeat, isClaimHeatScannableChain } from '../services/claimHeat'
 import { fetchDexScreenerData } from '../services/dexscreener'
 import { ApiError } from '../services/errors'
@@ -60,6 +64,25 @@ claimRoute.post('/bungalow/claim', requireWalletAuth, async (c) => {
   }
   if (!txHash) {
     throw new ApiError(400, 'missing_tx_hash', 'tx_hash is required')
+  }
+
+  const requesterIdentity = await resolveBungalowIdentity({
+    wallet,
+    privyUserId: c.get('privyUserId') ?? null,
+  })
+  const ownershipState = await getBungalowOwnershipState({
+    tokenAddress,
+    chain,
+    identity: requesterIdentity,
+  })
+  if (ownershipState.hasOwner) {
+    throw new ApiError(
+      409,
+      'already_claimed',
+      ownershipState.matchesIdentity
+        ? 'This bungalow is already claimed by your account'
+        : 'This bungalow has already been claimed',
+    )
   }
 
   logInfo('CLAIM', `wallet=${wallet} chain=${chain} token=${tokenAddress} tx=${txHash}`)
@@ -172,6 +195,7 @@ claimRoute.post('/bungalow/claim', requireWalletAuth, async (c) => {
     tokenAddress,
     chain,
     owner: wallet,
+    claimedByPrivyUserId: requesterIdentity.privyUserId,
     name: dexData.tokenName ?? undefined,
     symbol: dexData.tokenSymbol ?? undefined,
   })

@@ -674,6 +674,12 @@ export default function BodegaSubmitModal({
   const eligibilitySummary = publishEligibility
     ? `Current heat: ${publishEligibility.island_heat.toFixed(1)}. Required: ${publishEligibility.minimum_heat.toFixed(0)}.`
     : null;
+  const blockedByHeatGate =
+    !submittedItem &&
+    hasCreatorWallet &&
+    !isEligibilityLoading &&
+    !eligibilityError &&
+    publishEligibility?.can_publish === false;
   const submitBlockedByEligibility =
     step === 3 &&
     !submittedItem &&
@@ -687,6 +693,13 @@ export default function BodegaSubmitModal({
 
   const handleStepAdvance = () => {
     setError(null);
+
+    if (blockedByHeatGate) {
+      setError(
+        `You need at least ${minimumPublishHeat.toFixed(0)} island heat to publish. Current heat: ${publishEligibility?.island_heat.toFixed(1) ?? "0.0"}.`,
+      );
+      return;
+    }
 
     if (step === 1) {
       setStep(2);
@@ -1344,7 +1357,10 @@ export default function BodegaSubmitModal({
                 className={styles.primaryButton}
                 onClick={step === 3 ? handleSubmit : handleStepAdvance}
                 disabled={
-                  isSubmitting || isTransferring || submitBlockedByEligibility
+                  isSubmitting ||
+                  isTransferring ||
+                  submitBlockedByEligibility ||
+                  (step < 3 && blockedByHeatGate)
                 }
               >
                 {isSubmitting || isTransferring
@@ -1355,9 +1371,7 @@ export default function BodegaSubmitModal({
                       ? "Choose wallet first"
                     : step === 3 && eligibilityError
                       ? "Verify heat first"
-                      : step === 3 &&
-                          publishEligibility &&
-                          !publishEligibility.can_publish
+                      : blockedByHeatGate
                         ? `Need ${minimumPublishHeat.toFixed(0)} Heat`
                         : step === 3
                           ? pendingPayment &&

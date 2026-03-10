@@ -1389,22 +1389,33 @@ bungalowRoute.get("/bungalow/:chain/:ca", async (c) => {
   };
 
   if (viewerWallet) {
+    const viewerIdentity = await getIdentityClusterByWallet(viewerWallet);
+    const scopedWallets = viewerIdentity?.wallets.length
+      ? viewerIdentity.wallets.map((entry) => entry.wallet)
+      : [viewerWallet];
     const viewerIsOwner = Boolean(
       displaySource.current_owner &&
-      viewerWallet.toLowerCase() === displaySource.current_owner.toLowerCase(),
+      scopedWallets.some(
+        (candidate) =>
+          candidate.toLowerCase() === displaySource.current_owner?.toLowerCase(),
+      ),
     );
-    const [viewerProfile, walletHeat] = await Promise.all([
+    const [aggregated, tokenHeats, fallbackProfile] = await Promise.all([
+      getAggregatedUserByWallets(scopedWallets),
+      getWalletTokenHeats(heatContextDeployment.token_address, scopedWallets),
       getViewerProfile(viewerWallet),
-      getWalletTokenHeat(heatContextDeployment.token_address, viewerWallet),
     ]);
 
     response.viewer_context = {
       wallet: viewerWallet,
       is_owner: viewerIsOwner,
-      holds_token: walletHeat !== null,
-      token_heat_degrees: walletHeat ?? 0,
-      island_heat: viewerProfile?.islandHeat ?? 0,
-      tier: viewerProfile?.tier ?? "drifter",
+      holds_token: tokenHeats.length > 0,
+      token_heat_degrees: tokenHeats.reduce(
+        (sum, entry) => sum + entry.heat_degrees,
+        0,
+      ),
+      island_heat: aggregated?.island_heat ?? fallbackProfile?.islandHeat ?? 0,
+      tier: aggregated?.tier ?? fallbackProfile?.tier ?? "drifter",
     };
   }
 

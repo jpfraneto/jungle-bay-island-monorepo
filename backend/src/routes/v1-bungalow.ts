@@ -1,6 +1,11 @@
 import { Hono } from 'hono'
 import { CONFIG, db, normalizeAddress } from '../config'
+import { upsertClaimedBungalow } from '../db/queries'
 import { logInfo, logWarn } from '../services/logger'
+import {
+  getBungalowOwnershipState,
+  resolveBungalowIdentity,
+} from '../services/bungalowOwnership'
 import {
   verifyPayment,
   TREASURY_ADDRESS,
@@ -128,6 +133,28 @@ v1BungalowRoute.post('/v1/bungalow', async (c) => {
   }
 
   const deployer = payment.from ?? null
+  const requesterIdentity = await resolveBungalowIdentity({ wallet: deployer })
+  const ownershipState = await getBungalowOwnershipState({
+    tokenAddress,
+    chain,
+    identity: requesterIdentity,
+  })
+
+  if (ownershipState.hasOwner) {
+    if (!html_url) {
+      return c.json({
+        error: ownershipState.matchesIdentity
+          ? 'This bungalow is already claimed by your account'
+          : 'This bungalow has already been claimed',
+      }, 409 as any)
+    }
+
+    if (!ownershipState.matchesIdentity) {
+      return c.json({
+        error: 'Only the current bungalow owner can update this page',
+      }, 403 as any)
+    }
+  }
 
   // If html_url is provided, fetch and store the HTML (agent/update flow)
   if (html_url && typeof html_url === 'string') {
@@ -187,20 +214,15 @@ v1BungalowRoute.post('/v1/bungalow', async (c) => {
   }
 
   // Mark bungalow as claimed
-  await db`
-    INSERT INTO ${db(CONFIG.SCHEMA)}.bungalows (
-      token_address, chain, name, is_claimed, current_owner, updated_at
-    )
-    VALUES (
-      ${tokenAddress}, ${chain}, ${title ?? null}, TRUE, ${deployer}, NOW()
-    )
-    ON CONFLICT (token_address)
-    DO UPDATE SET
-      name = COALESCE(EXCLUDED.name, ${db(CONFIG.SCHEMA)}.bungalows.name),
-      is_claimed = TRUE,
-      current_owner = COALESCE(EXCLUDED.current_owner, ${db(CONFIG.SCHEMA)}.bungalows.current_owner),
-      updated_at = NOW()
-  `
+  await upsertClaimedBungalow({
+    tokenAddress,
+    chain,
+    owner: ownershipState.ownerRecord?.current_owner ?? deployer,
+    claimedByPrivyUserId:
+      ownershipState.ownerRecord?.claimed_by_privy_user_id ??
+      requesterIdentity.privyUserId,
+    name: title ?? undefined,
+  })
 
   const url = `https://memetics.lat/${chain}/${tokenAddress}`
 

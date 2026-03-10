@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { usePrivy } from "@privy-io/react-auth";
 import { SEEDED_HOME_TEAM } from "./useHomeTeam";
 
 export interface BungalowDeployment {
@@ -132,6 +133,7 @@ const SEEDED_BY_KEY = new Map(
 );
 
 export function useBungalow(chain?: string, ca?: string) {
+  const { authenticated, getAccessToken } = usePrivy();
   const [bungalow, setBungalow] = useState<BungalowDetails | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -147,7 +149,17 @@ export function useBungalow(chain?: string, ca?: string) {
     setError(null);
 
     try {
-      const response = await fetch(`/api/bungalow/${chain}/${ca}`);
+      const headers: Record<string, string> = {};
+      if (authenticated) {
+        const token = await getAccessToken();
+        if (token) {
+          headers.Authorization = `Bearer ${token}`;
+        }
+      }
+
+      const response = await fetch(`/api/bungalow/${chain}/${ca}`, {
+        headers,
+      });
       if (!response.ok) {
         throw new Error(`Request failed (${response.status})`);
       }
@@ -170,7 +182,7 @@ export function useBungalow(chain?: string, ca?: string) {
     } finally {
       setIsLoading(false);
     }
-  }, [ca, chain]);
+  }, [authenticated, ca, chain, getAccessToken]);
 
   useEffect(() => {
     void fetchBungalow();

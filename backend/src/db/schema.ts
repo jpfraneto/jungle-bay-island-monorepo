@@ -23,6 +23,7 @@ export interface BungalowRow {
   symbol: string | null
   ipfs_hash: string | null
   current_owner: string | null
+  claimed_by_privy_user_id: string | null
   verified_admin: string | null
   is_verified: boolean
   is_claimed: boolean

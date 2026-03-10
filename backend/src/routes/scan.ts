@@ -28,6 +28,10 @@ import {
   SCAN_COST_USDC,
   SCAN_COST_RAW,
 } from '../services/payment'
+import {
+  getBungalowOwnershipState,
+  resolveBungalowIdentity,
+} from '../services/bungalowOwnership'
 import { logError, logEvent, logInfo, logSuccess } from '../services/logger'
 import { addScanLog, getScanLogs, scheduleLogCleanup } from '../services/scanLogs'
 import { scanToken } from '../services/scanner'
@@ -57,6 +61,11 @@ scanRoute.post('/scan/:chain/:ca', optionalWalletContext, scanBurstLimit, async 
   }
   logInfo('SCAN REQUEST', `wallet=${requester} chain=${chain} token=${tokenAddress}`)
 
+  const requesterIdentity = await resolveBungalowIdentity({
+    wallet: requester,
+    privyUserId: c.get('privyUserId') ?? null,
+  })
+
   const registry = await getTokenRegistry(tokenAddress, chain)
   if (registry?.scan_status === 'complete') {
     return c.json({
@@ -78,18 +87,12 @@ scanRoute.post('/scan/:chain/:ca', optionalWalletContext, scanBurstLimit, async 
   // Check if this is a free retry (previous scan failed, requester already paid/owns)
   if (registry?.scan_status === 'failed') {
     // Check if requester is the bungalow owner (i.e. they already paid)
-    const bungalow = await db<{ current_owner: string | null; verified_admin: string | null }[]>`
-      SELECT current_owner, verified_admin FROM ${db(CONFIG.SCHEMA)}.bungalows
-      WHERE token_address = ${tokenAddress} AND is_claimed = true
-      LIMIT 1
-    `
-    if (
-      bungalow.length > 0 &&
-      (
-        bungalow[0].current_owner?.toLowerCase() === requester.toLowerCase() ||
-        bungalow[0].verified_admin?.toLowerCase() === requester.toLowerCase()
-      )
-    ) {
+    const ownershipState = await getBungalowOwnershipState({
+      tokenAddress,
+      chain,
+      identity: requesterIdentity,
+    })
+    if (ownershipState.hasOwner && ownershipState.matchesIdentity) {
       isFreeRetry = true
       logInfo('SCAN RETRY', `free retry for wallet=${requester} token=${tokenAddress} (previous scan failed, steward match)`)
     }
@@ -167,9 +170,22 @@ scanRoute.post('/scan/:chain/:ca', optionalWalletContext, scanBurstLimit, async 
 
   if (!isPaid) await incrementDailyAllowance(requester, today)
 
+  const existingOwnership = await getBungalowOwnershipState({
+    tokenAddress,
+    chain,
+    identity: requesterIdentity,
+  })
+  let autoClaimed = false
+
   // Auto-claim bungalow for paid scans (merges scan + claim into one $1 payment)
-  if (isPaid) {
-    await upsertClaimedBungalow({ tokenAddress, chain, owner: requester })
+  if (isPaid && !existingOwnership.hasOwner) {
+    await upsertClaimedBungalow({
+      tokenAddress,
+      chain,
+      owner: requester,
+      claimedByPrivyUserId: requesterIdentity.privyUserId,
+    })
+    autoClaimed = true
     logInfo('AUTO-CLAIM', `wallet=${requester} claimed bungalow for ${tokenAddress} via paid scan`)
   }
 
@@ -228,7 +244,7 @@ scanRoute.post('/scan/:chain/:ca', optionalWalletContext, scanBurstLimit, async 
     status: 'scanning',
     scan_id: scanId,
     estimated_seconds: 120,
-    claimed: isPaid,
+    claimed: autoClaimed,
   })
 })
 

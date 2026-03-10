@@ -3,6 +3,7 @@ import { CONFIG, db, normalizeAddress, toSupportedChain } from "../config";
 import {
   getAggregatedUserByWallets,
   getIdentityClusterByWallet,
+  getWalletDisplayIdentity,
   userOwnsWallet,
 } from "../db/queries";
 import { requirePrivyAuth } from "../middleware/auth";
@@ -319,10 +320,25 @@ itemsRoute.get("/address/:wallet/items", async (c) => {
   const rows = [...bodegaRows, ...legacyRows]
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     .slice(offset, offset + limit);
+  const displayMap = new Map<
+    string,
+    { username: string | null; pfp_url: string | null }
+  >();
+
+  await Promise.all(
+    [...new Set(rows.map((row) => row.placed_by))]
+      .filter((wallet): wallet is string => Boolean(wallet))
+      .map(async (wallet) => {
+        displayMap.set(wallet, await getWalletDisplayIdentity(wallet));
+      }),
+  );
 
   return c.json({
     wallet,
-    items: rows,
+    items: rows.map((row) => ({
+      ...row,
+      placed_by_username: displayMap.get(row.placed_by)?.username ?? null,
+    })),
     total:
       Number(legacyTotalRows[0]?.count ?? 0) +
       Number(bodegaTotalRows[0]?.count ?? 0),
@@ -427,8 +443,25 @@ itemsRoute.get("/bungalow/:chain/:ca/items", async (c) => {
 
     return Math.abs(b.id) - Math.abs(a.id);
   });
+  const displayMap = new Map<
+    string,
+    { username: string | null; pfp_url: string | null }
+  >();
 
-  return c.json({ items: rows });
+  await Promise.all(
+    [...new Set(rows.map((row) => row.placed_by))]
+      .filter((wallet): wallet is string => Boolean(wallet))
+      .map(async (wallet) => {
+        displayMap.set(wallet, await getWalletDisplayIdentity(wallet));
+      }),
+  );
+
+  return c.json({
+    items: rows.map((row) => ({
+      ...row,
+      placed_by_username: displayMap.get(row.placed_by)?.username ?? null,
+    })),
+  });
 });
 
 itemsRoute.post("/bungalow/:chain/:ca/items", requirePrivyAuth, async (c) => {

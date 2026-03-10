@@ -56,6 +56,7 @@ type DecorationType = 'image' | 'portal' | 'furniture' | 'social-link' | 'websit
 type SceneBungalowChain = 'base' | 'ethereum' | 'solana'
 type ScenePurchaseChain = 'base' | 'ethereum'
 type WallPlacementItemType = 'art' | 'link'
+const MINIMUM_WALL_TOKEN_HEAT = 10
 
 interface DecorationConfig {
   type: DecorationType
@@ -942,6 +943,15 @@ sceneRoute.post('/bungalow/:chain/:ca/wall-item', requirePrivyAuth, async (c) =>
     wallet,
     placedBy: asTrimmedString(body.placed_by) || null,
   })
+  const tokenHeats = await getWalletTokenHeats(ca, scopedWallets)
+  const tokenHeat = tokenHeats.reduce((sum, entry) => sum + entry.heat_degrees, 0)
+  if (tokenHeat < MINIMUM_WALL_TOKEN_HEAT) {
+    throw new ApiError(
+      403,
+      'insufficient_heat',
+      `You need at least ${MINIMUM_WALL_TOKEN_HEAT} heat on this token to add wall art or links. Current heat: ${tokenHeat.toFixed(1)}`,
+    )
+  }
 
   // Persist the actor's wallet→identity link so username lookup works immediately.
   persistActorIdentity(actorWallet, privyUserId, claims)

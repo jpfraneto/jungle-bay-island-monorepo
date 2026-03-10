@@ -19,6 +19,34 @@ export default function ChangelogPage() {
       <article className={styles.entry}>
         <div className={styles.entryHeader}>
           <span className={styles.date}>March 10, 2026</span>
+          <h2 className={styles.heading}>Claims And Wall Publishing Now Respect User Identity More Consistently</h2>
+        </div>
+        <p>
+          Claim ownership, bungalow wall permissions, and attribution now line
+          up with linked-account identity instead of drifting between raw
+          wallets and partial UI checks.
+        </p>
+        <ul className={styles.list}>
+          <li>
+            Claimed bungalows now persist the claiming Privy user identity, so
+            the same person cannot reclaim the same bungalow from a different
+            linked wallet later.
+          </li>
+          <li>
+            The legacy claim/update endpoint now stops cross-user overwrites and
+            only allows page updates from the same owner identity.
+          </li>
+          <li>
+            Bungalow pages now fetch viewer-aware heat, wall write/add buttons
+            block earlier, and wallet attribution resolves usernames from the
+            linked account cluster more reliably.
+          </li>
+        </ul>
+      </article>
+
+      <article className={styles.entry}>
+        <div className={styles.entryHeader}>
+          <span className={styles.date}>March 10, 2026</span>
           <h2 className={styles.heading}>Bodega Publishing Now Checks Heat Before It Lets You Pay</h2>
         </div>
         <p>

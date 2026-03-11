@@ -1,4 +1,5 @@
 import { COLORS } from './styles'
+import { getAbsoluteUrl, getSiteOgImageUrl } from '../services/siteMeta'
 
 export function renderTopbarAuth(): string {
   return `<a href="/info" class="auth-btn" style="text-decoration:none">Info</a>`
@@ -27,9 +28,9 @@ export function renderMiniappEmbed(opts?: {
   buttonTitle?: string
   launchUrl?: string
 }): string {
-  const image = opts?.imageUrl ?? 'https://memetics.lat/og-image.png'
+  const image = getAbsoluteUrl(opts?.imageUrl ?? getSiteOgImageUrl())
   const title = opts?.buttonTitle ?? 'Explore Tokens'
-  const url = opts?.launchUrl ?? 'https://memetics.lat'
+  const url = getAbsoluteUrl(opts?.launchUrl ?? '/')
   const meta = {
     version: '1',
     imageUrl: image,

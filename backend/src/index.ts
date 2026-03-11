@@ -31,6 +31,7 @@ import opsRoute from "./routes/ops";
 import { startDailyHeatRefreshScheduler } from "./services/dailyHeatRefresh";
 import { isApiError } from "./services/errors";
 import { logError, logWarn } from "./services/logger";
+import { renderSocialMeta, SITE_TITLE } from "./services/siteMeta";
 import type { AppEnv } from "./types";
 
 const STATIC_DIR = path.resolve(import.meta.dir, "../public");
@@ -114,7 +115,7 @@ function getIslandAssetTags(): string {
   return cachedIslandAssetTags;
 }
 
-function renderSpaShell(): string {
+function renderSpaShell(pathname = "/"): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -122,17 +123,8 @@ function renderSpaShell(): string {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
-  <title>Jungle Bay Island | Community bungalows for onchain projects</title>
-  <meta name="description" content="Open community bungalows for onchain projects, publish builds to the Bodega, curate rooms, and claim island rewards on Jungle Bay Island." />
-  <meta property="og:title" content="Jungle Bay Island | Community bungalows for onchain projects" />
-  <meta property="og:description" content="Open community bungalows for onchain projects, publish builds to the Bodega, curate rooms, and claim island rewards on Jungle Bay Island." />
-  <meta property="og:type" content="website" />
-  <meta property="og:image" content="/og-image.png" />
-  <meta property="og:site_name" content="Jungle Bay Island" />
-  <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Jungle Bay Island | Community bungalows for onchain projects" />
-  <meta name="twitter:description" content="Open community bungalows for onchain projects, publish builds to the Bodega, curate rooms, and claim island rewards on Jungle Bay Island." />
-  <meta name="twitter:image" content="/og-image.png" />
+  <title>${escapeHtml(SITE_TITLE)}</title>
+  ${renderSocialMeta({ url: pathname })}
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='52' font-size='52'%3E%F0%9F%8F%9D%EF%B8%8F%3C/text%3E%3C/svg%3E" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
@@ -402,7 +394,7 @@ app.notFound((c) => {
     );
   }
 
-  return c.html(renderSpaShell());
+  return c.html(renderSpaShell(c.req.path));
 });
 
 app.onError((error, c) => {

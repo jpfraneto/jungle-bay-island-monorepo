@@ -1,0 +1,101 @@
+import { CONFIG } from "../config";
+
+export const SITE_NAME = "Jungle Bay Island";
+export const SITE_TITLE = "Jungle Bay Island | Every token gets a Bungalow";
+export const SITE_DESCRIPTION =
+  "Every token gets a Bungalow. Holders claim it, customize it, post on it, and build Heat across Base, Ethereum, and Solana.";
+export const SITE_OG_IMAGE_PATH = "/OG_image.png";
+export const SITE_OG_IMAGE_ALT =
+  "Jungle Bay Island Open Graph artwork";
+export const SITE_OG_IMAGE_TYPE = "image/png";
+export const SITE_OG_IMAGE_WIDTH = "1200";
+export const SITE_OG_IMAGE_HEIGHT = "634";
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function trimTrailingSlash(value: string): string {
+  return value.replace(/\/+$/, "");
+}
+
+export function getSiteUrl(): string {
+  const serverUrl = process.env.SERVER_URL?.trim();
+  if (serverUrl && /^https?:\/\//i.test(serverUrl)) {
+    return trimTrailingSlash(serverUrl);
+  }
+
+  const publicOrigin = CONFIG.CORS_ORIGIN.split(",")
+    .map((origin) => origin.trim())
+    .find((origin) => origin && origin !== "*" && /^https?:\/\//i.test(origin));
+  if (publicOrigin) {
+    return trimTrailingSlash(publicOrigin);
+  }
+
+  return "https://memetics.lat";
+}
+
+export function getAbsoluteUrl(pathOrUrl: string): string {
+  if (/^https?:\/\//i.test(pathOrUrl)) {
+    return pathOrUrl;
+  }
+
+  const normalizedPath = pathOrUrl.startsWith("/") ? pathOrUrl : `/${pathOrUrl}`;
+  return `${getSiteUrl()}${normalizedPath}`;
+}
+
+export function getSiteOgImageUrl(): string {
+  return getAbsoluteUrl(SITE_OG_IMAGE_PATH);
+}
+
+export function buildBungalowDescription(
+  tokenName: string,
+  tokenSymbol?: string | null,
+): string {
+  const cleanName = tokenName.trim() || "This token";
+  const cleanSymbol = tokenSymbol?.trim();
+  const label = cleanSymbol ? `${cleanName} ($${cleanSymbol})` : cleanName;
+  return `${label} on Jungle Bay Island, where token holders claim bungalows, post on the bulletin board, and build Heat.`;
+}
+
+export function renderSocialMeta(input?: {
+  title?: string;
+  description?: string;
+  url?: string;
+  imageUrl?: string;
+  imageAlt?: string;
+  type?: "website" | "article";
+  siteName?: string;
+}): string {
+  const title = input?.title ?? SITE_TITLE;
+  const description = input?.description ?? SITE_DESCRIPTION;
+  const url = getAbsoluteUrl(input?.url ?? "/");
+  const imageUrl = getAbsoluteUrl(input?.imageUrl ?? SITE_OG_IMAGE_PATH);
+  const imageAlt = input?.imageAlt ?? SITE_OG_IMAGE_ALT;
+  const type = input?.type ?? "website";
+  const siteName = input?.siteName ?? SITE_NAME;
+
+  return [
+    `<link rel="canonical" href="${escapeHtml(url)}" />`,
+    `<meta name="description" content="${escapeHtml(description)}" />`,
+    `<meta property="og:type" content="${escapeHtml(type)}" />`,
+    `<meta property="og:title" content="${escapeHtml(title)}" />`,
+    `<meta property="og:description" content="${escapeHtml(description)}" />`,
+    `<meta property="og:url" content="${escapeHtml(url)}" />`,
+    `<meta property="og:site_name" content="${escapeHtml(siteName)}" />`,
+    `<meta property="og:image" content="${escapeHtml(imageUrl)}" />`,
+    `<meta property="og:image:alt" content="${escapeHtml(imageAlt)}" />`,
+    `<meta property="og:image:type" content="${SITE_OG_IMAGE_TYPE}" />`,
+    `<meta property="og:image:width" content="${SITE_OG_IMAGE_WIDTH}" />`,
+    `<meta property="og:image:height" content="${SITE_OG_IMAGE_HEIGHT}" />`,
+    `<meta name="twitter:card" content="summary_large_image" />`,
+    `<meta name="twitter:title" content="${escapeHtml(title)}" />`,
+    `<meta name="twitter:description" content="${escapeHtml(description)}" />`,
+    `<meta name="twitter:image" content="${escapeHtml(imageUrl)}" />`,
+    `<meta name="twitter:image:alt" content="${escapeHtml(imageAlt)}" />`,
+  ].join("\n  ");
+}

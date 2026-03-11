@@ -4,6 +4,7 @@ import {
   renderMiniappSdk,
   renderMiniappEmbed,
 } from "./auth-ui";
+import { renderSocialMeta, SITE_TITLE } from "../services/siteMeta";
 import type { RecentScanRow } from "../db/queries";
 
 function esc(str: string | null | undefined): string {
@@ -281,11 +282,8 @@ export function renderLanding(recentScans: RecentScanRow[] = []): string {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='52' font-size='52'%3E%F0%9F%8F%9D%EF%B8%8F%3C/text%3E%3C/svg%3E" />
-  <title>Jungle Bay Island | Community bungalows for onchain projects</title>
-  <meta name="description" content="Open community bungalows for onchain projects, publish builds to the Bodega, curate rooms, and claim island rewards on Jungle Bay Island." />
-  <meta property="og:title" content="Jungle Bay Island | Community bungalows for onchain projects" />
-  <meta property="og:description" content="Open community bungalows for onchain projects, publish builds to the Bodega, curate rooms, and claim island rewards on Jungle Bay Island." />
-  <meta property="og:type" content="website" />
+  <title>${esc(SITE_TITLE)}</title>
+  ${renderSocialMeta()}
   ${renderMiniappEmbed()}
   <style>${LANDING_CSS}</style>
 </head>

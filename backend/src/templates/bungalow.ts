@@ -1,6 +1,12 @@
 import { COLORS, BUNGALOW_CSS } from "./styles";
 import { renderClientScript } from "./client";
 import { renderTopbarAuth, renderMiniappEmbed, renderMiniappSdk } from "./auth-ui";
+import {
+  buildBungalowDescription,
+  getAbsoluteUrl,
+  getSiteOgImageUrl,
+  renderSocialMeta,
+} from "../services/siteMeta";
 import type {
   BungalowRow,
   TokenHolderRow,
@@ -123,14 +129,10 @@ export function renderBungalow(data: BungalowPageData): string {
   const symbol = b?.symbol ?? data.fallbackSymbol ?? "";
   const imageUrl = b?.image_url ?? data.fallbackImage ?? null;
   const isClaimed = b?.is_claimed ?? false;
-  const pageDescription = esc(
-    b?.description ?? `${name} community bungalow on Jungle Bay Island.`,
-  );
-
-  const displayTitle = `${esc(name)}${symbol ? ` ($${esc(symbol)})` : ""}`;
-  const pageTitle = symbol
-    ? `Memetics \u00B7 $${esc(symbol)} \u00B7 ${data.tokenAddress}`
-    : `Memetics \u00B7 ${data.tokenAddress}`;
+  const tokenLabel = symbol ? `${name} ($${symbol})` : name;
+  const pageDescription = buildBungalowDescription(name, symbol);
+  const pageTitle = `${tokenLabel} | Jungle Bay Island`;
+  const canonicalUrl = getAbsoluteUrl(`/${data.chain}/${data.tokenAddress}`);
   const dexUrl = `https://dexscreener.com/${dexscreenerChain(data.chain)}/${data.tokenAddress}?embed=1&theme=dark&info=0`;
 
   const links: { url: string; label: string }[] = [];
@@ -177,20 +179,17 @@ export function renderBungalow(data: BungalowPageData): string {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='52' font-size='52'%3E%F0%9F%8F%9D%EF%B8%8F%3C/text%3E%3C/svg%3E" />
-  <title>${pageTitle}</title>
-  <meta name="description" content="${pageDescription}" />
-  <meta property="og:title" content="${pageTitle}" />
-  <meta property="og:description" content="${pageDescription}" />
-  <meta property="og:type" content="website" />
-  ${imageUrl ? `<meta property="og:image" content="${esc(imageUrl)}" />` : ""}
-  <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="${pageTitle}" />
-  <meta name="twitter:description" content="${pageDescription}" />
-  ${imageUrl ? `<meta name="twitter:image" content="${esc(imageUrl)}" />` : ""}
+  <title>${esc(pageTitle)}</title>
+  ${renderSocialMeta({
+    title: pageTitle,
+    description: pageDescription,
+    url: canonicalUrl,
+    imageAlt: `${tokenLabel} on Jungle Bay Island`,
+  })}
   ${renderMiniappEmbed({
-    imageUrl: `https://memetics.lat/api/og-image/${data.chain}/${data.tokenAddress}`,
+    imageUrl: getSiteOgImageUrl(),
     buttonTitle: symbol ? `View $${symbol}` : "View Token",
-    launchUrl: `https://memetics.lat/${data.chain}/${data.tokenAddress}`,
+    launchUrl: canonicalUrl,
   })}
   <style>${BUNGALOW_CSS}</style>
   <script>window.__DATA__ = ${escJson(JSON.stringify(clientData))};</script>

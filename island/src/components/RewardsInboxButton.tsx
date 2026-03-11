@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { usePrivy } from "@privy-io/react-auth";
-import ChainIcon from "./ChainIcon";
 import WalletSelector, { type WalletSelectorState } from "./WalletSelector";
 import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
 import { useWalletClaims } from "../hooks/useWalletClaims";
+import { useUserWalletLinks } from "../hooks/useUserWalletLinks";
 import { CLAIM_CONTRACT_ADDRESS } from "../utils/constants";
 import {
   claimEscrowAbi,
@@ -177,11 +178,9 @@ function getAmountJbmFromPayload(payload: ClaimSignaturePayload): string {
 
 export default function RewardsInboxButton() {
   const { authenticated, getAccessToken, login } = usePrivy();
-  const {
-    publicClient,
-    requireWallet,
-    walletAddress,
-  } = usePrivyBaseWallet();
+  const { publicClient, requireWallet, walletAddress } = usePrivyBaseWallet();
+  const { wallets: linkedWalletRows, isLoading: isLinkedWalletsLoading } =
+    useUserWalletLinks(authenticated);
   const [selectedPayoutWallet, setSelectedPayoutWallet] = useState<string>("");
   const claimLookupWallet = selectedPayoutWallet || walletAddress || undefined;
   const {
@@ -203,6 +202,7 @@ export default function RewardsInboxButton() {
       hasAvailableWallet: false,
       availableWallets: [],
       totalWallets: 0,
+      isLoading: true,
     });
   const [cachedClaimedPeriod, setCachedClaimedPeriod] =
     useState<CachedClaimedPeriod | null>(null);
@@ -253,6 +253,7 @@ export default function RewardsInboxButton() {
     ? optimisticClaimedTotal
     : effectiveClaimedTodayTotal;
   const hasClaimedToday = backendHasClaimedToday || cachedClaimIsActive;
+  const isClaimsPending = isLoading && !claims && !cachedClaimIsActive;
   const effectivePeriodEndAt =
     claims?.period_end_at ??
     (cachedClaimIsActive && cachedClaimedPeriod
@@ -278,7 +279,7 @@ export default function RewardsInboxButton() {
     : "jungle bay memes to claim today";
   const summaryValue = hasClaimedToday
     ? formatJbmCount(displayedClaimedTodayTotal.toString())
-    : !isLoading && claims
+    : claims
       ? formatJbmCount(claims.total_claimable_jbm)
       : "—";
   const selectedClaimWallet =
@@ -293,6 +294,13 @@ export default function RewardsInboxButton() {
   const effectiveClaimWalletLabel = effectiveClaimWallet
     ? formatAddress(effectiveClaimWallet)
     : null;
+  const isWalletAvailabilityPending =
+    walletSelectorState.totalWallets > 0 || walletSelectorState.selectedWallet
+      ? Boolean(walletSelectorState.isLoading)
+      : isLinkedWalletsLoading && linkedWalletRows.length === 0;
+  const isModalLoading =
+    !hasClaimedToday && (isClaimsPending || isWalletAvailabilityPending);
+  const triggerBadgeLoading = isClaimsPending;
 
   useEffect(() => {
     if (!open || !hasClaimedToday) return;
@@ -303,6 +311,29 @@ export default function RewardsInboxButton() {
     return () => window.clearInterval(timer);
   }, [hasClaimedToday, open]);
 
+  useEffect(() => {
+    if (!open || typeof document === "undefined") return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    };
+
+    const previousRootOverflow = document.documentElement.style.overflow;
+    const previousBodyOverflow = document.body.style.overflow;
+
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.documentElement.style.overflow = previousRootOverflow;
+      document.body.style.overflow = previousBodyOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
   if (!authenticated) {
     return null;
   }
@@ -311,7 +342,7 @@ export default function RewardsInboxButton() {
     setStatus(null);
     setError(null);
     setOpen(true);
-    void refetch();
+    void refetch().catch(() => undefined);
   };
 
   const executeClaimAll = async () => {
@@ -479,11 +510,11 @@ export default function RewardsInboxButton() {
       }
 
       setStatus("Rewards claimed");
-      await refetch().catch(() => undefined);
+      await refetch({ force: true }).catch(() => undefined);
     } catch (err) {
       setError(getBatchErrorMessage(err));
       setStatus(null);
-      await refetch().catch(() => undefined);
+      await refetch({ force: true }).catch(() => undefined);
     } finally {
       setIsClaiming(false);
     }
@@ -503,64 +534,86 @@ export default function RewardsInboxButton() {
     await executeClaimAll();
   };
 
-  return (
-    <>
-      <button
-        type="button"
-        className={styles.trigger}
-        onClick={handleOpen}
-        aria-label="Open rewards"
+  const modal = open ? (
+    <div
+      className={styles.overlay}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) {
+          setOpen(false);
+        }
+      }}
+    >
+      <div
+        className={styles.modal}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Island Rewards"
+        onClick={(event) => event.stopPropagation()}
       >
-        <span className={styles.icon}>💸</span>
-        <span
-          className={`${styles.badge} ${hasClaimedToday ? styles.badgeClaimed : ""}`}
-          aria-label={hasClaimedToday ? "Claimed today" : "Claimable rewards"}
-        >
-          {hasClaimedToday ? "✓" : (claims?.claimable_count ?? 0)}
-        </span>
-      </button>
+        <header className={styles.header}>
+          <div>
+            <h3>Island Rewards</h3>
+            <p>
+              {isModalLoading
+                ? "Loading your wallet availability and rewards..."
+                : hasClaimedToday
+                  ? "You already claimed today's rewards."
+                  : claims
+                    ? `You have heat score on ${claims.claimable_count} bungalow${claims.claimable_count === 1 ? "" : "s"}.`
+                    : "Loading rewards..."}
+            </p>
+          </div>
+          <button
+            type="button"
+            className={styles.closeButton}
+            onClick={() => setOpen(false)}
+          >
+            ×
+          </button>
+        </header>
 
-      {open ? (
-        <div className={styles.overlay}>
-          <div className={styles.modal}>
-            <header className={styles.header}>
-              <div>
-                <h3>Island Rewards</h3>
-                <p>
-                  {hasClaimedToday
-                    ? "You already claimed today's rewards."
-                    : isLoading
-                      ? "Loading rewards..."
-                      : claims
-                        ? `You have heat score on ${claims.claimable_count} bungalow${claims.claimable_count === 1 ? "" : "s"}.`
-                        : "Loading rewards..."}
-                </p>
-              </div>
-              <button
-                type="button"
-                className={styles.closeButton}
-                onClick={() => setOpen(false)}
-              >
-                ×
-              </button>
-            </header>
+        {!hasClaimedToday ? (
+          <WalletSelector
+            value={selectedPayoutWallet}
+            onSelect={(address) => {
+              setSelectedPayoutWallet(address);
+              setError(null);
+            }}
+            onStateChange={setWalletSelectorState}
+          />
+        ) : null}
 
-            {!hasClaimedToday ? (
-              <WalletSelector
-                value={selectedPayoutWallet}
-                onSelect={(address) => {
-                  setSelectedPayoutWallet(address);
-                  setError(null);
-                }}
-                onStateChange={setWalletSelectorState}
+        {isModalLoading ? (
+          <div className={styles.loadingShell} aria-live="polite">
+            <p className={styles.loadingCopy}>
+              Loading your linked wallets and claim totals...
+            </p>
+            <div className={styles.loadingCard}>
+              <span
+                className={`${styles.loadingLine} ${styles.loadingLineWide}`}
               />
-            ) : null}
-
+              <span
+                className={`${styles.loadingLine} ${styles.loadingLineMedium}`}
+              />
+              <div className={styles.loadingList}>
+                {Array.from({ length: 4 }).map((_, index) => (
+                  <span
+                    key={`reward-skeleton-${index}`}
+                    className={`${styles.loadingRow} ${styles.loadingLine}`}
+                  />
+                ))}
+              </div>
+              <span
+                className={`${styles.loadingSummaryBar} ${styles.loadingLine}`}
+              />
+              <span
+                className={`${styles.loadingButtonBar} ${styles.loadingLine}`}
+              />
+            </div>
+          </div>
+        ) : (
+          <>
             <div className={styles.list}>
-              {isLoading && !hasClaimedToday ? (
-                <div className={styles.empty}>Loading wallet rewards...</div>
-              ) : null}
-
               {!isLoading && loadError && !hasClaimedToday ? (
                 <div className={styles.error}>{loadError}</div>
               ) : null}
@@ -586,38 +639,6 @@ export default function RewardsInboxButton() {
                   </div>
                 )
               ) : null}
-
-              {!isLoading && !loadError
-                ? (hasClaimedToday ? claimedItems : claimableItems).map(
-                    (item) => (
-                      <div
-                        key={`${item.chain}:${item.token_address}`}
-                        className={styles.item}
-                      >
-                        <span className={styles.itemLabel}>
-                          <ChainIcon
-                            chain={item.chain}
-                            className={styles.chainIcon}
-                            size={14}
-                          />
-                          <strong>
-                            {item.token_symbol
-                              ? `$${item.token_symbol}`
-                              : (item.token_name ?? item.token_address)}
-                          </strong>
-                        </span>
-                        <b>
-                          {formatJbmCount(
-                            hasClaimedToday
-                              ? item.period_reward_jbm
-                              : item.claimable_jbm,
-                          )}
-                          {hasClaimedToday ? " ✓" : ""}
-                        </b>
-                      </div>
-                    ),
-                  )
-                : null}
             </div>
 
             <div className={styles.footer}>
@@ -632,7 +653,7 @@ export default function RewardsInboxButton() {
                   isClaiming ||
                   hasClaimedToday ||
                   !walletSelectorState.hasAvailableWallet ||
-                  (isLoading && !hasClaimedToday) ||
+                  (isClaimsPending && !hasClaimedToday) ||
                   claimableItems.length === 0
                 }
                 onClick={() => {
@@ -640,10 +661,10 @@ export default function RewardsInboxButton() {
                 }}
               >
                 {isClaiming
-                  ? "Claiming..."
+                  ? "Claiming... Check your wallet for a transaction."
                   : hasClaimedToday
                     ? "Claimed today ✓"
-                    : isLoading
+                    : isClaimsPending
                       ? "Loading rewards..."
                       : `Claim ${claims ? formatJbmCount(claims.total_claimable_jbm) : "0"} jungle bay memes${
                           selectedClaimWalletLabel
@@ -655,9 +676,49 @@ export default function RewardsInboxButton() {
               {status ? <div className={styles.status}>{status}</div> : null}
               {error ? <div className={styles.error}>{error}</div> : null}
             </div>
-          </div>
-        </div>
-      ) : null}
+          </>
+        )}
+      </div>
+    </div>
+  ) : null;
+
+  return (
+    <>
+      <button
+        type="button"
+        className={styles.trigger}
+        onClick={handleOpen}
+        aria-label="Open rewards"
+      >
+        <span className={styles.icon}>💸</span>
+        <span
+          className={`${styles.badge} ${
+            hasClaimedToday
+              ? styles.badgeClaimed
+              : triggerBadgeLoading
+                ? styles.badgeLoading
+                : ""
+          }`}
+          aria-label={
+            triggerBadgeLoading
+              ? "Loading rewards"
+              : hasClaimedToday
+                ? "Claimed today"
+                : "Claimable rewards"
+          }
+        >
+          {triggerBadgeLoading ? (
+            <span className={styles.badgeSpinner} aria-hidden="true" />
+          ) : hasClaimedToday ? (
+            "✓"
+          ) : (
+            (claims?.claimable_count ?? 0)
+          )}
+        </span>
+      </button>
+      {modal && typeof document !== "undefined"
+        ? createPortal(modal, document.body)
+        : null}
     </>
   );
 }

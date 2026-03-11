@@ -31,7 +31,11 @@ import opsRoute from "./routes/ops";
 import { startDailyHeatRefreshScheduler } from "./services/dailyHeatRefresh";
 import { isApiError } from "./services/errors";
 import { logError, logWarn } from "./services/logger";
-import { renderSocialMeta, SITE_TITLE } from "./services/siteMeta";
+import {
+  getRequestSiteUrl,
+  renderSocialMeta,
+  SITE_TITLE,
+} from "./services/siteMeta";
 import type { AppEnv } from "./types";
 
 const STATIC_DIR = path.resolve(import.meta.dir, "../public");
@@ -394,7 +398,7 @@ app.notFound((c) => {
     );
   }
 
-  const requestOrigin = new URL(c.req.url).origin;
+  const requestOrigin = getRequestSiteUrl(c.req.raw);
   return c.html(renderSpaShell(c.req.path, requestOrigin));
 });
 

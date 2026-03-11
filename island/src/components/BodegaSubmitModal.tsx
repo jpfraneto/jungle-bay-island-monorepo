@@ -925,6 +925,7 @@ export default function BodegaSubmitModal({
 
         <WalletSelector
           label="Sign with"
+          panelMode="inline"
           value={selectedPayWallet}
           onSelect={(address) => {
             setSelectedPayWallet(address);

@@ -39,10 +39,24 @@
   color: #e8ffef;
 }
 
+.badgeLoading {
+  background: rgba(255, 255, 255, 0.12);
+  color: #eff7f2;
+}
+
+.badgeSpinner {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  border: 2px solid rgba(239, 247, 242, 0.3);
+  border-top-color: #eff7f2;
+  animation: rewardsSpin 0.85s linear infinite;
+}
+
 .overlay {
   position: fixed;
   inset: 0;
-  z-index: 70;
+  z-index: 2400;
   display: grid;
   place-items: center;
   padding: 16px;
@@ -189,6 +203,78 @@
   font-size: 12px;
 }
 
+.loadingShell {
+  display: grid;
+  gap: 12px;
+}
+
+.loadingCopy {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.loadingCard {
+  border: 1px dashed var(--border-subtle);
+  border-radius: 12px;
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.loadingLine {
+  position: relative;
+  overflow: hidden;
+  display: block;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.loadingLine::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.16),
+    transparent
+  );
+  animation: rewardsShimmer 1.4s ease-in-out infinite;
+}
+
+.loadingLineWide {
+  width: 58%;
+  height: 16px;
+}
+
+.loadingLineMedium {
+  width: 38%;
+  height: 12px;
+}
+
+.loadingList {
+  display: grid;
+  gap: 10px;
+}
+
+.loadingRow {
+  height: 46px;
+  border-radius: 10px;
+}
+
+.loadingSummaryBar {
+  height: 60px;
+  border-radius: 12px;
+}
+
+.loadingButtonBar {
+  height: 50px;
+  border-radius: 12px;
+}
+
 .footer {
   display: grid;
   gap: 8px;
@@ -221,6 +307,18 @@
   color: #ff8e83;
   font-size: 12px;
   overflow-wrap: anywhere;
+}
+
+@keyframes rewardsSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes rewardsShimmer {
+  100% {
+    transform: translateX(100%);
+  }
 }
 
 @media (max-width: 700px) {

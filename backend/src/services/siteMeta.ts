@@ -23,6 +23,12 @@ function trimTrailingSlash(value: string): string {
   return value.replace(/\/+$/, "");
 }
 
+function readForwardedValue(value: string | null): string | null {
+  if (!value) return null;
+  const first = value.split(",")[0]?.trim();
+  return first || null;
+}
+
 export function getSiteUrl(): string {
   const serverUrl = process.env.SERVER_URL?.trim();
   if (serverUrl && /^https?:\/\//i.test(serverUrl)) {
@@ -37,6 +43,34 @@ export function getSiteUrl(): string {
   }
 
   return "https://memetics.lat";
+}
+
+export function getRequestSiteUrl(request: Request): string {
+  const requestUrl = new URL(request.url);
+  const forwardedHost =
+    readForwardedValue(request.headers.get("x-forwarded-host")) ??
+    readForwardedValue(request.headers.get("host"));
+  let forwardedProto = readForwardedValue(
+    request.headers.get("x-forwarded-proto"),
+  );
+
+  if (!forwardedProto) {
+    const cfVisitor = request.headers.get("cf-visitor");
+    if (cfVisitor) {
+      try {
+        const parsed = JSON.parse(cfVisitor) as { scheme?: string };
+        if (parsed.scheme === "http" || parsed.scheme === "https") {
+          forwardedProto = parsed.scheme;
+        }
+      } catch {
+        // Ignore malformed Cloudflare visitor header.
+      }
+    }
+  }
+
+  const protocol = forwardedProto ?? requestUrl.protocol.replace(/:$/, "");
+  const host = forwardedHost ?? requestUrl.host;
+  return `${protocol}://${host}`;
 }
 
 export function getAbsoluteUrl(pathOrUrl: string, siteUrl?: string): string {

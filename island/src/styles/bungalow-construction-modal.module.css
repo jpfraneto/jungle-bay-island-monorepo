@@ -1,7 +1,7 @@
 .overlay {
   position: fixed;
   inset: 0;
-  z-index: 90;
+  z-index: 2400;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -69,6 +69,10 @@
   grid-template-columns: 160px 1fr auto;
   gap: 12px;
   padding: 0 24px 18px;
+}
+
+.formRowCompact {
+  grid-template-columns: 160px minmax(0, 1fr);
 }
 
 .field {

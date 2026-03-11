@@ -6,6 +6,7 @@ import { logError, logInfo } from "../services/logger";
 import {
   buildBungalowDescription,
   getAbsoluteUrl,
+  getRequestSiteUrl,
   getSiteOgImageUrl,
   renderSocialMeta,
 } from "../services/siteMeta";
@@ -215,7 +216,7 @@ ogRoute.get("/og", async (c) => {
 
 // --- OG page for social sharing: returns HTML with OG meta tags ---
 ogRoute.get("/og-page/:chain/:ca", async (c) => {
-  const requestOrigin = new URL(c.req.url).origin;
+  const requestOrigin = getRequestSiteUrl(c.req.raw);
   const chain = toSupportedChain(c.req.param("chain"));
   if (!chain) {
     return c.text("Invalid chain", 400);
@@ -265,7 +266,7 @@ ogRoute.get("/og-page/:chain/:ca", async (c) => {
 });
 
 ogRoute.get("/og-image/:chain/:ca", async (c) => {
-  const requestOrigin = new URL(c.req.url).origin;
+  const requestOrigin = getRequestSiteUrl(c.req.raw);
   const chain = toSupportedChain(c.req.param("chain"));
   if (!chain) return c.text("Invalid chain", 400);
 

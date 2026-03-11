@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
 import { useUserWalletLinks } from "../hooks/useUserWalletLinks";
@@ -72,6 +73,7 @@ export default function BungalowConstructionModal({
   const [isSubmittingSupport, setIsSubmittingSupport] = useState(false);
   const [isConstructing, setIsConstructing] = useState(false);
   const [pendingTxHash, setPendingTxHash] = useState<string | null>(null);
+  const [resolvedQueryKey, setResolvedQueryKey] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const viewerWallet = linkedWalletRows[0]?.address ?? walletAddress ?? "";
@@ -86,6 +88,7 @@ export default function BungalowConstructionModal({
     setIsSubmittingSupport(false);
     setIsConstructing(false);
     setPendingTxHash(null);
+    setResolvedQueryKey(null);
     setStatus(null);
     setError(null);
   }, [open]);
@@ -105,7 +108,18 @@ export default function BungalowConstructionModal({
     };
   }, [open]);
 
-  if (!open) return null;
+  const currentQueryKey = `${chain}:${ca.trim()}`;
+
+  useEffect(() => {
+    if (!open || !qualification || !resolvedQueryKey) return;
+    if (currentQueryKey === resolvedQueryKey) return;
+    setQualification(null);
+    setPendingTxHash(null);
+    setStatus(null);
+    setError(null);
+  }, [currentQueryKey, open, qualification, resolvedQueryKey]);
+
+  if (!open || typeof document === "undefined") return null;
 
   const loadQualification = async () => {
     const trimmedCa = ca.trim();
@@ -150,8 +164,10 @@ export default function BungalowConstructionModal({
       }
 
       setQualification(data as QualificationResponse);
+      setResolvedQueryKey(`${chain}:${trimmedCa}`);
     } catch (err) {
       setQualification(null);
+      setResolvedQueryKey(null);
       setError(
         err instanceof Error
           ? err.message
@@ -294,16 +310,16 @@ export default function BungalowConstructionModal({
     }
   };
 
-  return (
+  return createPortal(
     <div className={styles.overlay}>
-      <div className={styles.modal}>
+      <div className={styles.modal} role="dialog" aria-modal="true">
         <header className={styles.header}>
           <div>
             <p className={styles.kicker}>New Bungalow</p>
             <h3>Open a new community bungalow</h3>
             <p className={styles.summary}>
               You can open a bungalow on the island if you have enough heat,
-              support, or{" "}
+              support, or 10+{" "}
               <a
                 href="https://opensea.io/collection/junglebay"
                 target="_blank"
@@ -323,7 +339,9 @@ export default function BungalowConstructionModal({
           </button>
         </header>
 
-        <section className={styles.formRow}>
+        <section
+          className={`${styles.formRow} ${qualification ? styles.formRowCompact : ""}`}
+        >
           <label className={styles.field}>
             Chain
             <select
@@ -343,16 +361,18 @@ export default function BungalowConstructionModal({
               placeholder="Paste the contract address"
             />
           </label>
-          <button
-            type="button"
-            className={styles.primaryButton}
-            onClick={() => {
-              void loadQualification();
-            }}
-            disabled={isLoading}
-          >
-            {isLoading ? "Checking..." : "Check qualification"}
-          </button>
+          {!qualification ? (
+            <button
+              type="button"
+              className={styles.primaryButton}
+              onClick={() => {
+                void loadQualification();
+              }}
+              disabled={isLoading}
+            >
+              {isLoading ? "Checking..." : "Check qualification"}
+            </button>
+          ) : null}
         </section>
 
         {qualification ? (
@@ -360,6 +380,7 @@ export default function BungalowConstructionModal({
             <div className={styles.tokenRow}>
               <div>
                 <strong>
+                  $
                   {qualification.token.symbol ||
                     qualification.token.name ||
                     qualification.token_address}
@@ -421,6 +442,16 @@ export default function BungalowConstructionModal({
                 Shortcut: hold{" "}
                 {qualification.thresholds.jbac_shortcut_min_balance}+ Jungle Bay
                 Apes.
+              </p>
+              <p>
+                Or DM{" "}
+                <a
+                  href="https://x.com/_seacasa"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  @_seacasa
+                </a>
               </p>
             </div>
 
@@ -497,6 +528,7 @@ export default function BungalowConstructionModal({
         {status ? <div className={styles.status}>{status}</div> : null}
         {error ? <div className={styles.error}>{error}</div> : null}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

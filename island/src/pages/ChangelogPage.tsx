@@ -18,6 +18,76 @@ export default function ChangelogPage() {
 
       <article className={styles.entry}>
         <div className={styles.entryHeader}>
+          <span className={styles.date}>March 11, 2026</span>
+          <h2 className={styles.heading}>Rewards Inbox Now Reuses Warmed Data Instead Of Reloading On Every Open</h2>
+        </div>
+        <p>
+          The top-nav rewards flow now behaves like one continuous inbox instead
+          of a fresh loading cycle every time the modal opens.
+        </p>
+        <ul className={styles.list}>
+          <li>
+            Claim totals and linked-wallet availability are now cached in the
+            frontend for a short window, so reopening the rewards modal reuses
+            the data that was already loaded instead of dropping back to the
+            full skeleton state.
+          </li>
+          <li>
+            The rewards button now preloads linked-wallet data while the nav is
+            already on screen, which removes the extra first-open fetch in the
+            common case.
+          </li>
+          <li>
+            Successful claims still force a fresh rewards refresh immediately,
+            so the cache does not hide real post-claim state changes.
+          </li>
+        </ul>
+      </article>
+
+      <article className={styles.entry}>
+        <div className={styles.entryHeader}>
+          <span className={styles.date}>March 11, 2026</span>
+          <h2 className={styles.heading}>Heat Score Became A Live Wallet-Cluster Table And Island Modals Now Stay On Top</h2>
+        </div>
+        <p>
+          The Heat Score page now shows a real per-bungalow breakdown, and two
+          map actions that were slipping behind bungalow cards were moved above
+          the island stack.
+        </p>
+        <ul className={styles.list}>
+          <li>
+            The rewards modal and the new bungalow modal now render through
+            portals with a higher overlay layer, and the island&apos;s 3D marker
+            overlays now use a capped Html z-index range so they no longer
+            punch through those modals while rewards and bungalow flows are
+            open.
+          </li>
+          <li>
+            Rewards now wait behind a dedicated loading skeleton until wallet
+            availability and claim totals are ready, and the navbar badge shows
+            a spinner while rewards are still being fetched instead of flashing
+            a misleading zero.
+          </li>
+          <li>
+            The Heat Score page now sums heat across the user&apos;s linked
+            wallet cluster and shows the per-wallet contribution inside each
+            bungalow row.
+          </li>
+          <li>
+            After a bungalow qualification result loads, the initial check CTA
+            is removed until the contract input changes, which keeps the modal
+            from inviting dead-end re-clicks when the user does not qualify.
+          </li>
+          <li>
+            The Bodega submit modal now expands its wallet chooser inline
+            inside the scroll area, so opening the full linked-wallet list no
+            longer traps the lower part of the publishing flow off-screen.
+          </li>
+        </ul>
+      </article>
+
+      <article className={styles.entry}>
+        <div className={styles.entryHeader}>
           <span className={styles.date}>March 10, 2026</span>
           <h2 className={styles.heading}>Claims And Wall Publishing Now Respect User Identity More Consistently</h2>
         </div>

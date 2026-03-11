@@ -36,6 +36,7 @@ const OCEAN_SCENE_COLOR = "#04164e";
 const LAGOON_SURFACE_COLOR = "#1d8fff";
 const LAGOON_EMISSIVE_COLOR = "#003ca8";
 const LAGOON_GLOW_COLOR = "#66b8ff";
+const ISLAND_HTML_Z_INDEX_RANGE: [number, number] = [20, 0];
 
 export interface RingPosition {
   x: number;
@@ -183,7 +184,7 @@ function TokenAvatar({
 
 function SceneStatus({ label }: { label: string }) {
   return (
-    <Html center>
+    <Html center zIndexRange={ISLAND_HTML_Z_INDEX_RANGE}>
       <div
         style={{
           padding: "12px 16px",
@@ -292,7 +293,11 @@ function TerrainLayers({ islandRadius }: { islandRadius: number }) {
         distance={16}
       />
 
-      <Html position={[0, 2.5, 0]} center>
+      <Html
+        position={[0, 2.5, 0]}
+        center
+        zIndexRange={ISLAND_HTML_Z_INDEX_RANGE}
+      >
         <div
           style={{
             color: "#8fd3ff",
@@ -395,7 +400,12 @@ function BungalowMarker({
   const label = node.bungalow.symbol ?? node.bungalow.name ?? "Bungalow";
 
   return (
-    <Html position={[0, 3.35, 0]} center style={{ pointerEvents: "auto" }}>
+    <Html
+      position={[0, 3.35, 0]}
+      center
+      zIndexRange={ISLAND_HTML_Z_INDEX_RANGE}
+      style={{ pointerEvents: "auto" }}
+    >
       <div
         style={{
           display: "flex",

@@ -18,12 +18,14 @@ export interface WalletSelectorState {
   hasAvailableWallet: boolean;
   availableWallets: string[];
   totalWallets: number;
+  isLoading?: boolean;
 }
 
 interface WalletSelectorProps {
   onSelect: (address: string) => void;
   value?: string | null;
   label?: string;
+  panelMode?: "floating" | "inline";
   onStateChange?: (state: WalletSelectorState) => void;
   onWalletLinked?: (result: LinkedWalletResult) => void | Promise<void>;
 }
@@ -51,10 +53,7 @@ function truncateAddress(address: string): string {
 function formatSourceLabel(value: string | null | undefined): string | null {
   if (!value) return null;
 
-  const normalized = value
-    .replace(/[_-]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  const normalized = value.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
 
   if (!normalized) return null;
 
@@ -71,7 +70,7 @@ function getWalletStatus(option: WalletOption): string {
   }
 
   if (option.isLinked) {
-    return "Linked, reconnect here";
+    return "Linked, not available here";
   }
 
   return "Unavailable";
@@ -129,6 +128,7 @@ export default function WalletSelector({
   onSelect,
   value = null,
   label = "Sign with",
+  panelMode = "floating",
   onStateChange,
   onWalletLinked,
 }: WalletSelectorProps) {
@@ -159,6 +159,7 @@ export default function WalletSelector({
     useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const preferredAddress = value?.trim().toLowerCase() ?? "";
+  const showLoadingState = isLoading && linkedWalletRows.length === 0;
 
   useEffect(() => {
     if (!open) {
@@ -228,8 +229,7 @@ export default function WalletSelector({
           formatSourceLabel(wallet.connectorType) ??
           formatSourceLabel(wallet.walletClientType),
         isConnected: true,
-        isActive:
-          walletAddress?.toLowerCase() === wallet.address.toLowerCase(),
+        isActive: walletAddress?.toLowerCase() === wallet.address.toLowerCase(),
         connectedAt: wallet.connectedAt,
       });
     });
@@ -366,8 +366,9 @@ export default function WalletSelector({
         .filter((option) => option.isAvailable)
         .map((option) => option.address),
       totalWallets: options.length,
+      isLoading: showLoadingState,
     });
-  }, [onStateChange, options, selectedOption]);
+  }, [onStateChange, options, selectedOption, showLoadingState]);
 
   const handleChooseWallet = (option: WalletOption) => {
     if (!option.isAvailable) {
@@ -420,6 +421,19 @@ export default function WalletSelector({
     );
   }
 
+  if (showLoadingState) {
+    return (
+      <div ref={rootRef} className={styles.selectorWrap}>
+        <label className={styles.selectorLabel}>{label}</label>
+        <div className={styles.loadingCard} aria-live="polite">
+          <div className={`${styles.loadingLine} ${styles.loadingLinePrimary}`} />
+          <div className={`${styles.loadingLine} ${styles.loadingLineSecondary}`} />
+        </div>
+        <p className={styles.hint}>Loading wallet availability...</p>
+      </div>
+    );
+  }
+
   return (
     <div ref={rootRef} className={styles.selectorWrap}>
       <label className={styles.selectorLabel}>{label}</label>
@@ -466,7 +480,11 @@ export default function WalletSelector({
           </button>
 
           {open ? (
-            <div className={styles.panel}>
+            <div
+              className={`${styles.panel} ${
+                panelMode === "inline" ? styles.panelInline : ""
+              }`}
+            >
               <div className={styles.panelHeader}>
                 <div className={styles.panelHeaderCopy}>
                   <strong>Choose wallet</strong>
@@ -540,7 +558,9 @@ export default function WalletSelector({
                   {isLinking ? "Linking..." : "Link new wallet"}
                 </button>
                 {loadError ? <p className={styles.error}>{loadError}</p> : null}
-                {linkStatus ? <p className={styles.status}>{linkStatus}</p> : null}
+                {linkStatus ? (
+                  <p className={styles.status}>{linkStatus}</p>
+                ) : null}
                 {linkError ? <p className={styles.error}>{linkError}</p> : null}
               </div>
             </div>

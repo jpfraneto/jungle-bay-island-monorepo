@@ -1,9 +1,9 @@
 import { CONFIG } from "../config";
 
 export const SITE_NAME = "Jungle Bay Island";
-export const SITE_TITLE = "Jungle Bay Island | Every token gets a Bungalow";
+export const SITE_TITLE = "Jungle Bay Island | The Home Of Memes";
 export const SITE_DESCRIPTION =
-  "Every token gets a Bungalow. Holders claim it, customize it, post on it, and build Heat across Base, Ethereum, and Solana.";
+  "Welcome to the persistent cultural layer that gives tokens a bungalow, where to live over time.";
 export const SITE_OG_IMAGE_PATH = "/OG_image.png";
 export const SITE_OG_IMAGE_ALT =
   "Jungle Bay Island Open Graph artwork";

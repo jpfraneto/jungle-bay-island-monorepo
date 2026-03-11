@@ -4,7 +4,7 @@ export const SITE_NAME = "Jungle Bay Island";
 export const SITE_TITLE = "Jungle Bay Island | The Home Of Memes";
 export const SITE_DESCRIPTION =
   "Welcome to the persistent cultural layer that gives tokens a bungalow, where to live over time.";
-export const SITE_OG_IMAGE_PATH = "/OG_image.png";
+export const SITE_OG_IMAGE_PATH = "/og-image.png";
 export const SITE_OG_IMAGE_ALT =
   "Jungle Bay Island Open Graph artwork";
 export const SITE_OG_IMAGE_TYPE = "image/png";
@@ -39,17 +39,18 @@ export function getSiteUrl(): string {
   return "https://memetics.lat";
 }
 
-export function getAbsoluteUrl(pathOrUrl: string): string {
+export function getAbsoluteUrl(pathOrUrl: string, siteUrl?: string): string {
   if (/^https?:\/\//i.test(pathOrUrl)) {
     return pathOrUrl;
   }
 
   const normalizedPath = pathOrUrl.startsWith("/") ? pathOrUrl : `/${pathOrUrl}`;
-  return `${getSiteUrl()}${normalizedPath}`;
+  const baseUrl = siteUrl ? trimTrailingSlash(siteUrl) : getSiteUrl();
+  return `${baseUrl}${normalizedPath}`;
 }
 
-export function getSiteOgImageUrl(): string {
-  return getAbsoluteUrl(SITE_OG_IMAGE_PATH);
+export function getSiteOgImageUrl(siteUrl?: string): string {
+  return getAbsoluteUrl(SITE_OG_IMAGE_PATH, siteUrl);
 }
 
 export function buildBungalowDescription(
@@ -70,11 +71,15 @@ export function renderSocialMeta(input?: {
   imageAlt?: string;
   type?: "website" | "article";
   siteName?: string;
+  siteUrl?: string;
 }): string {
   const title = input?.title ?? SITE_TITLE;
   const description = input?.description ?? SITE_DESCRIPTION;
-  const url = getAbsoluteUrl(input?.url ?? "/");
-  const imageUrl = getAbsoluteUrl(input?.imageUrl ?? SITE_OG_IMAGE_PATH);
+  const url = getAbsoluteUrl(input?.url ?? "/", input?.siteUrl);
+  const imageUrl = getAbsoluteUrl(
+    input?.imageUrl ?? SITE_OG_IMAGE_PATH,
+    input?.siteUrl,
+  );
   const imageAlt = input?.imageAlt ?? SITE_OG_IMAGE_ALT;
   const type = input?.type ?? "website";
   const siteName = input?.siteName ?? SITE_NAME;

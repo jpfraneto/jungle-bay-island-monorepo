@@ -215,6 +215,7 @@ ogRoute.get("/og", async (c) => {
 
 // --- OG page for social sharing: returns HTML with OG meta tags ---
 ogRoute.get("/og-page/:chain/:ca", async (c) => {
+  const requestOrigin = new URL(c.req.url).origin;
   const chain = toSupportedChain(c.req.param("chain"));
   if (!chain) {
     return c.text("Invalid chain", 400);
@@ -234,7 +235,7 @@ ogRoute.get("/og-page/:chain/:ca", async (c) => {
     tokenMeta.name ?? tokenAddress,
     tokenMeta.symbol ?? null,
   );
-  const canonicalUrl = getAbsoluteUrl(`/${chain}/${tokenAddress}`);
+  const canonicalUrl = getAbsoluteUrl(`/${chain}/${tokenAddress}`, requestOrigin);
 
   logInfo(
     "OG PAGE",
@@ -251,6 +252,7 @@ ogRoute.get("/og-page/:chain/:ca", async (c) => {
     description,
     url: canonicalUrl,
     imageAlt: `${tokenMeta.name ?? tokenAddress} on Jungle Bay Island`,
+    siteUrl: requestOrigin,
   })}
   <meta http-equiv="refresh" content="0;url=${escapeHtml(canonicalUrl)}" />
 </head>
@@ -263,13 +265,14 @@ ogRoute.get("/og-page/:chain/:ca", async (c) => {
 });
 
 ogRoute.get("/og-image/:chain/:ca", async (c) => {
+  const requestOrigin = new URL(c.req.url).origin;
   const chain = toSupportedChain(c.req.param("chain"));
   if (!chain) return c.text("Invalid chain", 400);
 
   const tokenAddress = normalizeAddress(c.req.param("ca"), chain);
   if (!tokenAddress) return c.text("Invalid address", 400);
   c.header("Cache-Control", "public, max-age=3600");
-  return c.redirect(getSiteOgImageUrl(), 302);
+  return c.redirect(getSiteOgImageUrl(requestOrigin), 302);
 });
 
 function escapeHtml(str: string): string {

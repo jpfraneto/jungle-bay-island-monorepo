@@ -115,7 +115,7 @@ function getIslandAssetTags(): string {
   return cachedIslandAssetTags;
 }
 
-function renderSpaShell(pathname = "/"): string {
+function renderSpaShell(pathname = "/", siteUrl?: string): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -124,7 +124,7 @@ function renderSpaShell(pathname = "/"): string {
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
   <title>${escapeHtml(SITE_TITLE)}</title>
-  ${renderSocialMeta({ url: pathname })}
+  ${renderSocialMeta({ url: pathname, siteUrl })}
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='52' font-size='52'%3E%F0%9F%8F%9D%EF%B8%8F%3C/text%3E%3C/svg%3E" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
@@ -394,7 +394,8 @@ app.notFound((c) => {
     );
   }
 
-  return c.html(renderSpaShell(c.req.path));
+  const requestOrigin = new URL(c.req.url).origin;
+  return c.html(renderSpaShell(c.req.path, requestOrigin));
 });
 
 app.onError((error, c) => {

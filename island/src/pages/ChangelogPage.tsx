@@ -18,6 +18,78 @@ export default function ChangelogPage() {
 
       <article className={styles.entry}>
         <div className={styles.entryHeader}>
+          <span className={styles.date}>March 12, 2026</span>
+          <h2 className={styles.heading}>Commission Board Added For Escrowed Art Requests, Artist Applications, And Delivery Payouts</h2>
+        </div>
+        <p>
+          The Island now has a full commission workflow layered on top of the
+          deployed Memetics contract, so creative work can be commissioned,
+          selected, delivered, and paid without leaving the product.
+        </p>
+        <ul className={styles.list}>
+          <li>
+            Requesters can now open commissions from a new board, choose the
+            bungalow the work belongs to, define the rate/format, set the JBM
+            budget, write the prompt, and lock the budget in onchain escrow.
+          </li>
+          <li>
+            Artists can apply from the commission detail page with any wallet
+            already linked to their Memetics profile.
+          </li>
+          <li>
+            Requesters now approve one applicant in the app, then the approved
+            artist claims the commission onchain to start the paid job.
+          </li>
+          <li>
+            Deliverables now submit through the contract, requester approval
+            settles the payout onchain, and artists can also claim the timeout
+            payout path if the review window expires.
+          </li>
+        </ul>
+      </article>
+
+      <article className={styles.entry}>
+        <div className={styles.entryHeader}>
+          <span className={styles.date}>March 12, 2026</span>
+          <h2 className={styles.heading}>Memetics V2 Now Drives Identity, Claims, Bungalows, And The Bodega Onchain</h2>
+        </div>
+        <p>
+          The app now treats the deployed Memetics contract on Base as the
+          write path for the island&apos;s identity and marketplace loops, while
+          the backend indexes receipts and provides backend-signed heat
+          attestations for contract actions.
+        </p>
+        <ul className={styles.list}>
+          <li>
+            Profile now includes an onchain Memetics section where users can
+            create their contract profile from their X handle, sync heat, link
+            more wallets onchain, and choose the main payout wallet.
+          </li>
+          <li>
+            Daily rewards now claim through <code>claimDailyMemes</code> on the
+            Memetics contract instead of the old escrow contract path.
+          </li>
+          <li>
+            New bungalow opening now uses contract-native petitions and support
+            signatures, with the backend confirming the onchain result back
+            into the indexed bungalow registry after the transaction lands.
+          </li>
+          <li>
+            Bodega publishing now creates onchain artifacts, and Bodega
+            installs now approve JBM and call <code>installArtifact</code>
+            before the backend records the install locally.
+          </li>
+          <li>
+            Wallet availability checks in the shared signer chooser now treat
+            an empty onchain allowlist correctly, so contract-gated actions no
+            longer appear available from wallets that are only linked in Privy
+            but not linked onchain.
+          </li>
+        </ul>
+      </article>
+
+      <article className={styles.entry}>
+        <div className={styles.entryHeader}>
           <span className={styles.date}>March 11, 2026</span>
           <h2 className={styles.heading}>Rewards Inbox Now Reuses Warmed Data Instead Of Reloading On Every Open</h2>
         </div>

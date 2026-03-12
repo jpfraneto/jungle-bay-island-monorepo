@@ -2682,6 +2682,8 @@ function buildBodegaCatalogWhereClause(
 export async function createCatalogItem(data: {
   creator_wallet: string
   creator_handle?: string | null
+  contract_artifact_id?: number | null
+  contract_uri?: string | null
   origin_bungalow_token_address?: string | null
   origin_bungalow_chain?: string | null
   asset_type: BodegaCatalogRow['asset_type']
@@ -2697,6 +2699,8 @@ export async function createCatalogItem(data: {
     INSERT INTO ${db(CONFIG.SCHEMA)}.bodega_catalog (
       creator_wallet,
       creator_handle,
+      contract_artifact_id,
+      contract_uri,
       origin_bungalow_token_address,
       origin_bungalow_chain,
       asset_type,
@@ -2711,6 +2715,8 @@ export async function createCatalogItem(data: {
     VALUES (
       ${data.creator_wallet},
       ${data.creator_handle ?? null},
+      ${data.contract_artifact_id ?? null},
+      ${data.contract_uri ?? null},
       ${data.origin_bungalow_token_address ?? null},
       ${data.origin_bungalow_chain ?? null},
       ${data.asset_type},
@@ -2726,6 +2732,8 @@ export async function createCatalogItem(data: {
       id,
       creator_wallet,
       creator_handle,
+      contract_artifact_id,
+      contract_uri,
       origin_bungalow_token_address,
       origin_bungalow_chain,
       asset_type,
@@ -2753,6 +2761,8 @@ export async function getCatalogItem(id: number): Promise<BodegaCatalogRow | nul
       id,
       creator_wallet,
       creator_handle,
+      contract_artifact_id,
+      contract_uri,
       origin_bungalow_token_address,
       origin_bungalow_chain,
       asset_type,
@@ -2785,6 +2795,8 @@ export async function getCatalogItemBySubmissionTxHash(
       id,
       creator_wallet,
       creator_handle,
+      contract_artifact_id,
+      contract_uri,
       origin_bungalow_token_address,
       origin_bungalow_chain,
       asset_type,
@@ -2825,6 +2837,8 @@ export async function getCatalogItems(
       bc.id,
       bc.creator_wallet,
       bc.creator_handle,
+      bc.contract_artifact_id,
+      bc.contract_uri,
       bc.origin_bungalow_token_address,
       bc.origin_bungalow_chain,
       bc.asset_type,
@@ -2881,6 +2895,8 @@ export async function deactivateCatalogItem(
       id,
       creator_wallet,
       creator_handle,
+      contract_artifact_id,
+      contract_uri,
       origin_bungalow_token_address,
       origin_bungalow_chain,
       asset_type,
@@ -2942,15 +2958,20 @@ export async function adminDeactivateBungalowItem(input: {
  */
 export async function createBodegaInstall(data: {
   catalog_item_id: number
+  contract_artifact_id?: number | null
+  contract_bungalow_id?: number | null
   installed_to_token_address: string
   installed_to_chain: string
   installed_by_wallet: string
   tx_hash: string
   jbm_amount: string
+  creator_credit_jbm?: string
 }): Promise<BodegaInstallRow> {
   const rows = await db<BodegaInstallRow[]>`
     INSERT INTO ${db(CONFIG.SCHEMA)}.bodega_installs (
       catalog_item_id,
+      contract_artifact_id,
+      contract_bungalow_id,
       installed_to_token_address,
       installed_to_chain,
       installed_by_wallet,
@@ -2960,16 +2981,20 @@ export async function createBodegaInstall(data: {
     )
     VALUES (
       ${data.catalog_item_id},
+      ${data.contract_artifact_id ?? null},
+      ${data.contract_bungalow_id ?? null},
       ${data.installed_to_token_address},
       ${data.installed_to_chain},
       ${data.installed_by_wallet},
       ${data.tx_hash},
       ${data.jbm_amount},
-      (${data.jbm_amount}::numeric * 30 / 100)
+      ${data.creator_credit_jbm ?? `(${data.jbm_amount}::numeric * 30 / 100)`}
     )
     RETURNING
       id,
       catalog_item_id,
+      contract_artifact_id,
+      contract_bungalow_id,
       installed_to_token_address,
       installed_to_chain,
       installed_by_wallet,
@@ -2988,6 +3013,8 @@ export async function getBodegaInstallByTxHash(txHash: string): Promise<BodegaIn
     SELECT
       id,
       catalog_item_id,
+      contract_artifact_id,
+      contract_bungalow_id,
       installed_to_token_address,
       installed_to_chain,
       installed_by_wallet,
@@ -3015,6 +3042,8 @@ export async function getBodegaInstallsByBungalow(
     SELECT
       bi.id,
       bi.catalog_item_id,
+      bi.contract_artifact_id,
+      bi.contract_bungalow_id,
       bi.installed_to_token_address,
       bi.installed_to_chain,
       bi.installed_by_wallet,
@@ -3027,6 +3056,8 @@ export async function getBodegaInstallsByBungalow(
         'id', bc.id,
         'creator_wallet', bc.creator_wallet,
         'creator_handle', bc.creator_handle,
+        'contract_artifact_id', bc.contract_artifact_id,
+        'contract_uri', bc.contract_uri,
         'origin_bungalow_token_address', bc.origin_bungalow_token_address,
         'origin_bungalow_chain', bc.origin_bungalow_chain,
         'asset_type', bc.asset_type,
@@ -3071,6 +3102,8 @@ export async function getUnclaimedCreatorCredits(
     SELECT
       bi.id,
       bi.catalog_item_id,
+      bi.contract_artifact_id,
+      bi.contract_bungalow_id,
       bi.installed_to_token_address,
       bi.installed_to_chain,
       bi.installed_by_wallet,
@@ -3083,6 +3116,8 @@ export async function getUnclaimedCreatorCredits(
         'id', bc.id,
         'creator_wallet', bc.creator_wallet,
         'creator_handle', bc.creator_handle,
+        'contract_artifact_id', bc.contract_artifact_id,
+        'contract_uri', bc.contract_uri,
         'origin_bungalow_token_address', bc.origin_bungalow_token_address,
         'origin_bungalow_chain', bc.origin_bungalow_chain,
         'asset_type', bc.asset_type,

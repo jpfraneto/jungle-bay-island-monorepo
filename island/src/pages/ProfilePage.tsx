@@ -1,9 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { useModalStatus, usePrivy } from "@privy-io/react-auth";
 import { useNavigate } from "react-router-dom";
+import WalletSelector, { type WalletSelectorState } from "../components/WalletSelector";
+import { useMemeticsProfile } from "../hooks/useMemeticsProfile";
 import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
 import { useUserWalletLinks } from "../hooks/useUserWalletLinks";
 import { formatNumber } from "../utils/formatters";
+import {
+  getMemeticsErrorMessage,
+  MEMETICS_CONTRACT_ADDRESS,
+  memeticsAbi,
+} from "../utils/memetics";
 import {
   getPrivyWalletChainType,
   getPrivyWalletList,
@@ -17,6 +24,39 @@ interface UserProfileResponse {
   token_breakdown?: unknown[];
   scans?: unknown[];
   x_username?: string | null;
+}
+
+interface RegisterProfileSignatureResponse {
+  contract_address?: string;
+  wallet?: string;
+  handle?: string;
+  heat_score?: number;
+  salt?: `0x${string}`;
+  deadline?: number;
+  sig?: `0x${string}`;
+  error?: string;
+}
+
+interface LinkWalletSignatureResponse {
+  contract_address?: string;
+  profile_id?: number;
+  wallet?: string;
+  heat_score?: number;
+  salt?: `0x${string}`;
+  deadline?: number;
+  sig?: `0x${string}`;
+  error?: string;
+}
+
+interface SyncHeatSignatureResponse {
+  contract_address?: string;
+  profile_id?: number;
+  wallet?: string;
+  heat_score?: number;
+  salt?: `0x${string}`;
+  deadline?: number;
+  sig?: `0x${string}`;
+  error?: string;
 }
 
 function truncateAddress(address: string): string {
@@ -48,7 +88,13 @@ export default function ProfilePage() {
     user,
   } = usePrivy();
   const { isOpen: isPrivyModalOpen } = useModalStatus();
-  const { walletAddress } = usePrivyBaseWallet();
+  const { publicClient, requireWallet, walletAddress } = usePrivyBaseWallet();
+  const {
+    data: memeticsProfile,
+    isLoading: isMemeticsProfileLoading,
+    error: memeticsProfileError,
+    refetch: refetchMemeticsProfile,
+  } = useMemeticsProfile(authenticated);
   const {
     wallets: linkedWallets,
     isLoading: isWalletsLoading,
@@ -71,6 +117,18 @@ export default function ProfilePage() {
   const [xError, setXError] = useState<string | null>(null);
   const [claimedXUsername, setClaimedXUsername] = useState<string | null>(null);
   const [pendingTwitterSync, setPendingTwitterSync] = useState(false);
+  const [selectedContractWallet, setSelectedContractWallet] = useState("");
+  const [contractWalletState, setContractWalletState] =
+    useState<WalletSelectorState>({
+      selectedWallet: null,
+      selectedWalletAvailable: false,
+      hasAvailableWallet: false,
+      availableWallets: [],
+      totalWallets: 0,
+    });
+  const [isOnchainActionPending, setIsOnchainActionPending] = useState(false);
+  const [onchainStatus, setOnchainStatus] = useState<string | null>(null);
+  const [onchainError, setOnchainError] = useState<string | null>(null);
 
   useEffect(() => {
     setClaimedXUsername((current) => {
@@ -90,6 +148,12 @@ export default function ProfilePage() {
       return normalized || null;
     });
   }, [profile?.x_username, user?.twitter?.username]);
+
+  useEffect(() => {
+    if (!walletAddress) return;
+    if (selectedContractWallet) return;
+    setSelectedContractWallet(walletAddress);
+  }, [selectedContractWallet, walletAddress]);
 
   useEffect(() => {
     if (!authenticated || !walletAddress) {
@@ -426,6 +490,368 @@ export default function ProfilePage() {
     }
   };
 
+  const runOnchainAction = useCallback(
+    async (action: () => Promise<void>) => {
+      setOnchainError(null);
+      setOnchainStatus(null);
+      setIsOnchainActionPending(true);
+
+      try {
+        await action();
+        await refetchMemeticsProfile().catch(() => undefined);
+      } catch (actionError) {
+        setOnchainError(
+          getMemeticsErrorMessage(actionError, "Memetics action failed"),
+        );
+      } finally {
+        setIsOnchainActionPending(false);
+      }
+    },
+    [refetchMemeticsProfile],
+  );
+
+  const handleRegisterOnchainProfile = useCallback(async () => {
+    await runOnchainAction(async () => {
+      if (!publicClient) {
+        throw new Error("Missing Base public client");
+      }
+
+      if (!memeticsProfile?.preferred_handle) {
+        throw new Error("Link your X handle before creating an onchain profile.");
+      }
+
+      if (!contractWalletState.selectedWalletAvailable) {
+        throw new Error("Choose a connected wallet that is linked to your Privy account.");
+      }
+
+      const { address, walletClient } = await requireWallet();
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      const token = await getAccessToken();
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
+      setOnchainStatus("Requesting profile signature...");
+      const response = await fetch("/api/memetics/register/sign", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          wallet: address,
+        }),
+      });
+      const data =
+        (await response.json().catch(() => null)) as RegisterProfileSignatureResponse | null;
+
+      if (
+        !response.ok ||
+        !data?.handle ||
+        data.heat_score === undefined ||
+        !data.salt ||
+        data.deadline === undefined ||
+        !data.sig
+      ) {
+        throw new Error(
+          data?.error ?? `Profile signing failed (${response.status})`,
+        );
+      }
+
+      const contractAddress =
+        (typeof data.contract_address === "string"
+          ? data.contract_address
+          : MEMETICS_CONTRACT_ADDRESS) as `0x${string}`;
+      const args = [
+        data.handle,
+        BigInt(data.heat_score),
+        data.salt,
+        BigInt(data.deadline),
+        data.sig,
+      ] as const;
+
+      setOnchainStatus("Checking onchain profile registration...");
+      await publicClient.simulateContract({
+        address: contractAddress,
+        abi: memeticsAbi,
+        functionName: "registerProfile",
+        args,
+        account: address,
+      });
+
+      const hash = await walletClient.writeContract({
+        address: contractAddress,
+        abi: memeticsAbi,
+        functionName: "registerProfile",
+        args,
+        account: address,
+      });
+
+      setOnchainStatus("Waiting for Base confirmation...");
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      if (receipt.status !== "success") {
+        throw new Error("Onchain profile registration failed");
+      }
+
+      setOnchainStatus("Onchain profile created.");
+    });
+  }, [
+    contractWalletState.selectedWalletAvailable,
+    getAccessToken,
+    memeticsProfile?.preferred_handle,
+    publicClient,
+    requireWallet,
+    runOnchainAction,
+  ]);
+
+  const handleLinkWalletOnchain = useCallback(async () => {
+    await runOnchainAction(async () => {
+      if (!publicClient) {
+        throw new Error("Missing Base public client");
+      }
+
+      if (!memeticsProfile?.profile) {
+        throw new Error("Create your onchain profile first.");
+      }
+
+      if (!contractWalletState.selectedWalletAvailable) {
+        throw new Error("Choose a connected wallet that is linked to your Privy account.");
+      }
+
+      const { address, walletClient } = await requireWallet();
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      const token = await getAccessToken();
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
+      setOnchainStatus("Requesting wallet-link signature...");
+      const response = await fetch("/api/memetics/link-wallet/sign", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          wallet: address,
+        }),
+      });
+      const data =
+        (await response.json().catch(() => null)) as LinkWalletSignatureResponse | null;
+
+      if (
+        !response.ok ||
+        data?.profile_id === undefined ||
+        data.heat_score === undefined ||
+        !data.salt ||
+        data.deadline === undefined ||
+        !data.sig
+      ) {
+        throw new Error(
+          data?.error ?? `Wallet-link signing failed (${response.status})`,
+        );
+      }
+
+      const contractAddress =
+        (typeof data.contract_address === "string"
+          ? data.contract_address
+          : MEMETICS_CONTRACT_ADDRESS) as `0x${string}`;
+      const args = [
+        BigInt(data.profile_id),
+        BigInt(data.heat_score),
+        data.salt,
+        BigInt(data.deadline),
+        data.sig,
+      ] as const;
+
+      setOnchainStatus("Checking onchain wallet link...");
+      await publicClient.simulateContract({
+        address: contractAddress,
+        abi: memeticsAbi,
+        functionName: "linkWallet",
+        args,
+        account: address,
+      });
+
+      const hash = await walletClient.writeContract({
+        address: contractAddress,
+        abi: memeticsAbi,
+        functionName: "linkWallet",
+        args,
+        account: address,
+      });
+
+      setOnchainStatus("Waiting for Base confirmation...");
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      if (receipt.status !== "success") {
+        throw new Error("Onchain wallet link failed");
+      }
+
+      setOnchainStatus("Wallet linked onchain.");
+    });
+  }, [
+    contractWalletState.selectedWalletAvailable,
+    getAccessToken,
+    memeticsProfile?.profile,
+    publicClient,
+    requireWallet,
+    runOnchainAction,
+  ]);
+
+  const handleSyncOnchainHeat = useCallback(async () => {
+    await runOnchainAction(async () => {
+      if (!publicClient) {
+        throw new Error("Missing Base public client");
+      }
+
+      if (!memeticsProfile?.profile) {
+        throw new Error("Create your onchain profile first.");
+      }
+
+      const onchainWallets = memeticsProfile.profile.wallets.map((wallet) =>
+        wallet.toLowerCase(),
+      );
+      if (
+        !selectedContractWallet ||
+        !onchainWallets.includes(selectedContractWallet.toLowerCase())
+      ) {
+        throw new Error("Choose a connected wallet that is already linked onchain.");
+      }
+
+      const { address, walletClient } = await requireWallet();
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      const token = await getAccessToken();
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
+      setOnchainStatus("Requesting heat sync...");
+      const response = await fetch("/api/memetics/sync-heat/sign", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          wallet: address,
+        }),
+      });
+      const data =
+        (await response.json().catch(() => null)) as SyncHeatSignatureResponse | null;
+
+      if (
+        !response.ok ||
+        data?.profile_id === undefined ||
+        data.heat_score === undefined ||
+        !data.salt ||
+        data.deadline === undefined ||
+        !data.sig
+      ) {
+        throw new Error(data?.error ?? `Heat sync failed (${response.status})`);
+      }
+
+      const contractAddress =
+        (typeof data.contract_address === "string"
+          ? data.contract_address
+          : MEMETICS_CONTRACT_ADDRESS) as `0x${string}`;
+      const args = [
+        BigInt(data.profile_id),
+        BigInt(data.heat_score),
+        data.salt,
+        BigInt(data.deadline),
+        data.sig,
+      ] as const;
+
+      setOnchainStatus("Checking heat sync...");
+      await publicClient.simulateContract({
+        address: contractAddress,
+        abi: memeticsAbi,
+        functionName: "syncHeat",
+        args,
+        account: address,
+      });
+
+      const hash = await walletClient.writeContract({
+        address: contractAddress,
+        abi: memeticsAbi,
+        functionName: "syncHeat",
+        args,
+        account: address,
+      });
+
+      setOnchainStatus("Waiting for Base confirmation...");
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      if (receipt.status !== "success") {
+        throw new Error("Heat sync transaction failed");
+      }
+
+      setOnchainStatus("Onchain heat synced.");
+    });
+  }, [
+    getAccessToken,
+    memeticsProfile?.profile,
+    publicClient,
+    requireWallet,
+    runOnchainAction,
+    selectedContractWallet,
+  ]);
+
+  const handleSetMainWalletOnchain = useCallback(
+    async (nextMainWallet: string) => {
+      await runOnchainAction(async () => {
+        if (!publicClient) {
+          throw new Error("Missing Base public client");
+        }
+
+        if (!memeticsProfile?.profile) {
+          throw new Error("Create your onchain profile first.");
+        }
+
+        const onchainWallets = memeticsProfile.profile.wallets.map((wallet) =>
+          wallet.toLowerCase(),
+        );
+        if (
+          !selectedContractWallet ||
+          !onchainWallets.includes(selectedContractWallet.toLowerCase())
+        ) {
+          throw new Error(
+            "Choose a connected wallet that is already linked onchain.",
+          );
+        }
+
+        const { address, walletClient } = await requireWallet();
+        setOnchainStatus("Checking main wallet update...");
+        await publicClient.simulateContract({
+          address: MEMETICS_CONTRACT_ADDRESS,
+          abi: memeticsAbi,
+          functionName: "setMainWallet",
+          args: [nextMainWallet as `0x${string}`],
+          account: address,
+        });
+
+        const hash = await walletClient.writeContract({
+          address: MEMETICS_CONTRACT_ADDRESS,
+          abi: memeticsAbi,
+          functionName: "setMainWallet",
+          args: [nextMainWallet as `0x${string}`],
+          account: address,
+        });
+
+        setOnchainStatus("Waiting for Base confirmation...");
+        const receipt = await publicClient.waitForTransactionReceipt({ hash });
+        if (receipt.status !== "success") {
+          throw new Error("Main wallet update failed");
+        }
+
+        setOnchainStatus("Main wallet updated.");
+      });
+    },
+    [
+      memeticsProfile?.profile,
+      publicClient,
+      requireWallet,
+      runOnchainAction,
+      selectedContractWallet,
+    ],
+  );
+
   if (!authenticated) {
     return (
       <section className={styles.page}>
@@ -446,6 +872,21 @@ export default function ProfilePage() {
   const isEmailLoginUser = Boolean(user?.email);
   const isXLoginUser = Boolean(user?.twitter) && !user?.email;
   const emailClaimedHandle = claimedXUsername || null;
+  const preferredOnchainHandle = memeticsProfile?.preferred_handle ?? null;
+  const onchainProfile = memeticsProfile?.profile ?? null;
+  const onchainWallets = onchainProfile?.wallets ?? [];
+  const selectedWalletLower = selectedContractWallet.toLowerCase();
+  const selectedWalletOnchainLinked = onchainWallets.some(
+    (wallet) => wallet.toLowerCase() === selectedWalletLower,
+  );
+  const canRegisterOnchainProfile =
+    !onchainProfile &&
+    Boolean(preferredOnchainHandle) &&
+    contractWalletState.selectedWalletAvailable;
+  const canLinkSelectedWalletOnchain =
+    Boolean(onchainProfile) &&
+    contractWalletState.selectedWalletAvailable &&
+    !selectedWalletOnchainLinked;
 
   return (
     <section className={styles.page}>
@@ -532,6 +973,184 @@ export default function ProfilePage() {
             </strong>
           </div>
         </div>
+
+        <section className={styles.linkedWallets}>
+          <div className={styles.sectionHeader}>
+            <div>
+              <h2>Onchain Profile</h2>
+              <p>
+                Memetics contract actions now run through an onchain profile
+                keyed to your X handle. Use a connected wallet from your Privy
+                account to create the profile, link more wallets, sync heat,
+                and choose the main payout wallet.
+              </p>
+            </div>
+          </div>
+
+          <WalletSelector
+            label="Transaction wallet"
+            panelMode="inline"
+            value={selectedContractWallet}
+            onSelect={(nextWallet) => {
+              setSelectedContractWallet(nextWallet);
+              setOnchainError(null);
+            }}
+            onStateChange={setContractWalletState}
+          />
+
+          {memeticsProfileError ? (
+            <p className={styles.inlineError}>{memeticsProfileError}</p>
+          ) : null}
+          {onchainError ? (
+            <p className={styles.inlineError}>{onchainError}</p>
+          ) : null}
+          {onchainStatus ? (
+            <p className={styles.inlineStatus}>{onchainStatus}</p>
+          ) : null}
+
+          {!preferredOnchainHandle ? (
+            <div className={styles.walletRow}>
+              <div>
+                <strong>Link X before you go onchain</strong>
+                <span>
+                  The Memetics contract uses your X handle as the readable entry
+                  point for identity, so the contract profile cannot be created
+                  until your handle is linked above.
+                </span>
+              </div>
+            </div>
+          ) : null}
+
+          {isMemeticsProfileLoading ? (
+            <p className={styles.placeholder}>Loading onchain profile...</p>
+          ) : null}
+
+          {!isMemeticsProfileLoading && !onchainProfile ? (
+            <div className={styles.walletList}>
+              <div className={styles.walletRow}>
+                <div>
+                  <strong>@{preferredOnchainHandle}</strong>
+                  <span>
+                    No Memetics profile exists yet. Create it with a connected
+                    wallet from your Privy account, then the rest of the app can
+                    use contract-native claims, bungalow petitions, and Bodega
+                    installs.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className={styles.primaryButton}
+                  onClick={() => {
+                    void handleRegisterOnchainProfile();
+                  }}
+                  disabled={isOnchainActionPending || !canRegisterOnchainProfile}
+                >
+                  {isOnchainActionPending ? "Working..." : "Create onchain profile"}
+                </button>
+              </div>
+              {!preferredOnchainHandle ? null : !contractWalletState.selectedWalletAvailable ? (
+                <p className={styles.inlineError}>
+                  Choose a connected wallet that is already linked to your Privy
+                  account before registering onchain.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {onchainProfile ? (
+            <>
+              <div className={styles.stats}>
+                <div>
+                  <span>Profile ID</span>
+                  <strong>{formatNumber(onchainProfile.id)}</strong>
+                </div>
+                <div>
+                  <span>Handle</span>
+                  <strong>@{onchainProfile.handle}</strong>
+                </div>
+                <div>
+                  <span>Onchain Heat</span>
+                  <strong>{onchainProfile.heat_score}</strong>
+                </div>
+                <div>
+                  <span>Main Wallet</span>
+                  <strong>{truncateAddress(onchainProfile.main_wallet)}</strong>
+                </div>
+              </div>
+
+              <div className={styles.actions}>
+                <button
+                  type="button"
+                  className={styles.primaryButton}
+                  onClick={() => {
+                    void handleSyncOnchainHeat();
+                  }}
+                  disabled={
+                    isOnchainActionPending || !selectedWalletOnchainLinked
+                  }
+                >
+                  {isOnchainActionPending ? "Working..." : "Sync heat"}
+                </button>
+                <button
+                  type="button"
+                  className={styles.secondaryButton}
+                  onClick={() => {
+                    void handleLinkWalletOnchain();
+                  }}
+                  disabled={
+                    isOnchainActionPending || !canLinkSelectedWalletOnchain
+                  }
+                >
+                  {isOnchainActionPending
+                    ? "Working..."
+                    : "Link selected wallet onchain"}
+                </button>
+              </div>
+
+              <div className={styles.walletList}>
+                <h3>Onchain wallets</h3>
+                {onchainWallets.map((wallet) => {
+                  const isMainWallet =
+                    wallet.toLowerCase() ===
+                    onchainProfile.main_wallet.toLowerCase();
+
+                  return (
+                    <div key={wallet} className={styles.walletRow}>
+                      <div>
+                        <strong title={wallet}>{truncateAddress(wallet)}</strong>
+                        <span>
+                          {isMainWallet
+                            ? "Main payout wallet"
+                            : "Linked to your Memetics profile"}
+                        </span>
+                      </div>
+                      {isMainWallet ? (
+                        <span className={styles.inlineStatus}>Main</span>
+                      ) : (
+                        <button
+                          type="button"
+                          className={styles.unlinkButton}
+                          onClick={() => {
+                            void handleSetMainWalletOnchain(wallet);
+                          }}
+                          disabled={isOnchainActionPending}
+                        >
+                          Make main
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <p className={styles.helperCopy}>
+                {selectedWalletOnchainLinked
+                  ? `The selected transaction wallet is already linked onchain. You can use it to sync heat or change the main wallet.`
+                  : `The selected transaction wallet is not linked onchain yet. Use "Link selected wallet onchain" if you want this signer available across claims, bungalow petitions, and Bodega installs.`}
+              </p>
+            </>
+          ) : null}
+        </section>
 
         <section className={styles.linkedWallets}>
           <div className={styles.sectionHeader}>

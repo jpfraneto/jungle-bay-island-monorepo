@@ -15,6 +15,8 @@ export interface BodegaCatalogItem {
   id: number;
   creator_wallet: string;
   creator_handle: string | null;
+  contract_artifact_id?: number | null;
+  contract_uri?: string | null;
   origin_bungalow_token_address: string | null;
   origin_bungalow_chain: string | null;
   asset_type: BodegaAssetType;
@@ -33,6 +35,8 @@ export interface BodegaCatalogItem {
 export interface BodegaInstallRecord {
   id: number;
   catalog_item_id: number;
+  contract_artifact_id?: number | null;
+  contract_bungalow_id?: number | null;
   installed_to_token_address: string;
   installed_to_chain: string;
   installed_by_wallet: string;
@@ -149,6 +153,8 @@ export function normalizeBodegaCatalogItem(input: unknown): BodegaCatalogItem | 
     id,
     creator_wallet: asString(item.creator_wallet),
     creator_handle: asString(item.creator_handle) || null,
+    contract_artifact_id: asNumber(item.contract_artifact_id) || null,
+    contract_uri: asString(item.contract_uri) || null,
     origin_bungalow_token_address:
       asString(item.origin_bungalow_token_address) || null,
     origin_bungalow_chain: asString(item.origin_bungalow_chain) || null,
@@ -177,17 +183,18 @@ export function normalizeBodegaCatalogItems(input: unknown): BodegaCatalogItem[]
 export function normalizeBodegaInstallRecords(input: unknown): BodegaInstallRecord[] {
   if (!Array.isArray(input)) return [];
 
-  return input
-    .map((raw) => {
+  return input.reduce<BodegaInstallRecord[]>((acc, raw) => {
       const item = asObject(raw);
       const id = asNumber(item.id);
-      if (!id) return null;
+      if (!id) return acc;
 
       const catalogItem = normalizeBodegaCatalogItem(item.catalog_item);
 
-      return {
+      acc.push({
         id,
         catalog_item_id: asNumber(item.catalog_item_id),
+        contract_artifact_id: asNumber(item.contract_artifact_id) || null,
+        contract_bungalow_id: asNumber(item.contract_bungalow_id) || null,
         installed_to_token_address: asString(item.installed_to_token_address),
         installed_to_chain: asString(item.installed_to_chain),
         installed_by_wallet: asString(item.installed_by_wallet),
@@ -197,9 +204,10 @@ export function normalizeBodegaInstallRecords(input: unknown): BodegaInstallReco
         credit_claimed: Boolean(item.credit_claimed),
         created_at: asString(item.created_at),
         catalog_item: catalogItem,
-      };
-    })
-    .filter((item): item is BodegaInstallRecord => item !== null);
+      });
+
+      return acc;
+    }, []);
 }
 
 export function getBodegaAssetIcon(assetType: BodegaAssetType): string {

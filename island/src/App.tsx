@@ -6,6 +6,8 @@ import BodegaPage from "./pages/BodegaPage";
 import BodegaListingPage from "./pages/BodegaListingPage";
 import BungalowPage from "./pages/BungalowPage";
 import ChangelogPage from "./pages/ChangelogPage";
+import CommissionDetailPage from "./pages/CommissionDetailPage";
+import CommissionsPage from "./pages/CommissionsPage";
 import HeatScorePage from "./pages/HeatScorePage";
 import IslandPage from "./pages/IslandPage";
 import LegacyBungalowRedirectPage from "./pages/LegacyBungalowRedirectPage";
@@ -20,6 +22,8 @@ export default function App() {
         <Route path="/" element={<IslandPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/changelog" element={<ChangelogPage />} />
+        <Route path="/commissions" element={<CommissionsPage />} />
+        <Route path="/commissions/:commission_id" element={<CommissionDetailPage />} />
         <Route path="/bodega" element={<BodegaPage />} />
         <Route path="/bodega/:tx_hash" element={<BodegaListingPage />} />
         <Route path="/bungalow/:identifier" element={<BungalowPage />} />

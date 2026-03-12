@@ -34,3 +34,6 @@ export const JBM_ADDRESS = import.meta.env.VITE_JBM_ADDRESS;
 export const TREASURY_ADDRESS = import.meta.env.VITE_TREASURY_ADDRESS;
 export const CLAIM_CONTRACT_ADDRESS = import.meta.env
   .VITE_CLAIM_CONTRACT_ADDRESS;
+export const MEMETICS_CONTRACT_ADDRESS =
+  import.meta.env.VITE_MEMETICS_CONTRACT_ADDRESS ??
+  "0xaa027CFC273e58BD19a5df9a803598DF9Bebad1C";

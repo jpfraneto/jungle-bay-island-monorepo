@@ -1,8 +1,10 @@
 import { Hono } from 'hono'
+import { parseUnits } from 'viem'
 import {
   CONFIG,
   db,
   normalizeAddress,
+  publicClients,
   toSupportedChain,
   type SupportedChain,
 } from '../config'
@@ -17,6 +19,8 @@ import {
   getCatalogItemBySubmissionTxHash,
   getCatalogItems,
   getCatalogItemsByCreator,
+  getTokenRegistry,
+  getUserWallets,
   getIdentityClusterByWallet,
   userOwnsWallet,
   getUnclaimedCreatorCredits,
@@ -26,13 +30,21 @@ import { requirePrivyAuth } from '../middleware/auth'
 import { getCanonicalProjectContext } from '../services/canonicalProjects'
 import { COMMUNITY_POLICY } from '../services/communityPolicy'
 import { ApiError } from '../services/errors'
+import {
+  decodeMemeticsLog,
+  findMemeticsProfileByWallets,
+  getMemeticsContractAddress,
+  readMemeticsBungalowIdByAssetKey,
+  toMemeticsAssetChain,
+  inferMemeticsAssetKind,
+  computeMemeticsPrimaryAssetKey,
+} from '../services/memetics'
 import type { AppEnv } from '../types'
 
 const bodegaRoute = new Hono<AppEnv>()
 
 const REWARD_RESET_HOUR_UTC = 12
 const REWARD_RESET_OFFSET_SECONDS = REWARD_RESET_HOUR_UTC * 3600
-const BODEGA_SUBMISSION_FEE = 69_000n
 const ITEM_PRICES: Record<'link' | 'frame' | 'image' | 'portal', bigint> = {
   link: 69_000n,
   frame: 50_000n,
@@ -94,6 +106,8 @@ async function ensureBodegaCatalogShape(): Promise<void> {
           id SERIAL PRIMARY KEY,
           creator_wallet TEXT NOT NULL,
           creator_handle TEXT,
+          contract_artifact_id BIGINT,
+          contract_uri TEXT,
           origin_bungalow_token_address TEXT,
           origin_bungalow_chain TEXT,
           asset_type TEXT NOT NULL CHECK (
@@ -133,12 +147,42 @@ async function ensureBodegaCatalogShape(): Promise<void> {
       )
 
       for (const definition of [
+        'contract_artifact_id BIGINT',
+        'contract_uri TEXT',
         'moderated_reason TEXT',
         'moderated_by TEXT',
         'moderated_at TIMESTAMPTZ',
       ]) {
         await db.unsafe(
           `ALTER TABLE "${CONFIG.SCHEMA}".bodega_catalog ADD COLUMN IF NOT EXISTS ${definition}`,
+        )
+      }
+
+      await db`
+        CREATE TABLE IF NOT EXISTS ${db(CONFIG.SCHEMA)}.bodega_installs (
+          id SERIAL PRIMARY KEY,
+          catalog_item_id INTEGER NOT NULL,
+          contract_artifact_id BIGINT,
+          contract_bungalow_id BIGINT,
+          installed_to_token_address TEXT NOT NULL,
+          installed_to_chain TEXT NOT NULL,
+          installed_by_wallet TEXT NOT NULL,
+          tx_hash TEXT UNIQUE NOT NULL,
+          jbm_amount NUMERIC NOT NULL,
+          creator_credit_jbm NUMERIC NOT NULL DEFAULT 0,
+          credit_claimed BOOLEAN NOT NULL DEFAULT FALSE,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `
+
+      for (const definition of [
+        'contract_artifact_id BIGINT',
+        'contract_bungalow_id BIGINT',
+        'creator_credit_jbm NUMERIC NOT NULL DEFAULT 0',
+        'credit_claimed BOOLEAN NOT NULL DEFAULT FALSE',
+      ]) {
+        await db.unsafe(
+          `ALTER TABLE "${CONFIG.SCHEMA}".bodega_installs ADD COLUMN IF NOT EXISTS ${definition}`,
         )
       }
     })()
@@ -168,6 +212,37 @@ function getPrivyUserIdFromClaims(claims: Record<string, unknown> | undefined): 
     throw new ApiError(401, 'auth_required', 'Privy authentication required')
   }
   return privyUserId
+}
+
+async function resolveAuthorizedEvmWallets(
+  c: { get: (key: string) => unknown },
+  privyUserId: string,
+): Promise<`0x${string}`[]> {
+  const claimWallets = Array.isArray(c.get('walletAddresses'))
+    ? (c.get('walletAddresses') as string[])
+    : []
+  const storedWallets = (await getUserWallets(privyUserId)).map((row) => row.address)
+
+  return [...new Set(
+    [...claimWallets, ...storedWallets]
+      .map((wallet) => normalizeAddress(wallet))
+      .filter((wallet): wallet is `0x${string}` => Boolean(wallet)),
+  )]
+}
+
+function assertAuthorizedEvmWallet(
+  wallet: string | null,
+  authorizedWallets: `0x${string}`[],
+): `0x${string}` {
+  if (!wallet) {
+    throw new ApiError(400, 'invalid_wallet', 'A valid EVM wallet is required')
+  }
+
+  if (!authorizedWallets.some((entry) => entry.toLowerCase() === wallet.toLowerCase())) {
+    throw new ApiError(401, 'wallet_not_owned', 'wallet_not_owned')
+  }
+
+  return wallet as `0x${string}`
 }
 
 /**
@@ -394,6 +469,11 @@ function normalizeBodegaContent(
  * Derives a cached creator handle from Farcaster profile lookups when available.
  */
 async function getCreatorHandle(wallet: string): Promise<string | null> {
+  const memeticsProfile = await findMemeticsProfileByWallets([wallet]).catch(() => null)
+  if (memeticsProfile?.profile.handle) {
+    return memeticsProfile.profile.handle
+  }
+
   const rows = await db<Array<{ username: string | null }>>`
     SELECT username
     FROM ${db(CONFIG.SCHEMA)}.wallet_farcaster_profiles
@@ -402,6 +482,30 @@ async function getCreatorHandle(wallet: string): Promise<string | null> {
   `
 
   return rows[0]?.username ?? null
+}
+
+function getArtifactUriForCatalogItem(input: {
+  assetType: string
+  content: Record<string, unknown>
+  previewUrl: string | null
+}): string {
+  if (input.assetType === 'miniapp' || input.assetType === 'game' || input.assetType === 'link') {
+    const url = asString(input.content.url)
+    if (!url || !isHttpUrl(url)) {
+      throw new ApiError(400, 'invalid_content', 'Listing content.url must be a valid http(s) URL')
+    }
+    return url
+  }
+
+  if (input.assetType === 'decoration') {
+    const previewUrl = asString(input.content.preview_url) || input.previewUrl
+    if (!previewUrl || !isHttpUrl(previewUrl)) {
+      throw new ApiError(400, 'invalid_content', 'Decoration listings need a valid preview URL')
+    }
+    return previewUrl
+  }
+
+  throw new ApiError(400, 'unsupported_asset_type', 'This asset type cannot be published through the onchain Bodega flow')
 }
 
 async function getIslandHeatForWallet(wallet: string): Promise<{
@@ -606,21 +710,16 @@ bodegaRoute.post('/submit', requirePrivyAuth, async (c) => {
 
   const claims = c.get('privyClaims') as Record<string, unknown> | undefined
   const privyUserId = getPrivyUserIdFromClaims(claims)
+  const authorizedWallets = await resolveAuthorizedEvmWallets(c, privyUserId)
 
   const body = await c.req.json<BodegaSubmitBody>()
-  const creatorWallet = normalizeWallet(body.creator_wallet) ?? c.get('walletAddress') ?? null
-  if (!creatorWallet) {
-    throw new ApiError(
-      400,
-      'invalid_wallet',
-      'creator_wallet is required',
-    )
-  }
-
-  const ownsWallet = await userOwnsWallet(privyUserId, creatorWallet)
-  if (!ownsWallet) {
-    throw new ApiError(401, 'wallet_not_owned', 'wallet_not_owned')
-  }
+  const fallbackWallet =
+    typeof c.get('walletAddress') === 'string' ? c.get('walletAddress') : null
+  const creatorWallet = assertAuthorizedEvmWallet(
+    (typeof body.creator_wallet === 'string' ? normalizeAddress(body.creator_wallet) : null) ??
+      (fallbackWallet ? normalizeAddress(fallbackWallet) : null),
+    authorizedWallets,
+  )
 
   await requireMinimumSubmissionHeat(creatorWallet)
 
@@ -637,14 +736,6 @@ bodegaRoute.post('/submit', requirePrivyAuth, async (c) => {
   const normalizedContent = normalizeBodegaContent(assetType, body.content)
   const priceInJbm = parsePositiveNumericString(body.price_in_jbm, 'price_in_jbm')
   const submissionTxHash = validateTxHash(body.tx_hash)
-  const submissionFee = parseWholeJbmAmount(body.jbm_amount, 'jbm_amount')
-  if (submissionFee !== BODEGA_SUBMISSION_FEE) {
-    throw new ApiError(
-      400,
-      'invalid_submission_fee',
-      `jbm_amount must equal ${BODEGA_SUBMISSION_FEE.toString()} for Bodega submissions`,
-    )
-  }
   const origin = parseOriginBungalow(body)
   const creatorHandle = await getCreatorHandle(creatorWallet)
   const existingItem = await getCatalogItemBySubmissionTxHash(submissionTxHash)
@@ -673,10 +764,52 @@ bodegaRoute.post('/submit', requirePrivyAuth, async (c) => {
 
     return null
   })()
+  const artifactUri = getArtifactUriForCatalogItem({
+    assetType,
+    content: normalizedContent,
+    previewUrl,
+  })
+  const contractAddress = getMemeticsContractAddress()
+  if (!contractAddress) {
+    throw new ApiError(500, 'memetics_not_configured', 'Memetics contract address is not configured')
+  }
+
+  const receipt = await publicClients.base.getTransactionReceipt({
+    hash: submissionTxHash as `0x${string}`,
+  })
+  if (receipt.status !== 'success') {
+    throw new ApiError(409, 'tx_failed', 'Listing transaction failed onchain')
+  }
+  if (receipt.from.toLowerCase() !== creatorWallet.toLowerCase()) {
+    throw new ApiError(401, 'wallet_not_owned', 'wallet_not_owned')
+  }
+
+  const listedEvent = receipt.logs
+    .map((log) =>
+      decodeMemeticsLog({
+        address: log.address,
+        data: log.data,
+        topics: log.topics as `0x${string}`[],
+      }),
+    )
+    .find((log) => log?.eventName === 'ArtifactListed')
+
+  if (!listedEvent) {
+    throw new ApiError(409, 'unexpected_receipt', 'Transaction did not emit ArtifactListed')
+  }
+
+  const listedUri = typeof listedEvent.args.uri === 'string' ? listedEvent.args.uri : ''
+  const listedPrice = BigInt(listedEvent.args.price ?? 0n)
+  const expectedPrice = parseUnits(priceInJbm, 18)
+  if (listedUri !== artifactUri || listedPrice !== expectedPrice) {
+    throw new ApiError(409, 'listing_mismatch', 'Onchain listing payload does not match the submitted metadata')
+  }
 
   const item = await createCatalogItem({
     creator_wallet: creatorWallet,
     creator_handle: creatorHandle,
+    contract_artifact_id: Number(listedEvent.args.artifactId ?? 0),
+    contract_uri: artifactUri,
     origin_bungalow_token_address: origin.token_address,
     origin_bungalow_chain: origin.chain,
     asset_type: assetType as
@@ -693,7 +826,7 @@ bodegaRoute.post('/submit', requirePrivyAuth, async (c) => {
     preview_url: previewUrl,
     price_in_jbm: priceInJbm,
     submission_tx_hash: submissionTxHash,
-    submission_fee_jbm: submissionFee.toString(),
+    submission_fee_jbm: null,
   })
 
   if (origin.chain && origin.token_address) {
@@ -966,21 +1099,16 @@ bodegaRoute.post('/install', requirePrivyAuth, async (c) => {
 
   const claims = c.get('privyClaims') as Record<string, unknown> | undefined
   const privyUserId = getPrivyUserIdFromClaims(claims)
+  const authorizedWallets = await resolveAuthorizedEvmWallets(c, privyUserId)
 
   const body = await c.req.json<BodegaInstallBody>()
-  const installedByWallet = normalizeWallet(body.installed_by_wallet) ?? c.get('walletAddress') ?? null
-  if (!installedByWallet) {
-    throw new ApiError(
-      400,
-      'invalid_wallet',
-      'installed_by_wallet is required',
-    )
-  }
-
-  const ownsWallet = await userOwnsWallet(privyUserId, installedByWallet)
-  if (!ownsWallet) {
-    throw new ApiError(401, 'wallet_not_owned', 'wallet_not_owned')
-  }
+  const fallbackWallet =
+    typeof c.get('walletAddress') === 'string' ? c.get('walletAddress') : null
+  const installedByWallet = assertAuthorizedEvmWallet(
+    (typeof body.installed_by_wallet === 'string' ? normalizeAddress(body.installed_by_wallet) : null) ??
+      (fallbackWallet ? normalizeAddress(fallbackWallet) : null),
+    authorizedWallets,
+  )
 
   const catalogItemId = Number.parseInt(String(body.catalog_item_id ?? ''), 10)
   if (!Number.isFinite(catalogItemId) || catalogItemId <= 0) {
@@ -1001,18 +1129,13 @@ bodegaRoute.post('/install', requirePrivyAuth, async (c) => {
   }
 
   const txHash = validateTxHash(body.tx_hash)
-  const jbmAmount = parsePositiveNumericString(body.jbm_amount, 'jbm_amount')
 
   const catalogItem = await getCatalogItem(catalogItemId)
   if (!catalogItem || !catalogItem.active) {
     throw new ApiError(404, 'catalog_item_not_found', 'Catalog item is missing or inactive')
   }
-
-  const priceCheck = await db<Array<{ enough: boolean }>>`
-    SELECT (${jbmAmount}::numeric >= ${catalogItem.price_in_jbm}::numeric) AS enough
-  `
-  if (!priceCheck[0]?.enough) {
-    throw new ApiError(400, 'insufficient_jbm_amount', 'jbm_amount must match or exceed the catalog item price')
+  if (!catalogItem.contract_artifact_id || catalogItem.contract_artifact_id <= 0) {
+    throw new ApiError(409, 'missing_artifact_id', 'Catalog item is not linked to an onchain artifact')
   }
 
   const existingInstall = await getBodegaInstallByTxHash(txHash)
@@ -1020,39 +1143,76 @@ bodegaRoute.post('/install', requirePrivyAuth, async (c) => {
     return c.json({ install: existingInstall })
   }
 
+  const projectContext = await getCanonicalProjectContext(installedToChain, installedToTokenAddress)
+  const storageDeployment = projectContext.primaryDeployment
+  const tokenRegistry = await getTokenRegistry(storageDeployment.token_address, storageDeployment.chain)
+  const expectedBungalowId = await readMemeticsBungalowIdByAssetKey(
+    computeMemeticsPrimaryAssetKey(
+      toMemeticsAssetChain(storageDeployment.chain),
+      inferMemeticsAssetKind({
+        chain: storageDeployment.chain,
+        decimals: tokenRegistry?.decimals ?? null,
+      }),
+      storageDeployment.token_address,
+    ),
+  )
+  if (!expectedBungalowId) {
+    throw new ApiError(409, 'bungalow_not_onchain', 'This bungalow is not active onchain yet')
+  }
+
+  const receipt = await publicClients.base.getTransactionReceipt({
+    hash: txHash as `0x${string}`,
+  })
+  if (receipt.status !== 'success') {
+    throw new ApiError(409, 'tx_failed', 'Install transaction failed onchain')
+  }
+  if (receipt.from.toLowerCase() !== installedByWallet.toLowerCase()) {
+    throw new ApiError(401, 'wallet_not_owned', 'wallet_not_owned')
+  }
+
+  const installedEvent = receipt.logs
+    .map((log) =>
+      decodeMemeticsLog({
+        address: log.address,
+        data: log.data,
+        topics: log.topics as `0x${string}`[],
+      }),
+    )
+    .find((log) => log?.eventName === 'ArtifactInstalled')
+
+  if (!installedEvent) {
+    throw new ApiError(409, 'unexpected_receipt', 'Transaction did not emit ArtifactInstalled')
+  }
+
+  const installedArtifactId = Number(installedEvent.args.artifactId ?? 0)
+  const installedBungalowId = Number(installedEvent.args.bungalowId ?? 0)
+  if (
+    installedArtifactId !== catalogItem.contract_artifact_id ||
+    installedBungalowId !== expectedBungalowId
+  ) {
+    throw new ApiError(409, 'install_mismatch', 'Onchain install payload does not match the selected Bodega item or bungalow')
+  }
+
   const install = await createBodegaInstall({
     catalog_item_id: catalogItemId,
-    installed_to_token_address: installedToTokenAddress,
-    installed_to_chain: installedToChain,
+    contract_artifact_id: installedArtifactId,
+    contract_bungalow_id: installedBungalowId,
+    installed_to_token_address: storageDeployment.token_address,
+    installed_to_chain: storageDeployment.chain,
     installed_by_wallet: installedByWallet,
     tx_hash: txHash,
-    jbm_amount: jbmAmount,
+    jbm_amount: catalogItem.price_in_jbm,
+    creator_credit_jbm: '0',
   })
 
   await incrementInstallCount(catalogItemId)
 
-  const installBonusTarget = await getClosestBungalowDeployment(
-    installedToChain,
-    installedToTokenAddress,
-  )
   await createBonusHeatEvent({
     wallet: installedByWallet,
-    token_address: installBonusTarget.token_address,
-    chain: installBonusTarget.chain,
+    token_address: storageDeployment.token_address,
+    chain: storageDeployment.chain,
     event_type: 'bodega_install',
     bonus_points: 3,
-  })
-
-  const creatorCreditContext = await resolveCreatorCreditContext({
-    catalogItem,
-    installedToChain,
-    installedToTokenAddress,
-  })
-  await upsertCreatorClaimAllocation({
-    creatorWallet: catalogItem.creator_wallet,
-    amountJbm: install.creator_credit_jbm,
-    chain: creatorCreditContext.chain,
-    tokenAddress: creatorCreditContext.token_address,
   })
 
   return c.json({ install }, 201)

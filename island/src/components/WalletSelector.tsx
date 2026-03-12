@@ -26,6 +26,7 @@ interface WalletSelectorProps {
   value?: string | null;
   label?: string;
   panelMode?: "floating" | "inline";
+  eligibleWallets?: string[] | null;
   onStateChange?: (state: WalletSelectorState) => void;
   onWalletLinked?: (result: LinkedWalletResult) => void | Promise<void>;
 }
@@ -36,6 +37,7 @@ interface WalletOption {
   isConnected: boolean;
   isLinked: boolean;
   isActive: boolean;
+  meetsEligibility: boolean;
   isAvailable: boolean;
   connectedAt: number;
   linkedAt: number;
@@ -65,6 +67,10 @@ function getWalletStatus(option: WalletOption): string {
     return "Available here";
   }
 
+  if (option.isConnected && !option.meetsEligibility) {
+    return "Onchain link needed";
+  }
+
   if (option.isConnected) {
     return "Connected, link needed";
   }
@@ -79,6 +85,10 @@ function getWalletStatus(option: WalletOption): string {
 function getWalletContextLabel(option: WalletOption): string {
   if (option.isAvailable) {
     return "Connected + linked";
+  }
+
+  if (option.isConnected && !option.meetsEligibility) {
+    return "Connected in browser";
   }
 
   if (option.isConnected) {
@@ -129,6 +139,7 @@ export default function WalletSelector({
   value = null,
   label = "Sign with",
   panelMode = "floating",
+  eligibleWallets = null,
   onStateChange,
   onWalletLinked,
 }: WalletSelectorProps) {
@@ -159,6 +170,13 @@ export default function WalletSelector({
     useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const preferredAddress = value?.trim().toLowerCase() ?? "";
+  const eligibleWalletSet = useMemo(
+    () =>
+      eligibleWallets === null
+        ? null
+        : new Set(eligibleWallets.map((wallet) => wallet.toLowerCase())),
+    [eligibleWallets],
+  );
   const showLoadingState = isLoading && linkedWalletRows.length === 0;
 
   useEffect(() => {
@@ -198,6 +216,7 @@ export default function WalletSelector({
           isConnected: false,
           isLinked: false,
           isActive: false,
+          meetsEligibility: eligibleWalletSet !== null,
           isAvailable: false,
           connectedAt: 0,
           linkedAt: 0,
@@ -209,7 +228,10 @@ export default function WalletSelector({
         address: current.address,
       };
 
-      next.isAvailable = next.isConnected && next.isLinked;
+      next.meetsEligibility = eligibleWalletSet !== null
+        ? eligibleWalletSet.has(key)
+        : next.isLinked;
+      next.isAvailable = next.isConnected && next.meetsEligibility;
       optionMap.set(key, next);
     };
 
@@ -237,7 +259,13 @@ export default function WalletSelector({
     return [...optionMap.values()].sort((left, right) =>
       compareWalletOptions(left, right, preferredAddress),
     );
-  }, [connectedWallets, linkedWalletRows, preferredAddress, walletAddress]);
+  }, [
+    connectedWallets,
+    eligibleWalletSet,
+    linkedWalletRows,
+    preferredAddress,
+    walletAddress,
+  ]);
 
   const selectedOption = useMemo(() => {
     if (!preferredAddress) {

@@ -1,15 +1,23 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePrivy } from "@privy-io/react-auth";
-import { useJBMTransfer } from "../hooks/useJBMTransfer";
+import { useMemeticsProfile } from "../hooks/useMemeticsProfile";
 import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
 import type { DecorationConfig } from "../types/scene";
+import { JBM_ADDRESS } from "../utils/constants";
 import { formatJbmAmount } from "../utils/formatters";
 import {
   formatCreatorLabel,
   getBodegaPreviewUrl,
   type BodegaCatalogItem,
 } from "../utils/bodega";
+import {
+  MEMETICS_CONTRACT_ADDRESS,
+  erc20ApprovalAbi,
+  getMemeticsErrorMessage,
+  memeticsAbi,
+  parseJbmToWei,
+} from "../utils/memetics";
 import WalletSelector, { type WalletSelectorState } from "./WalletSelector";
 
 interface BodegaPlacementModalProps {
@@ -42,6 +50,16 @@ interface PlacementRecoveryState {
   install: InstallRecord | null;
 }
 
+interface QualificationResponse {
+  exists?: boolean;
+  contract?: {
+    bungalow_id?: number | null;
+  } | null;
+  error?: string;
+}
+
+const MAX_UINT256 = (1n << 256n) - 1n;
+
 function asString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -54,6 +72,10 @@ function inferSlotType(slotId: string): string {
   if (slotId.includes("floor")) return "Floor";
   if (slotId.includes("link")) return "Link";
   return "Slot";
+}
+
+function isHexAddress(value: string | null | undefined): value is `0x${string}` {
+  return typeof value === "string" && /^0x[0-9a-fA-F]{40}$/.test(value);
 }
 
 function inferLinkDecorationType(url: string): DecorationConfig["type"] {
@@ -253,8 +275,8 @@ export default function BodegaPlacementModal({
   onPlaced,
 }: BodegaPlacementModalProps) {
   const { authenticated, getAccessToken, login } = usePrivy();
-  const { walletAddress } = usePrivyBaseWallet();
-  const { transfer, isTransferring } = useJBMTransfer();
+  const { publicClient, requireWallet, walletAddress } = usePrivyBaseWallet();
+  const { data: memeticsProfile } = useMemeticsProfile(authenticated);
 
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -271,6 +293,7 @@ export default function BodegaPlacementModal({
     useState<ConfirmedPayment | null>(null);
   const [confirmedInstall, setConfirmedInstall] =
     useState<InstallRecord | null>(null);
+  const onchainWallets = memeticsProfile?.profile?.wallets ?? [];
   const recoveryKey = getPlacementRecoveryKey({
     chain,
     ca,
@@ -325,7 +348,7 @@ export default function BodegaPlacementModal({
   const creatorLabel = formatCreatorLabel(item);
   const canRetryWithoutPaying = Boolean(confirmedPayment);
   const canRetryPlacementOnly = Boolean(confirmedInstall);
-  const isProcessing = Boolean(status) || isTransferring;
+  const isProcessing = Boolean(status);
   const lockedPayer = confirmedPayment?.payer ?? null;
 
   const handlePlace = async () => {
@@ -334,12 +357,22 @@ export default function BodegaPlacementModal({
       return;
     }
 
+    if (!memeticsProfile?.profile) {
+      setError("Create your onchain profile before installing Bodega items.");
+      return;
+    }
+
+    if (!item.contract_artifact_id) {
+      setError("This listing is not linked to an onchain artifact yet.");
+      return;
+    }
+
     const payoutWallet = selectedWallet || walletAddress;
     if (
       !confirmedPayment &&
       (!payoutWallet || !walletSelectorState.selectedWalletAvailable)
     ) {
-      setError("Choose a wallet that is available here or link a new one.");
+      setError("Choose a connected wallet that is already linked onchain.");
       return;
     }
 
@@ -351,15 +384,106 @@ export default function BodegaPlacementModal({
 
     try {
       if (!payment) {
-        setStatus("Waiting for JBM transfer confirmation...");
-        const transferResult = await transfer(item.price_in_jbm);
+        if (!publicClient) {
+          throw new Error("Missing Base public client");
+        }
+
+        const token = await getAccessToken();
+        if (!token) {
+          throw new Error("Missing auth token");
+        }
+
+        const bungalowResponse = await fetch(
+          `/api/memetics/bungalow/${encodeURIComponent(chain)}/${encodeURIComponent(ca)}/qualification?viewer_wallet=${encodeURIComponent(payoutWallet ?? "")}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+            cache: "no-store",
+          },
+        );
+        const bungalowData =
+          (await bungalowResponse.json().catch(() => null)) as QualificationResponse | null;
+        if (!bungalowResponse.ok) {
+          throw new Error(
+            bungalowData?.error ??
+              `Could not resolve onchain bungalow (${bungalowResponse.status})`,
+          );
+        }
+
+        const bungalowId = Number(bungalowData?.contract?.bungalow_id ?? 0);
+        if (!bungalowData?.exists || bungalowId <= 0) {
+          throw new Error("This bungalow is not active onchain yet.");
+        }
+
+        if (!isHexAddress(JBM_ADDRESS)) {
+          throw new Error("JBM token address is not configured.");
+        }
+
+        const { address, walletClient } = await requireWallet();
+        if (
+          !onchainWallets.some(
+            (wallet) => wallet.toLowerCase() === address.toLowerCase(),
+          )
+        ) {
+          throw new Error("Choose a connected wallet that is already linked onchain.");
+        }
+
+        const priceWei = parseJbmToWei(item.price_in_jbm);
+        const allowance = await publicClient.readContract({
+          address: JBM_ADDRESS,
+          abi: erc20ApprovalAbi,
+          functionName: "allowance",
+          args: [address, MEMETICS_CONTRACT_ADDRESS],
+        });
+
+        if (allowance < priceWei) {
+          setStatus("Approving JBM for the Memetics contract...");
+          const approveHash = await walletClient.writeContract({
+            address: JBM_ADDRESS,
+            abi: erc20ApprovalAbi,
+            functionName: "approve",
+            args: [MEMETICS_CONTRACT_ADDRESS, MAX_UINT256],
+            account: address,
+          });
+          const approveReceipt = await publicClient.waitForTransactionReceipt({
+            hash: approveHash,
+          });
+          if (approveReceipt.status !== "success") {
+            throw new Error("JBM approval failed");
+          }
+        }
+
+        setStatus("Checking onchain Bodega install...");
+        await publicClient.simulateContract({
+          address: MEMETICS_CONTRACT_ADDRESS,
+          abi: memeticsAbi,
+          functionName: "installArtifact",
+          args: [BigInt(item.contract_artifact_id), BigInt(bungalowId)],
+          account: address,
+        });
+
+        const hash = await walletClient.writeContract({
+          address: MEMETICS_CONTRACT_ADDRESS,
+          abi: memeticsAbi,
+          functionName: "installArtifact",
+          args: [BigInt(item.contract_artifact_id), BigInt(bungalowId)],
+          account: address,
+        });
+
         payment = {
-          txHash: transferResult.hash,
-          payer: transferResult.from,
+          txHash: hash,
+          payer: address,
           amount: item.price_in_jbm,
         };
-        setSelectedWallet(transferResult.from);
+        setSelectedWallet(address);
         setConfirmedPayment(payment);
+
+        setStatus("Waiting for install confirmation on Base...");
+        const receipt = await publicClient.waitForTransactionReceipt({ hash });
+        if (receipt.status !== "success") {
+          throw new Error("Bodega install transaction failed");
+        }
       }
 
       if (!install) {
@@ -381,7 +505,6 @@ export default function BodegaPlacementModal({
             installed_to_token_address: ca,
             installed_to_chain: chain,
             tx_hash: payment.txHash,
-            jbm_amount: payment.amount,
           }),
         });
 
@@ -420,10 +543,10 @@ export default function BodegaPlacementModal({
       setStatus(null);
       onPlaced();
     } catch (placementError) {
-      const message =
-        placementError instanceof Error
-          ? placementError.message
-          : "Failed to place Bodega item";
+      const message = getMemeticsErrorMessage(
+        placementError,
+        "Failed to place Bodega item",
+      );
 
       if (install || canRetryPlacementOnly) {
         setError(
@@ -586,6 +709,7 @@ export default function BodegaPlacementModal({
           <WalletSelector
             label="Sign with"
             value={selectedWallet}
+            eligibleWallets={onchainWallets}
             onSelect={(nextAddress) => {
               setSelectedWallet(nextAddress);
               setError(null);

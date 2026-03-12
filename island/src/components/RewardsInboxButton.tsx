@@ -2,46 +2,24 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePrivy } from "@privy-io/react-auth";
 import WalletSelector, { type WalletSelectorState } from "./WalletSelector";
+import { useMemeticsProfile } from "../hooks/useMemeticsProfile";
 import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
 import { useWalletClaims } from "../hooks/useWalletClaims";
 import { useUserWalletLinks } from "../hooks/useUserWalletLinks";
-import { CLAIM_CONTRACT_ADDRESS } from "../utils/constants";
 import {
-  claimEscrowAbi,
-  type ClaimSignaturePayload,
-  isHexAddress,
-  isHexSignature,
-  isHexBytes32,
-} from "../utils/claimEscrow";
+  MEMETICS_CONTRACT_ADDRESS,
+  getMemeticsErrorMessage,
+  memeticsAbi,
+} from "../utils/memetics";
 import { formatAddress, formatJbmCount } from "../utils/formatters";
 import styles from "../styles/rewards-inbox.module.css";
 
 const CLAIMED_REWARDS_CACHE_PREFIX = "jbi:rewards:claimed-period-total:v1";
-const WEI_PER_JBM = 1_000_000_000_000_000_000n;
-
 interface CachedClaimedPeriod {
   periodId: string;
   amountJbm: string;
   periodEndMs: number;
   payoutWallet: string | null;
-}
-
-function getBatchErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    const reasonMatch = error.message.match(
-      /reverted with the following reason:\s*([\s\S]*?)(?:\n\s*Contract Call:|$)/i,
-    );
-    if (reasonMatch?.[1]) {
-      return reasonMatch[1].trim();
-    }
-
-    const compact = error.message.split("\nContract Call:")[0]?.trim();
-    if (compact) {
-      return compact;
-    }
-  }
-
-  return "Batch claim failed";
 }
 
 function parseAmount(value: string | null | undefined): bigint {
@@ -162,23 +140,11 @@ function toPeriodIdString(
   return null;
 }
 
-function getAmountJbmFromPayload(payload: ClaimSignaturePayload): string {
-  if (payload.amount_jbm && payload.amount_jbm.trim()) {
-    return payload.amount_jbm;
-  }
-  if (payload.amount_wei && payload.amount_wei.trim()) {
-    try {
-      return (BigInt(payload.amount_wei) / WEI_PER_JBM).toString();
-    } catch {
-      return "0";
-    }
-  }
-  return "0";
-}
-
 export default function RewardsInboxButton() {
   const { authenticated, getAccessToken, login } = usePrivy();
   const { publicClient, requireWallet, walletAddress } = usePrivyBaseWallet();
+  const { data: memeticsProfile, isLoading: isMemeticsProfileLoading } =
+    useMemeticsProfile(authenticated);
   const { wallets: linkedWalletRows, isLoading: isLinkedWalletsLoading } =
     useUserWalletLinks(authenticated);
   const [selectedPayoutWallet, setSelectedPayoutWallet] = useState<string>("");
@@ -298,8 +264,10 @@ export default function RewardsInboxButton() {
     walletSelectorState.totalWallets > 0 || walletSelectorState.selectedWallet
       ? Boolean(walletSelectorState.isLoading)
       : isLinkedWalletsLoading && linkedWalletRows.length === 0;
+  const onchainWallets = memeticsProfile?.profile?.wallets ?? [];
   const isModalLoading =
-    !hasClaimedToday && (isClaimsPending || isWalletAvailabilityPending);
+    !hasClaimedToday &&
+    (isClaimsPending || isWalletAvailabilityPending || isMemeticsProfileLoading);
   const triggerBadgeLoading = isClaimsPending;
 
   useEffect(() => {
@@ -376,87 +344,77 @@ export default function RewardsInboxButton() {
         headers.Authorization = `Bearer ${token}`;
       }
 
-      const firstClaim = claimableItems[0];
-      if (!firstClaim) {
-        setStatus("No rewards ready to claim");
-        return;
+      if (!memeticsProfile?.profile) {
+        throw new Error("Create your onchain profile before claiming rewards.");
       }
 
-      const signResponse = await fetch(
-        `/api/claims/${firstClaim.chain}/${firstClaim.token_address}/sign`,
-        {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            wallet: address,
-            payout_wallet: payoutWallet,
-          }),
-        },
-      );
+      const signResponse = await fetch("/api/claims/memetics/sign", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          wallet: address,
+        }),
+      });
 
-      const signData = (await signResponse.json()) as ClaimSignaturePayload;
+      const signData = (await signResponse.json().catch(() => null)) as
+        | {
+            contract_address?: string;
+            amount_jbm?: string;
+            amount_wei?: string;
+            period_id?: number;
+            heat_score?: number;
+            salt?: `0x${string}`;
+            deadline?: number;
+            sig?: `0x${string}`;
+            error?: string;
+          }
+        | null;
+
       if (
         !signResponse.ok ||
-        !signData.signature ||
-        !signData.escrow ||
-        !signData.amount_wei ||
-        !signData.periodId ||
-        !signData.deadline ||
-        !signData.payout_wallet ||
-        !signData.breakdown_hash
+        !signData?.amount_wei ||
+        signData.period_id === undefined ||
+        signData.heat_score === undefined ||
+        !signData.salt ||
+        signData.deadline === undefined ||
+        !signData.sig
       ) {
         throw new Error(
-          signData.error ?? `Signing failed (${signResponse.status})`,
+          signData?.error ?? `Signing failed (${signResponse.status})`,
         );
-      }
-
-      if (
-        !isHexSignature(signData.signature) ||
-        !isHexAddress(signData.escrow) ||
-        !isHexAddress(signData.payout_wallet) ||
-        !isHexBytes32(signData.breakdown_hash)
-      ) {
-        throw new Error("Invalid claim payload from backend");
       }
 
       const claimContract =
-        typeof signData.claim_contract === "string" &&
-        isHexAddress(signData.claim_contract)
-          ? signData.claim_contract
-          : CLAIM_CONTRACT_ADDRESS;
-      if (!isHexAddress(claimContract)) {
-        throw new Error(
-          "Claim contract address is missing. Set VITE_CLAIM_CONTRACT_ADDRESS or return claim_contract from /sign.",
-        );
-      }
+        (typeof signData.contract_address === "string"
+          ? signData.contract_address
+          : MEMETICS_CONTRACT_ADDRESS) as `0x${string}`;
 
       if (!publicClient) {
         throw new Error("Missing Base public client");
       }
 
       const claimArgs = [
-        signData.escrow,
-        signData.payout_wallet,
+        BigInt(signData.period_id),
         BigInt(signData.amount_wei),
-        BigInt(signData.periodId),
+        BigInt(signData.heat_score),
+        signData.salt,
         BigInt(signData.deadline),
-        signData.breakdown_hash,
-        signData.signature,
+        signData.sig,
       ] as const;
 
       setStatus("Checking claim...");
       await publicClient.simulateContract({
         address: claimContract,
-        abi: claimEscrowAbi,
-        functionName: "claimPeriodTotal",
+        abi: memeticsAbi,
+        functionName: "claimDailyMemes",
         args: claimArgs,
         account: address,
       });
 
       const hash = await walletClient.writeContract({
         address: claimContract,
-        abi: claimEscrowAbi,
-        functionName: "claimPeriodTotal",
+        abi: memeticsAbi,
+        functionName: "claimDailyMemes",
         args: claimArgs,
         account: address,
       });
@@ -467,13 +425,13 @@ export default function RewardsInboxButton() {
         throw new Error("Claim transaction failed");
       }
 
-      const periodId = toPeriodIdString(signData.periodId);
+      const periodId = toPeriodIdString(signData.period_id);
       const periodEndMs = getPeriodEndMs(claims?.period_end_at);
-      const claimedWallet = signData.payout_wallet ?? address;
+      const claimedWallet = address;
       if (periodId) {
         const nextCachedClaim: CachedClaimedPeriod = {
           periodId,
-          amountJbm: getAmountJbmFromPayload(signData),
+          amountJbm: signData.amount_jbm ?? "0",
           periodEndMs,
           payoutWallet: claimedWallet,
         };
@@ -487,17 +445,13 @@ export default function RewardsInboxButton() {
         }
       }
 
-      const confirmResponse = await fetch(
-        `/api/claims/${firstClaim.chain}/${firstClaim.token_address}/confirm`,
-        {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            wallet: address,
-            payout_wallet: payoutWallet,
-          }),
-        },
-      );
+      const confirmResponse = await fetch("/api/claims/memetics/confirm", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          wallet: address,
+        }),
+      });
 
       if (!confirmResponse.ok) {
         const confirmData = (await confirmResponse.json()) as {
@@ -512,7 +466,7 @@ export default function RewardsInboxButton() {
       setStatus("Rewards claimed");
       await refetch({ force: true }).catch(() => undefined);
     } catch (err) {
-      setError(getBatchErrorMessage(err));
+      setError(getMemeticsErrorMessage(err, "Batch claim failed"));
       setStatus(null);
       await refetch({ force: true }).catch(() => undefined);
     } finally {
@@ -526,8 +480,13 @@ export default function RewardsInboxButton() {
       return;
     }
 
+    if (!memeticsProfile?.profile) {
+      setError("Create your onchain profile before claiming rewards.");
+      return;
+    }
+
     if (!walletSelectorState.hasAvailableWallet) {
-      setError("Choose a wallet that is available here or link a new one.");
+      setError("Choose a connected wallet that is already linked onchain.");
       return;
     }
 
@@ -575,6 +534,7 @@ export default function RewardsInboxButton() {
         {!hasClaimedToday ? (
           <WalletSelector
             value={selectedPayoutWallet}
+            eligibleWallets={onchainWallets}
             onSelect={(address) => {
               setSelectedPayoutWallet(address);
               setError(null);
@@ -616,6 +576,11 @@ export default function RewardsInboxButton() {
             <div className={styles.list}>
               {!isLoading && loadError && !hasClaimedToday ? (
                 <div className={styles.error}>{loadError}</div>
+              ) : null}
+              {!hasClaimedToday && !memeticsProfile?.profile ? (
+                <div className={styles.error}>
+                  Create your onchain profile in the Profile page before claiming daily rewards.
+                </div>
               ) : null}
 
               {!loadError &&

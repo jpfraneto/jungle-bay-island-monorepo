@@ -1,5 +1,16 @@
 {
-  "name": "jungle-bay-island",
+  "name": "jungle-bay-island-monorepo",
   "private": true,
-  "version": "1.0.0"
+  "version": "1.0.0",
+  "workspaces": [
+    "backend",
+    "island"
+  ],
+  "scripts": {
+    "build:frontend": "./scripts/build.sh",
+    "deploy:backend": "./scripts/deploy-backend.sh",
+    "dev:backend": "bun --cwd backend run dev",
+    "dev:frontend": "bun --cwd island run dev",
+    "typecheck": "bun --cwd backend run typecheck && bun --cwd island run typecheck"
+  }
 }

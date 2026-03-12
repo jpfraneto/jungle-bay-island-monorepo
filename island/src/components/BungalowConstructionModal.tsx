@@ -2,9 +2,14 @@ import { useEffect, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
+import { useMemeticsProfile } from "../hooks/useMemeticsProfile";
 import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
-import { useUserWalletLinks } from "../hooks/useUserWalletLinks";
-import { useJBMTransfer } from "../hooks/useJBMTransfer";
+import WalletSelector, { type WalletSelectorState } from "./WalletSelector";
+import {
+  getMemeticsErrorMessage,
+  MEMETICS_CONTRACT_ADDRESS,
+  memeticsAbi,
+} from "../utils/memetics";
 import styles from "../styles/bungalow-construction-modal.module.css";
 
 interface BungalowConstructionModalProps {
@@ -17,7 +22,6 @@ interface QualificationResponse {
   chain: string;
   exists: boolean;
   canonical_path?: string | null;
-  construction_fee_jbm: string;
   thresholds: {
     submit_heat_min: number;
     support_heat_min: number;
@@ -38,15 +42,70 @@ interface QualificationResponse {
     has_supported: boolean;
     can_submit_to_bungalow: boolean;
     can_support: boolean;
+    can_create_petition: boolean;
+    profile_ready: boolean;
     qualifies_to_construct_now: boolean;
     qualification_path: string | null;
+    active_petition_id: number | null;
+    profile_id: number | null;
   } | null;
   token: {
     name: string | null;
     symbol: string | null;
     image_url: string | null;
   };
+  contract: {
+    contract_address?: string | null;
+    bungalow_id: number | null;
+    petition_id: number | null;
+    primary_asset_key: string;
+    primary_asset_chain: number;
+    primary_asset_kind: number;
+    primary_asset_ref: string;
+  };
 }
+
+interface CreatePetitionSignatureResponse {
+  contract_address?: string;
+  wallet?: string;
+  profile_id?: number;
+  bungalow_name?: string;
+  metadata_uri?: string;
+  heat_score?: number;
+  attested_apes_balance?: string;
+  primary_asset_chain?: number;
+  primary_asset_kind?: number;
+  primary_asset_ref?: string;
+  salt?: `0x${string}`;
+  deadline?: number;
+  sig?: `0x${string}`;
+  error?: string;
+}
+
+interface SignPetitionSignatureResponse {
+  contract_address?: string;
+  wallet?: string;
+  profile_id?: number;
+  petition_id?: number;
+  heat_score?: number;
+  salt?: `0x${string}`;
+  deadline?: number;
+  sig?: `0x${string}`;
+  error?: string;
+}
+
+interface ConfirmResponse {
+  created?: boolean;
+  petition_id?: number | null;
+  supporter_count?: number | null;
+  bungalow?: {
+    canonical_path?: string | null;
+    token_address?: string;
+  } | null;
+  error?: string;
+}
+
+type PendingAction = "create" | "support" | null;
 
 function formatPathLabel(path: string | null | undefined): string {
   if (path === "single_hot_wallet") return "Single high-heat builder";
@@ -55,28 +114,41 @@ function formatPathLabel(path: string | null | undefined): string {
   return "Not qualified yet";
 }
 
+function normalizeAddress(value: string | null | undefined): string {
+  return value?.trim().toLowerCase() ?? "";
+}
+
 export default function BungalowConstructionModal({
   open,
   onClose,
 }: BungalowConstructionModalProps) {
   const navigate = useNavigate();
   const { authenticated, getAccessToken, login } = usePrivy();
-  const { walletAddress } = usePrivyBaseWallet();
-  const { wallets: linkedWalletRows } = useUserWalletLinks(authenticated);
-  const { transfer, isTransferring } = useJBMTransfer();
+  const { publicClient, requireWallet, walletAddress } = usePrivyBaseWallet();
+  const { data: memeticsProfile } = useMemeticsProfile(authenticated);
 
   const [chain, setChain] = useState("base");
   const [ca, setCa] = useState("");
   const [qualification, setQualification] =
     useState<QualificationResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [isSubmittingSupport, setIsSubmittingSupport] = useState(false);
-  const [isConstructing, setIsConstructing] = useState(false);
+  const [isActing, setIsActing] = useState(false);
   const [pendingTxHash, setPendingTxHash] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [resolvedQueryKey, setResolvedQueryKey] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const viewerWallet = linkedWalletRows[0]?.address ?? walletAddress ?? "";
+  const [selectedWallet, setSelectedWallet] = useState("");
+  const [walletSelectorState, setWalletSelectorState] =
+    useState<WalletSelectorState>({
+      selectedWallet: null,
+      selectedWalletAvailable: false,
+      hasAvailableWallet: false,
+      availableWallets: [],
+      totalWallets: 0,
+    });
+  const onchainWallets = memeticsProfile?.profile?.wallets ?? [];
+  const viewerWallet = selectedWallet || walletAddress || "";
 
   useEffect(() => {
     if (!open) return;
@@ -85,13 +157,14 @@ export default function BungalowConstructionModal({
     setCa("");
     setQualification(null);
     setIsLoading(false);
-    setIsSubmittingSupport(false);
-    setIsConstructing(false);
+    setIsActing(false);
     setPendingTxHash(null);
+    setPendingAction(null);
     setResolvedQueryKey(null);
     setStatus(null);
     setError(null);
-  }, [open]);
+    setSelectedWallet(walletAddress ?? "");
+  }, [open, walletAddress]);
 
   useEffect(() => {
     if (!open || typeof document === "undefined") return;
@@ -108,13 +181,15 @@ export default function BungalowConstructionModal({
     };
   }, [open]);
 
-  const currentQueryKey = `${chain}:${ca.trim()}`;
+  const currentQueryKey = `${chain}:${ca.trim()}:${normalizeAddress(viewerWallet)}`;
 
   useEffect(() => {
     if (!open || !qualification || !resolvedQueryKey) return;
     if (currentQueryKey === resolvedQueryKey) return;
+
     setQualification(null);
     setPendingTxHash(null);
+    setPendingAction(null);
     setStatus(null);
     setError(null);
   }, [currentQueryKey, open, qualification, resolvedQueryKey]);
@@ -140,11 +215,7 @@ export default function BungalowConstructionModal({
       }
 
       const response = await fetch(
-        `/api/bungalow/${encodeURIComponent(chain)}/${encodeURIComponent(trimmedCa)}/qualification${
-          viewerWallet
-            ? `?viewer_wallet=${encodeURIComponent(viewerWallet)}`
-            : ""
-        }`,
+        `/api/memetics/bungalow/${encodeURIComponent(chain)}/${encodeURIComponent(trimmedCa)}${viewerWallet ? `/qualification?viewer_wallet=${encodeURIComponent(viewerWallet)}` : "/qualification"}`,
         {
           headers,
           cache: "no-store",
@@ -164,13 +235,13 @@ export default function BungalowConstructionModal({
       }
 
       setQualification(data as QualificationResponse);
-      setResolvedQueryKey(`${chain}:${trimmedCa}`);
-    } catch (err) {
+      setResolvedQueryKey(currentQueryKey);
+    } catch (loadError) {
       setQualification(null);
       setResolvedQueryKey(null);
       setError(
-        err instanceof Error
-          ? err.message
+        loadError instanceof Error
+          ? loadError.message
           : "Failed to load bungalow qualification",
       );
     } finally {
@@ -178,77 +249,33 @@ export default function BungalowConstructionModal({
     }
   };
 
-  const handleSupport = async () => {
+  const handlePetitionAction = async () => {
     if (!authenticated) {
       login();
       return;
     }
+
     if (!qualification) return;
 
-    setIsSubmittingSupport(true);
-    setError(null);
-    setStatus("Submitting your support...");
-
-    try {
-      const headers: Record<string, string> = {};
-      const token = await getAccessToken();
-      if (token) {
-        headers.Authorization = `Bearer ${token}`;
-      }
-
-      const response = await fetch(
-        `/api/bungalow/${encodeURIComponent(qualification.chain)}/${encodeURIComponent(qualification.token_address)}/support`,
-        {
-          method: "POST",
-          headers,
-        },
-      );
-      const data = (await response.json().catch(() => null)) as
-        | QualificationResponse
-        | { error?: string }
-        | null;
-
-      if (!response.ok) {
-        throw new Error(
-          typeof (data as { error?: string } | null)?.error === "string"
-            ? (data as { error?: string }).error
-            : `Request failed (${response.status})`,
-        );
-      }
-
-      setQualification(data as QualificationResponse);
-      setStatus("Support recorded.");
-    } catch (err) {
-      setStatus(null);
-      setError(err instanceof Error ? err.message : "Failed to submit support");
-    } finally {
-      setIsSubmittingSupport(false);
-    }
-  };
-
-  const handleConstruct = async () => {
-    if (!authenticated) {
-      login();
+    if (!memeticsProfile?.profile) {
+      setError("Create your onchain profile before opening or supporting bungalows.");
       return;
     }
-    if (!qualification) return;
 
-    setIsConstructing(true);
+    if (
+      !pendingTxHash &&
+      (!viewerWallet || !walletSelectorState.selectedWalletAvailable)
+    ) {
+      setError("Choose a connected wallet that is already linked onchain.");
+      return;
+    }
+
+    setIsActing(true);
     setError(null);
+    let submittedTxHash = pendingTxHash;
+    let submittedAction = pendingAction;
 
     try {
-      let txHash = pendingTxHash;
-      if (!txHash) {
-        setStatus("Waiting for construction fee confirmation...");
-        const transferResult = await transfer(
-          Number(qualification.construction_fee_jbm),
-        );
-        txHash = transferResult.hash;
-        setPendingTxHash(txHash);
-      }
-
-      setStatus("Opening the bungalow on the island...");
-
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
       };
@@ -257,58 +284,235 @@ export default function BungalowConstructionModal({
         headers.Authorization = `Bearer ${token}`;
       }
 
-      const response = await fetch(
-        `/api/bungalow/${encodeURIComponent(qualification.chain)}/${encodeURIComponent(qualification.token_address)}/construct`,
+      let txHash = submittedTxHash;
+      let action = submittedAction;
+      const contractAddress =
+        (typeof qualification.contract.contract_address === "string"
+          ? qualification.contract.contract_address
+          : MEMETICS_CONTRACT_ADDRESS) as `0x${string}`;
+
+      if (!txHash) {
+        if (!publicClient) {
+          throw new Error("Missing Base public client");
+        }
+
+        const { address, walletClient } = await requireWallet();
+        if (
+          !onchainWallets.some(
+            (wallet) => wallet.toLowerCase() === address.toLowerCase(),
+          )
+        ) {
+          throw new Error("Choose a connected wallet that is already linked onchain.");
+        }
+
+        if (qualification.contract.petition_id && qualification.viewer?.can_support) {
+          action = "support";
+          setStatus("Requesting petition signature...");
+          const response = await fetch(
+            `/api/memetics/bungalow/${encodeURIComponent(qualification.chain)}/${encodeURIComponent(qualification.token_address)}/petition/sign`,
+            {
+              method: "POST",
+              headers,
+              body: JSON.stringify({
+                wallet: address,
+              }),
+            },
+          );
+          const data =
+            (await response.json().catch(() => null)) as SignPetitionSignatureResponse | null;
+
+          if (
+            !response.ok ||
+            data?.petition_id === undefined ||
+            data.heat_score === undefined ||
+            !data.salt ||
+            data.deadline === undefined ||
+            !data.sig
+          ) {
+            throw new Error(
+              data?.error ?? `Petition signing failed (${response.status})`,
+            );
+          }
+
+          const args = [
+            BigInt(data.petition_id),
+            BigInt(data.heat_score),
+            data.salt,
+            BigInt(data.deadline),
+            data.sig,
+          ] as const;
+
+          setStatus("Checking petition signature...");
+          await publicClient.simulateContract({
+            address: contractAddress,
+            abi: memeticsAbi,
+            functionName: "signBungalowPetition",
+            args,
+            account: address,
+          });
+
+          txHash = await walletClient.writeContract({
+            address: contractAddress,
+            abi: memeticsAbi,
+            functionName: "signBungalowPetition",
+            args,
+            account: address,
+          });
+        } else {
+          action = "create";
+          setStatus("Requesting bungalow petition...");
+          const response = await fetch(
+            `/api/memetics/bungalow/${encodeURIComponent(qualification.chain)}/${encodeURIComponent(qualification.token_address)}/create/sign`,
+            {
+              method: "POST",
+              headers,
+              body: JSON.stringify({
+                wallet: address,
+              }),
+            },
+          );
+          const data =
+            (await response.json().catch(() => null)) as CreatePetitionSignatureResponse | null;
+
+          if (
+            !response.ok ||
+            !data?.bungalow_name ||
+            data.primary_asset_chain === undefined ||
+            data.primary_asset_kind === undefined ||
+            !data.primary_asset_ref ||
+            data.heat_score === undefined ||
+            !data.attested_apes_balance ||
+            !data.salt ||
+            data.deadline === undefined ||
+            !data.sig
+          ) {
+            throw new Error(
+              data?.error ?? `Petition creation failed (${response.status})`,
+            );
+          }
+
+          const args = [
+            data.bungalow_name,
+            data.metadata_uri ?? "",
+            data.primary_asset_chain,
+            data.primary_asset_kind,
+            data.primary_asset_ref,
+            BigInt(data.heat_score),
+            BigInt(data.attested_apes_balance),
+            data.salt,
+            BigInt(data.deadline),
+            data.sig,
+          ] as const;
+
+          setStatus("Checking bungalow petition...");
+          await publicClient.simulateContract({
+            address: contractAddress,
+            abi: memeticsAbi,
+            functionName: "createBungalowPetition",
+            args,
+            account: address,
+          });
+
+          txHash = await walletClient.writeContract({
+            address: contractAddress,
+            abi: memeticsAbi,
+            functionName: "createBungalowPetition",
+            args,
+            account: address,
+          });
+        }
+
+        if (!txHash) {
+          throw new Error("Missing Memetics transaction hash");
+        }
+
+        setPendingTxHash(txHash);
+        setPendingAction(action);
+        submittedTxHash = txHash;
+        submittedAction = action;
+        setStatus("Waiting for Memetics confirmation on Base...");
+        const receipt = await publicClient.waitForTransactionReceipt({
+          hash: txHash as `0x${string}`,
+        });
+        if (receipt.status !== "success") {
+          throw new Error("Memetics bungalow transaction failed");
+        }
+      }
+
+      setStatus(
+        action === "support"
+          ? "Confirming petition support..."
+          : "Confirming bungalow petition...",
+      );
+
+      const confirmResponse = await fetch(
+        `/api/memetics/bungalow/${encodeURIComponent(qualification.chain)}/${encodeURIComponent(qualification.token_address)}/confirm`,
         {
           method: "POST",
           headers,
           body: JSON.stringify({
             tx_hash: txHash,
-            jbm_amount: qualification.construction_fee_jbm,
           }),
         },
       );
+      const confirmData = (await confirmResponse.json().catch(() => null)) as
+        | ConfirmResponse
+        | null;
 
-      const data = (await response.json().catch(() => null)) as {
-        bungalow?: {
-          canonical_path?: string | null;
-          token_address?: string;
-        };
-        error?: string;
-      } | null;
-
-      if (!response.ok) {
+      if (!confirmResponse.ok) {
         throw new Error(
-          typeof data?.error === "string"
-            ? data.error
-            : `Request failed (${response.status})`,
+          confirmData?.error ?? `Confirmation failed (${confirmResponse.status})`,
         );
       }
 
-      const destination =
-        data?.bungalow?.canonical_path ||
-        qualification.canonical_path ||
-        `/bungalow/${qualification.token_address}`;
-
       setPendingTxHash(null);
-      setStatus("Bungalow opened.");
-      navigate(destination);
-      onClose();
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Failed to construct bungalow";
+      setPendingAction(null);
+
+      if (confirmData?.created) {
+        const destination =
+          confirmData.bungalow?.canonical_path ||
+          qualification.canonical_path ||
+          `/bungalow/${qualification.token_address}`;
+        setStatus("Bungalow opened.");
+        navigate(destination);
+        onClose();
+        return;
+      }
+
+      await loadQualification();
+      setStatus(
+        `Petition updated. ${confirmData?.supporter_count ?? qualification.support.supporter_count} / ${qualification.support.required_supporters} supporters.`,
+      );
+    } catch (actionError) {
+      const message = getMemeticsErrorMessage(
+        actionError,
+        "Failed to update bungalow petition",
+      );
       setStatus(null);
-      if (pendingTxHash) {
+      if (submittedTxHash) {
         setError(
-          `${message}. The fee transfer is already confirmed, so you can retry without paying again.`,
+          `${message}. The transaction is already confirmed, so you can retry indexing without signing again.`,
         );
       } else {
         setError(message);
       }
     } finally {
-      setIsConstructing(false);
+      setIsActing(false);
     }
   };
+
+  const shouldShowSupportAction =
+    authenticated &&
+    Boolean(memeticsProfile?.profile) &&
+    qualification?.viewer?.can_support &&
+    !qualification?.support.has_supported &&
+    !qualification?.exists;
+  const shouldShowCreateAction =
+    authenticated &&
+    Boolean(memeticsProfile?.profile) &&
+    !qualification?.exists &&
+    qualification?.viewer?.qualifies_to_construct_now &&
+    !qualification?.contract.petition_id;
 
   return createPortal(
     <div className={styles.overlay}>
@@ -318,16 +522,9 @@ export default function BungalowConstructionModal({
             <p className={styles.kicker}>New Bungalow</p>
             <h3>Open a new community bungalow</h3>
             <p className={styles.summary}>
-              You can open a bungalow on the island if you have enough heat,
-              support, or 10+{" "}
-              <a
-                href="https://opensea.io/collection/junglebay"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Jungle Bay Apes
-              </a>
-              .
+              Bungalows now open through the Memetics contract. You need an
+              onchain profile first, then either high enough heat, community
+              petition support, or the Jungle Bay Apes shortcut.
             </p>
           </div>
           <button
@@ -375,6 +572,38 @@ export default function BungalowConstructionModal({
           ) : null}
         </section>
 
+        {authenticated ? (
+          <section className={styles.panel} style={{ marginTop: 0 }}>
+            <WalletSelector
+              label="Sign with"
+              panelMode="inline"
+              value={selectedWallet}
+              eligibleWallets={onchainWallets}
+              onSelect={(nextWallet) => {
+                setSelectedWallet(nextWallet);
+                setError(null);
+              }}
+              onStateChange={setWalletSelectorState}
+            />
+            {!memeticsProfile?.profile ? (
+              <div className={styles.notice} style={{ margin: "12px 0 0" }}>
+                Create your onchain profile in the Profile page before opening
+                or supporting bungalow petitions.
+                <button
+                  type="button"
+                  className={styles.inlineLink}
+                  onClick={() => {
+                    navigate("/profile");
+                    onClose();
+                  }}
+                >
+                  Open profile
+                </button>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+
         {qualification ? (
           <section className={styles.panel}>
             <div className={styles.tokenRow}>
@@ -403,8 +632,12 @@ export default function BungalowConstructionModal({
                 </strong>
               </div>
               <div className={styles.metricCard}>
-                <span>Construction fee</span>
-                <strong>{qualification.construction_fee_jbm} JBM</strong>
+                <span>Active petition</span>
+                <strong>
+                  {qualification.contract.petition_id
+                    ? `#${qualification.contract.petition_id}`
+                    : "None"}
+                </strong>
               </div>
               <div className={styles.metricCard}>
                 <span>Your island heat</span>
@@ -435,8 +668,8 @@ export default function BungalowConstructionModal({
               </p>
               <p>
                 Or {qualification.thresholds.required_supporters} residents with{" "}
-                {qualification.thresholds.support_heat_min}+ heat can back the
-                same CA.
+                {qualification.thresholds.support_heat_min}+ heat can sign the
+                same petition.
               </p>
               <p>
                 Shortcut: hold{" "}
@@ -444,20 +677,14 @@ export default function BungalowConstructionModal({
                 Apes.
               </p>
               <p>
-                Or DM{" "}
-                <a
-                  href="https://x.com/_seacasa"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  @_seacasa
-                </a>
+                Every write happens through the Memetics contract and requires
+                an onchain profile first.
               </p>
             </div>
 
             {qualification.exists ? (
               <div className={styles.notice}>
-                This bungalow is already open on the island.
+                This bungalow is already open onchain.
                 {qualification.canonical_path ? (
                   <>
                     {" "}
@@ -482,45 +709,78 @@ export default function BungalowConstructionModal({
                 className={styles.secondaryButton}
                 onClick={() => login()}
               >
-                Connect wallet to back or open this bungalow
+                Connect wallet to open or support this bungalow
               </button>
             ) : null}
 
             {authenticated &&
-            qualification.viewer?.can_support &&
-            !qualification.support.has_supported &&
+            !memeticsProfile?.profile &&
             !qualification.exists ? (
               <button
                 type="button"
                 className={styles.secondaryButton}
                 onClick={() => {
-                  void handleSupport();
+                  navigate("/profile");
+                  onClose();
                 }}
-                disabled={isSubmittingSupport || isConstructing}
               >
-                {isSubmittingSupport ? "Backing..." : "Back this contract"}
+                Create onchain profile first
               </button>
             ) : null}
 
-            {authenticated &&
-            qualification.viewer?.qualifies_to_construct_now &&
-            !qualification.exists ? (
+            {shouldShowSupportAction ? (
+              <button
+                type="button"
+                className={styles.secondaryButton}
+                onClick={() => {
+                  void handlePetitionAction();
+                }}
+                disabled={isActing}
+              >
+                {isActing
+                  ? "Signing..."
+                  : pendingTxHash && pendingAction === "support"
+                    ? "Retry indexing support"
+                    : "Sign this petition"}
+              </button>
+            ) : null}
+
+            {shouldShowCreateAction ? (
               <button
                 type="button"
                 className={styles.primaryButton}
                 onClick={() => {
-                  void handleConstruct();
+                  void handlePetitionAction();
                 }}
-                disabled={
-                  isConstructing || isSubmittingSupport || isTransferring
-                }
+                disabled={isActing}
               >
-                {isConstructing || isTransferring
+                {isActing
                   ? "Processing..."
                   : pendingTxHash
-                    ? "Retry open bungalow"
-                    : `Pay ${qualification.construction_fee_jbm} JBM & Open`}
+                    ? "Retry indexing petition"
+                    : "Create bungalow petition"}
               </button>
+            ) : null}
+
+            {authenticated &&
+            qualification.contract.petition_id &&
+            !qualification.viewer?.can_support &&
+            !qualification.support.has_supported &&
+            !qualification.exists ? (
+              <div className={styles.notice}>
+                This bungalow already has an active petition. You need{" "}
+                {qualification.thresholds.support_heat_min}+ heat and an onchain
+                profile to sign it.
+              </div>
+            ) : null}
+
+            {authenticated &&
+            qualification.support.has_supported &&
+            !qualification.exists ? (
+              <div className={styles.notice}>
+                Your profile already signed this petition. It will open
+                automatically once the quorum is reached.
+              </div>
             ) : null}
           </section>
         ) : null}

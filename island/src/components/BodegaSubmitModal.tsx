@@ -4,9 +4,15 @@ import { useNavigate } from "react-router-dom";
 import BodegaCard from "./BodegaCard";
 import BungalowOptionPicker from "./BungalowOptionPicker";
 import WalletSelector, { type WalletSelectorState } from "./WalletSelector";
-import { useJBMTransfer } from "../hooks/useJBMTransfer";
+import { useMemeticsProfile } from "../hooks/useMemeticsProfile";
 import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
 import { formatJbmAmount } from "../utils/formatters";
+import {
+  getMemeticsErrorMessage,
+  MEMETICS_CONTRACT_ADDRESS,
+  memeticsAbi,
+  parseJbmToWei,
+} from "../utils/memetics";
 import styles from "../styles/bodega-submit-modal.module.css";
 import {
   getBodegaAssetIcon,
@@ -31,7 +37,6 @@ interface BodegaSubmitModalProps {
 type BodegaListingType = "art" | "miniapp";
 type ArtFormat = "image" | "glb";
 type ModalStep = 1 | 2 | 3;
-const BODEGA_SUBMISSION_FEE = 69_000;
 const PENDING_SUBMISSION_PAYMENT_STORAGE_KEY =
   "jbi:bodega:pending-submission-payment";
 
@@ -61,7 +66,7 @@ interface PublishEligibility {
 }
 
 /**
- * Restores a pending publishing-fee payment so retries can survive refreshes.
+ * Restores a pending onchain listing transaction so retries can survive refreshes.
  */
 function readPendingSubmissionPayment(): PendingSubmissionPayment | null {
   if (typeof window === "undefined") return null;
@@ -96,7 +101,7 @@ function readPendingSubmissionPayment(): PendingSubmissionPayment | null {
 }
 
 /**
- * Persists or clears the pending publishing-fee payment between page loads.
+ * Persists or clears the pending onchain listing transaction between page loads.
  */
 function writePendingSubmissionPayment(
   payment: PendingSubmissionPayment | null,
@@ -195,6 +200,14 @@ function buildContentPayload(input: {
   };
 }
 
+function getOnchainArtifactUri(input: {
+  assetType: BodegaAssetType;
+  previewUrl: string;
+  url: string;
+}): string {
+  return input.assetType === "miniapp" ? input.url.trim() : input.previewUrl.trim();
+}
+
 /**
  * Validates the current draft before the preview or submit step.
  */
@@ -258,8 +271,9 @@ export default function BodegaSubmitModal({
 }: BodegaSubmitModalProps) {
   const navigate = useNavigate();
   const { authenticated, getAccessToken, login } = usePrivy();
-  const { walletAddress } = usePrivyBaseWallet();
-  const { transfer, isTransferring } = useJBMTransfer();
+  const { publicClient, requireWallet, walletAddress } = usePrivyBaseWallet();
+  const { data: memeticsProfile, isLoading: isMemeticsProfileLoading } =
+    useMemeticsProfile(authenticated);
 
   const [step, setStep] = useState<ModalStep>(1);
   const [listingType, setListingType] = useState<BodegaListingType>("art");
@@ -307,6 +321,7 @@ export default function BodegaSubmitModal({
   const previewUrlInputRef = useRef<HTMLInputElement | null>(null);
   const urlInputRef = useRef<HTMLInputElement | null>(null);
   const creatorWallet = selectedPayWallet || walletAddress || "";
+  const onchainWallets = memeticsProfile?.profile?.wallets ?? [];
 
   useEffect(() => {
     if (!open) return;
@@ -684,6 +699,8 @@ export default function BodegaSubmitModal({
     step === 3 &&
     !submittedItem &&
     (!hasCreatorWallet ||
+      isMemeticsProfileLoading ||
+      !memeticsProfile?.profile ||
       isEligibilityLoading ||
       Boolean(eligibilityError) ||
       !publishEligibility ||
@@ -741,7 +758,7 @@ export default function BodegaSubmitModal({
       !reusablePayment &&
       (!payoutWallet || !walletSelectorState.selectedWalletAvailable)
     ) {
-      setError("Choose a wallet that is available here or link a new one.");
+      setError("Choose a connected wallet that is already linked onchain.");
       return;
     }
 
@@ -778,18 +795,21 @@ export default function BodegaSubmitModal({
       const baseMessage = `You need at least ${publishEligibility.minimum_heat.toFixed(0)} island heat to publish live listings. Current heat: ${publishEligibility.island_heat.toFixed(1)}.`;
       setError(
         reusablePayment
-          ? `${baseMessage} Your publishing fee is already recorded and can be reused once this wallet cluster qualifies.`
+          ? `${baseMessage} Your onchain listing transaction is already recorded and can be confirmed once this wallet cluster qualifies.`
           : baseMessage,
       );
+      return;
+    }
+
+    if (!memeticsProfile?.profile) {
+      setError("Create your onchain profile before publishing to the Bodega.");
       return;
     }
 
     setFieldErrors({});
     setIsSubmitting(true);
     setError(null);
-    setStatus(
-      `Waiting for the ${formatJbmAmount(BODEGA_SUBMISSION_FEE)} publishing fee confirmation...`,
-    );
+    setStatus("Preparing your onchain Bodega listing...");
 
     let usedExistingPayment = false;
     let confirmedPayment: PendingSubmissionPayment | null = null;
@@ -799,19 +819,53 @@ export default function BodegaSubmitModal({
         usedExistingPayment = true;
         confirmedPayment = pendingPayment;
       } else {
-        const transferResult = await transfer(BODEGA_SUBMISSION_FEE);
+        if (!publicClient) {
+          throw new Error("Missing Base public client");
+        }
+
+        const { address, walletClient } = await requireWallet();
+        const artifactUri = getOnchainArtifactUri({
+          assetType,
+          previewUrl: resolvedPreviewUrl,
+          url,
+        });
+        const priceWei = parseJbmToWei(price);
+
+        setStatus("Checking your onchain Bodega listing...");
+        await publicClient.simulateContract({
+          address: MEMETICS_CONTRACT_ADDRESS,
+          abi: memeticsAbi,
+          functionName: "listArtifact",
+          args: [artifactUri, priceWei],
+          account: address,
+        });
+
+        const hash = await walletClient.writeContract({
+          address: MEMETICS_CONTRACT_ADDRESS,
+          abi: memeticsAbi,
+          functionName: "listArtifact",
+          args: [artifactUri, priceWei],
+          account: address,
+        });
+
         confirmedPayment = {
           draftFingerprint,
-          txHash: transferResult.hash,
-          payer: transferResult.from,
+          txHash: hash,
+          payer: address,
         };
         setPendingPayment(confirmedPayment);
+
+        setStatus("Waiting for listing confirmation on Base...");
+        const receipt = await publicClient.waitForTransactionReceipt({ hash });
+        if (receipt.status !== "success") {
+          throw new Error("Bodega listing transaction failed");
+        }
       }
 
-      setStatus("Publishing your listing to the Bodega...");
+      setStatus("Indexing your listing in the Bodega...");
 
       if (!confirmedPayment) {
-        throw new Error("Missing publishing fee confirmation");
+        throw new Error("Missing listing transaction");
       }
 
       const headers: Record<string, string> = {
@@ -834,7 +888,6 @@ export default function BodegaSubmitModal({
           preview_url: draftItem.preview_url ?? undefined,
           price_in_jbm: asPositiveNumber(price),
           tx_hash: confirmedPayment.txHash,
-          jbm_amount: String(BODEGA_SUBMISSION_FEE),
           origin_bungalow_token_address: selectedOrigin?.token_address,
           origin_bungalow_chain: selectedOrigin?.chain,
         }),
@@ -857,15 +910,17 @@ export default function BodegaSubmitModal({
 
       setPendingPayment(null);
       setSubmittedItem(item);
-      setStatus("Your listing is live in the Bodega.");
+      setStatus("Your listing is live onchain and indexed in the Bodega.");
       onSubmitted?.(item);
     } catch (err) {
       setStatus(null);
-      const message =
-        err instanceof Error ? err.message : "Failed to submit Bodega listing";
+      const message = getMemeticsErrorMessage(
+        err,
+        "Failed to submit Bodega listing",
+      );
       if (usedExistingPayment || Boolean(confirmedPayment)) {
         setError(
-          `${message}. The ${formatJbmAmount(BODEGA_SUBMISSION_FEE)} publishing fee is already paid, so you can retry without paying again.`,
+          `${message}. The listing transaction is already mined, so you can retry indexing it without sending another transaction.`,
         );
       } else {
         setError(message);
@@ -901,11 +956,10 @@ export default function BodegaSubmitModal({
           <div>
             <h3>Submit to the Bodega</h3>
             <p>
-              Publish one reusable listing. A one-time{" "}
-              {formatJbmAmount(BODEGA_SUBMISSION_FEE)} publishing fee is charged
-              when you submit, the listing goes live immediately, and you earn
-              30% every time another bungalow pays to install it. Publishing
-              currently requires at least 25 island heat.
+              Publish one reusable listing. The listing is created onchain, it
+              goes live here once indexed, and installs pay you directly through
+              the Memetics contract. Publishing currently requires at least 25
+              island heat and an onchain profile.
             </p>
           </div>
           <button
@@ -927,6 +981,7 @@ export default function BodegaSubmitModal({
           label="Sign with"
           panelMode="inline"
           value={selectedPayWallet}
+          eligibleWallets={onchainWallets}
           onSelect={(address) => {
             setSelectedPayWallet(address);
             setError(null);
@@ -976,14 +1031,14 @@ export default function BodegaSubmitModal({
             </div>
             <p className={styles.eligibilityBody}>
               {!hasCreatorWallet
-                ? "Choose a wallet first so the Bodega can verify the heat gate before any publishing fee is charged."
+                ? "Choose a wallet first so the Bodega can verify the heat gate."
                 : isEligibilityLoading
-                ? "Checking whether the selected wallet cluster can publish before any JBM fee is charged."
+                ? "Checking whether the selected wallet cluster can publish."
                 : eligibilityError
-                  ? `${eligibilityError} The publishing fee stays blocked until this check succeeds.`
+                  ? `${eligibilityError} Publishing stays blocked until this check succeeds.`
                   : publishEligibility?.can_publish
-                    ? "This wallet cluster clears the live-publishing threshold, so the Bodega fee can be charged safely."
-                    : "This wallet cluster is below the live-publishing threshold. The publish fee button stays blocked until the required island heat is reached."}
+                    ? "This wallet cluster clears the live-publishing threshold. The selected signer also needs to be linked onchain."
+                    : "This wallet cluster is below the live-publishing threshold. Publishing stays blocked until the required island heat is reached."}
             </p>
           </section>
         ) : null}
@@ -1257,7 +1312,8 @@ export default function BodegaSubmitModal({
               ) : null}
               <small>
                 This is the amount another bungalow pays each time it installs
-                this listing. You receive 30% of each paid install.
+                this listing. Payment routes directly to the seller through the
+                Memetics contract.
               </small>
             </label>
 
@@ -1315,13 +1371,10 @@ export default function BodegaSubmitModal({
               compact={false}
             />
             <div className={styles.feeCard}>
-              <strong>
-                One-time publishing fee:{" "}
-                {formatJbmAmount(BODEGA_SUBMISSION_FEE)}
-              </strong>
+              <strong>Install price onchain: {formatJbmAmount(price)}</strong>
               <span>
-                This fee is paid once when the listing is first published. It is
-                separate from the install price charged to future buyers.
+                This is the amount future buyers approve and pay when they
+                install the listing into a bungalow.
               </span>
             </div>
           </section>
@@ -1359,12 +1412,11 @@ export default function BodegaSubmitModal({
                 onClick={step === 3 ? handleSubmit : handleStepAdvance}
                 disabled={
                   isSubmitting ||
-                  isTransferring ||
                   submitBlockedByEligibility ||
                   (step < 3 && blockedByHeatGate)
                 }
               >
-                {isSubmitting || isTransferring
+                {isSubmitting
                   ? "Submitting..."
                   : step === 3 && isEligibilityLoading
                     ? "Checking heat..."
@@ -1377,8 +1429,8 @@ export default function BodegaSubmitModal({
                         : step === 3
                           ? pendingPayment &&
                             pendingPayment.draftFingerprint === draftFingerprint
-                            ? "Retry Save"
-                            : `Pay ${formatJbmAmount(BODEGA_SUBMISSION_FEE)} & Submit`
+                            ? "Retry indexing"
+                            : "Create onchain listing"
                           : "Continue"}
               </button>
             </div>

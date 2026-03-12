@@ -174,6 +174,8 @@ export interface BodegaCatalogRow {
   id: number
   creator_wallet: string
   creator_handle: string | null
+  contract_artifact_id?: number | null
+  contract_uri?: string | null
   origin_bungalow_token_address: string | null
   origin_bungalow_chain: 'base' | 'ethereum' | 'solana' | null
   asset_type: 'decoration' | 'miniapp' | 'game' | 'link' | 'image' | 'frame' | 'portal'
@@ -204,6 +206,8 @@ export interface BodegaCatalogRow {
 export interface BodegaInstallRow {
   id: number
   catalog_item_id: number
+  contract_artifact_id?: number | null
+  contract_bungalow_id?: number | null
   installed_to_token_address: string
   installed_to_chain: 'base' | 'ethereum' | 'solana'
   installed_by_wallet: string
@@ -222,6 +226,55 @@ export interface BonusHeatEventRow {
   event_type: 'item_added' | 'bodega_install' | 'bodega_submission'
   bonus_points: number
   created_at: string
+}
+
+export interface CommissionRecordRow {
+  brief_id: string
+  commission_id: number | null
+  requester_privy_user_id: string
+  requester_wallet: string
+  requester_profile_id: number | null
+  requester_handle: string | null
+  bungalow_chain: 'base' | 'ethereum' | 'solana'
+  bungalow_token_address: string
+  bungalow_name: string | null
+  rate_label: string
+  prompt: string
+  brief_uri: string
+  budget_jbm: string
+  claim_deadline: string
+  delivery_deadline: string
+  status: 'draft' | 'open' | 'claimed' | 'submitted' | 'disputed' | 'completed' | 'cancelled'
+  created_tx_hash: string | null
+  approved_application_id: number | null
+  approved_artist_wallet: string | null
+  approved_artist_profile_id: number | null
+  approved_artist_handle: string | null
+  artist_wallet: string | null
+  artist_profile_id: number | null
+  artist_handle: string | null
+  claimed_tx_hash: string | null
+  submitted_tx_hash: string | null
+  approved_tx_hash: string | null
+  cancelled_tx_hash: string | null
+  payout_claim_tx_hash: string | null
+  deliverable_uri: string | null
+  submitted_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface CommissionApplicationRow {
+  id: number
+  commission_id: number
+  artist_privy_user_id: string
+  artist_wallet: string
+  artist_profile_id: number | null
+  artist_handle: string | null
+  message: string | null
+  status: 'pending' | 'approved' | 'rejected' | 'withdrawn'
+  created_at: string
+  updated_at: string
 }
 
 export interface UserWalletLinkRow {

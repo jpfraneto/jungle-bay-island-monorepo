@@ -105,8 +105,9 @@ export default function AboutPage() {
           <li>
             <strong>A project qualifies for territory</strong> &mdash; a new
             bungalow can open through one high-heat builder, five mid-heat
-            supporters backing the same CA, or the JBAC shortcut. A
-            construction fee in JBM finalizes the opening.
+            supporters backing the same CA, or the JBAC shortcut. That now
+            happens as a Memetics onchain petition flow instead of a separate
+            construction-fee transfer.
           </li>
           <li>
             <strong>Assets live inside the bungalow</strong> &mdash; one
@@ -133,9 +134,16 @@ export default function AboutPage() {
           </li>
           <li>
             <strong>The Bodega closes the loop</strong> &mdash; builders can
-            publish portable art and builds once through the full Bodega flow,
-            while bungalow walls now support their own paid local art and link
-            placements that stay inside that project&apos;s room.
+            publish portable art and builds as onchain listings, install them
+            into bungalows through the same contract, and still use paid local
+            wall placements for room-specific additions that do not become
+            portable listings.
+          </li>
+          <li>
+            <strong>Commissions turn intent into work</strong> &mdash; a
+            bungalow can now anchor a paid creative brief, artists can apply to
+            it, one artist can be approved, and the actual payment still clears
+            through onchain escrow when the work is delivered.
           </li>
         </ol>
       </article>
@@ -202,27 +210,70 @@ export default function AboutPage() {
       <article className={styles.card}>
         <h2 className={styles.heading}>Identity And Wallet Ownership</h2>
         <p>
-          The Island now separates account identity from transaction wallets on
-          purpose. Your authenticated identity is your Privy user ID. Wallets
-          are attributes you link explicitly through Privy external wallet flows
-          (SIWE for EVM, SIWS for Solana).
+          The Island now has two aligned identity layers on purpose. Your app
+          session is still your Privy account, but contract-native actions now
+          route through a Memetics onchain profile that starts from your X
+          handle and can hold multiple linked wallets.
         </p>
         <ul className={styles.list}>
           <li>
-            <strong>Identity key</strong> &mdash; authenticated flows anchor to
-            your Privy account, not to whichever wallet is active in the moment.
+            <strong>Session identity</strong> &mdash; authenticated frontend
+            flows anchor to your Privy account, not to whichever wallet is
+            active in the moment.
           </li>
           <li>
-            <strong>Wallets are explicit</strong> &mdash; only wallets you
-            intentionally link are allowed for claims and other onchain actions.
+            <strong>Onchain identity</strong> &mdash; write actions on Base now
+            require a Memetics profile, and only wallets explicitly linked to
+            that onchain profile can sign those contract calls.
           </li>
           <li>
             <strong>Handles are X-based</strong> &mdash; email users can claim a
-            handle by linking X; X-login users are verified from login.
+            handle by linking X; X-login users are verified from login; that
+            handle then becomes the readable entry point for the onchain
+            profile.
+          </li>
+          <li>
+            <strong>Main wallet is explicit</strong> &mdash; users can choose
+            which linked onchain wallet receives commission payouts and seller
+            proceeds.
           </li>
           <li>
             <strong>No silent imports</strong> &mdash; Farcaster/Neynar wallet
             auto-enrichment is removed so profile ownership stays user-controlled.
+          </li>
+        </ul>
+      </article>
+
+      <article className={styles.card}>
+        <h2 className={styles.heading}>Commissions As Cultural Production</h2>
+        <p>
+          The Island is not only a place to display artifacts after they exist.
+          It now also supports the act of commissioning them into existence.
+          That matters because scenes do not just need storage; they need a way
+          to route taste, intention, and compensation toward people who can make
+          the next image, poster, loop, or visual language for a community.
+        </p>
+        <ul className={styles.list}>
+          <li>
+            <strong>Requesters define the brief</strong> &mdash; a commission
+            now names the bungalow it serves, the format of work being asked
+            for, the prompt, the delivery deadline, and the JBM budget.
+          </li>
+          <li>
+            <strong>Artists gather before the contract claim</strong> &mdash;
+            applications happen in the product first, so a requester can choose
+            the right artist before the approved artist claims the job onchain.
+          </li>
+          <li>
+            <strong>Money still lives onchain</strong> &mdash; once the
+            commission is opened, the budget is locked in Memetics escrow and
+            the payout only resolves through the contract&apos;s settlement
+            path.
+          </li>
+          <li>
+            <strong>The bungalow stays central</strong> &mdash; the work is not
+            commissioned in the abstract. It belongs to a place, a community,
+            and a visual context on the island.
           </li>
         </ul>
       </article>

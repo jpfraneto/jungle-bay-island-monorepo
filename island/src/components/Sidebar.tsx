@@ -93,6 +93,17 @@ export default function Sidebar({
             <span>🛖</span>
             <span>Bodega</span>
           </button>
+          <button
+            type="button"
+            className={styles.itemButton}
+            onClick={() => {
+              navigate("/commissions");
+              onClose();
+            }}
+          >
+            <span>🎨</span>
+            <span>Commissions</span>
+          </button>
         </section>
 
         <section className={styles.section}>

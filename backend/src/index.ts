@@ -27,6 +27,8 @@ import sceneRoute from "./routes/scene";
 import claimsRoute from "./routes/claims";
 import bodegaRoute from "./routes/bodega";
 import walletLinkRoute from "./routes/wallet-link";
+import memeticsRoute from "./routes/memetics";
+import commissionsRoute from "./routes/commissions";
 import opsRoute from "./routes/ops";
 import { startDailyHeatRefreshScheduler } from "./services/dailyHeatRefresh";
 import { isApiError } from "./services/errors";
@@ -291,6 +293,8 @@ app.route("/api", sceneRoute);
 app.route("/api", claimsRoute);
 app.route("/api/bodega", bodegaRoute);
 app.route("/api", walletLinkRoute);
+app.route("/api", memeticsRoute);
+app.route("/api", commissionsRoute);
 app.route("/api/ops", opsRoute);
 
 // Solana RPC proxy (browser can't hit public RPC directly due to CORS/403)

@@ -4,6 +4,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import {
   getAggregatedUserByWallets,
   getIdentityClusterByWallet,
+  getUserWallets,
   getWalletTokenHeats,
   userOwnsWallet,
   type IdentityClusterWallet,
@@ -18,6 +19,15 @@ import {
   toSupportedChain,
 } from "../config";
 import { ApiError } from "../services/errors";
+import {
+  MEMETICS_EIP712_DOMAIN,
+  createMemeticsSalt,
+  getMemeticsContractAddress,
+  getMemeticsDeadline,
+  getMemeticsSigner,
+  isMemeticsDailyClaimed,
+  readWalletProfileId,
+} from "../services/memetics";
 import type { AppEnv } from "../types";
 
 const claimsRoute = new Hono<AppEnv>();
@@ -478,6 +488,42 @@ function getPrivyUserIdFromClaims(
   return privyUserId;
 }
 
+async function resolveAuthorizedClaimWallets(
+  c: { get: (key: string) => unknown },
+  privyUserId: string,
+): Promise<string[]> {
+  const claimWallets = Array.isArray(c.get("walletAddresses"))
+    ? (c.get("walletAddresses") as string[])
+    : [];
+  const storedWallets = (await getUserWallets(privyUserId)).map((row) => row.address);
+
+  return [...new Set(
+    [...claimWallets, ...storedWallets]
+      .map((wallet) => normalizeAddress(wallet))
+      .filter((wallet): wallet is `0x${string}` => Boolean(wallet)),
+  )];
+}
+
+function assertAuthorizedClaimWallet(
+  requestedWallet: unknown,
+  fallbackWallet: string | null | undefined,
+  authorizedWallets: string[],
+): `0x${string}` {
+  const wallet =
+    (typeof requestedWallet === "string" ? normalizeAddress(requestedWallet) : null) ??
+    (fallbackWallet ? normalizeAddress(fallbackWallet) : null);
+
+  if (!wallet) {
+    throw new ApiError(400, "invalid_wallet", "A valid EVM wallet is required");
+  }
+
+  if (!authorizedWallets.some((entry) => entry.toLowerCase() === wallet.toLowerCase())) {
+    throw new ApiError(401, "wallet_not_owned", "wallet_not_owned");
+  }
+
+  return wallet as `0x${string}`;
+}
+
 function deriveIdentityFromClaims(
   requesterWallet: string,
   claims: Record<string, unknown> | null,
@@ -919,6 +965,309 @@ claimsRoute.get("/claims/:chain/:ca/:address", async (c) => {
       farcaster_verified_wallets: identity.wallets.filter((entry) => entry.farcaster_verified).length,
     },
     holdings: allocation.wallets_snapshot_parsed,
+  });
+});
+
+claimsRoute.post("/claims/memetics/sign", requirePrivyAuth, async (c) => {
+  const rawClaims = c.get("privyClaims") as Record<string, unknown> | undefined;
+  const claims = rawClaims ?? null;
+  const privyUserId = getPrivyUserIdFromClaims(claims);
+  const signer = getMemeticsSigner();
+  const contractAddress = getMemeticsContractAddress();
+  if (!signer || !contractAddress) {
+    throw new ApiError(
+      500,
+      "memetics_not_configured",
+      "Memetics contract signer is not configured",
+    );
+  }
+
+  const body = await c.req.json<{
+    wallet?: unknown;
+  }>();
+  const authorizedWallets = await resolveAuthorizedClaimWallets(c, privyUserId);
+  const claimWallet = assertAuthorizedClaimWallet(
+    body.wallet,
+    c.get("walletAddress") as string | null | undefined,
+    authorizedWallets,
+  );
+  const profileId = await readWalletProfileId(claimWallet);
+  if (!profileId) {
+    throw new ApiError(
+      403,
+      "profile_required",
+      "Create your onchain profile and link this wallet before claiming rewards",
+    );
+  }
+
+  const identity = await resolveIdentity({
+    requesterWallet: claimWallet,
+    claims,
+    allowClaimsEnrichment: true,
+  });
+
+  const periodId = getCurrentPeriodId();
+  const alreadyClaimed = await isMemeticsDailyClaimed(profileId, periodId);
+  if (alreadyClaimed) {
+    throw new ApiError(409, "already_claimed_today", "Daily reward already claimed");
+  }
+
+  const claimEntries = await getIdentityClaimEntries({ identity, periodId });
+  if (claimEntries.length === 0) {
+    throw new ApiError(409, "nothing_to_claim", "No claimable JBM for this period");
+  }
+
+  const aggregated = await getAggregatedUserByWallets(
+    identity.wallets.map((entry) => entry.wallet),
+  );
+  const heatScore = Math.max(0, Math.round(aggregated?.island_heat ?? 0));
+  const salt = createMemeticsSalt();
+  const deadline = getMemeticsDeadline();
+
+  const response = await db.begin(async (tx) => {
+    const trx = tx as unknown as typeof db;
+
+    await trx`SELECT pg_advisory_xact_lock(hashtext(${`memetics-claim:${identity.identity_key}:${periodId}`}))`;
+
+    await trx`
+      INSERT INTO ${db(CONFIG.SCHEMA)}.claim_period_caps (
+        period_id,
+        cap_jbm,
+        distributed_jbm
+      )
+      VALUES (
+        ${periodId},
+        ${DAILY_DISTRIBUTION_CAP_JBM.toString()},
+        0
+      )
+      ON CONFLICT (period_id) DO NOTHING
+    `;
+
+    const capRows = await trx<ClaimPeriodCapRow[]>`
+      SELECT
+        period_id,
+        cap_jbm::text AS cap_jbm,
+        distributed_jbm::text AS distributed_jbm,
+        updated_at::text AS updated_at
+      FROM ${db(CONFIG.SCHEMA)}.claim_period_caps
+      WHERE period_id = ${periodId}
+      FOR UPDATE
+    `;
+
+    const capRow = capRows[0];
+    if (!capRow) {
+      throw new ApiError(500, "cap_read_failed", "Could not read daily claim cap");
+    }
+
+    const capJbm = parseNumericBigInt(capRow.cap_jbm);
+    const distributedJbm = parseNumericBigInt(capRow.distributed_jbm);
+    let distributedAfter = distributedJbm;
+    let remainingAfter = capJbm > distributedJbm ? capJbm - distributedJbm : 0n;
+
+    const allocationRows = await trx<ClaimAllocationRow[]>`
+      SELECT
+        identity_key,
+        identity_source,
+        identity_value,
+        chain,
+        token_address,
+        period_id,
+        heat_degrees::text AS heat_degrees,
+        reward_jbm::text AS reward_jbm,
+        wallets_snapshot,
+        created_at::text AS created_at,
+        claimed_at::text AS claimed_at,
+        claimant_wallet,
+        claim_nonce,
+        signature,
+        amount_wei::text AS amount_wei,
+        deadline
+      FROM ${db(CONFIG.SCHEMA)}.claim_daily_allocations
+      WHERE identity_key = ${identity.identity_key}
+        AND period_id = ${periodId}
+      FOR UPDATE
+    `;
+
+    if (allocationRows.length === 0) {
+      throw new ApiError(500, "allocation_failed", "Could not resolve claim allocation");
+    }
+
+    const lockedAllocations = allocationRows
+      .map((row) => parseAllocation(row))
+      .filter((row) => row.reward_jbm_bigint > 0n || getReservedJbm(row.amount_wei) > 0n)
+      .sort((a, b) => {
+        const keyA = `${a.chain}:${a.token_address}`;
+        const keyB = `${b.chain}:${b.token_address}`;
+        return keyA.localeCompare(keyB);
+      });
+
+    if (lockedAllocations.length === 0) {
+      throw new ApiError(409, "nothing_to_claim", "No claimable JBM for this period");
+    }
+
+    const grantedRows: Array<{
+      chain: "base" | "ethereum" | "solana";
+      token_address: string;
+      granted_jbm: bigint;
+      amount_wei: bigint;
+    }> = [];
+
+    for (const row of lockedAllocations) {
+      const hasReservedAmount = parseNumericBigInt(row.amount_wei) > 0n;
+      const grantedJbm = hasReservedAmount
+        ? getReservedJbm(row.amount_wei)
+        : minBigInt(row.reward_jbm_bigint, remainingAfter);
+
+      if (grantedJbm <= 0n) continue;
+
+      if (!hasReservedAmount) {
+        distributedAfter += grantedJbm;
+        remainingAfter = capJbm > distributedAfter ? capJbm - distributedAfter : 0n;
+      }
+
+      grantedRows.push({
+        chain: row.chain,
+        token_address: row.token_address,
+        granted_jbm: grantedJbm,
+        amount_wei: parseUnits(grantedJbm.toString(), 18),
+      });
+    }
+
+    if (grantedRows.length === 0) {
+      throw new ApiError(409, "daily_cap_reached", "Daily claim cap reached");
+    }
+
+    if (distributedAfter !== distributedJbm) {
+      await trx`
+        UPDATE ${db(CONFIG.SCHEMA)}.claim_period_caps
+        SET
+          distributed_jbm = ${distributedAfter.toString()},
+          updated_at = NOW()
+        WHERE period_id = ${periodId}
+      `;
+    }
+
+    const totalGrantedJbm = grantedRows.reduce((sum, row) => sum + row.granted_jbm, 0n);
+    const amountWei = parseUnits(totalGrantedJbm.toString(), 18);
+    const sig = await signer.signTypedData({
+      domain: {
+        ...MEMETICS_EIP712_DOMAIN,
+        verifyingContract: contractAddress,
+      },
+      types: {
+        ClaimDailyMemes: [
+          { name: "profileId", type: "uint256" },
+          { name: "wallet", type: "address" },
+          { name: "periodId", type: "uint256" },
+          { name: "amount", type: "uint256" },
+          { name: "heatScore", type: "uint256" },
+          { name: "salt", type: "bytes32" },
+          { name: "deadline", type: "uint256" },
+        ],
+      },
+      primaryType: "ClaimDailyMemes",
+      message: {
+        profileId: BigInt(profileId),
+        wallet: claimWallet,
+        periodId: BigInt(periodId),
+        amount: amountWei,
+        heatScore: BigInt(heatScore),
+        salt,
+        deadline: BigInt(deadline),
+      },
+    });
+
+    for (const row of grantedRows) {
+      await trx`
+        UPDATE ${db(CONFIG.SCHEMA)}.claim_daily_allocations
+        SET
+          claimed_at = NULL,
+          claimant_wallet = ${claimWallet},
+          signature = ${sig},
+          amount_wei = ${row.amount_wei.toString()},
+          deadline = ${deadline}
+        WHERE identity_key = ${identity.identity_key}
+          AND chain = ${row.chain}
+          AND token_address = ${row.token_address}
+          AND period_id = ${periodId}
+      `;
+    }
+
+    return {
+      contract_address: contractAddress,
+      profile_id: profileId,
+      wallet: claimWallet,
+      period_id: periodId,
+      amount_jbm: totalGrantedJbm.toString(),
+      amount_wei: amountWei.toString(),
+      heat_score: heatScore,
+      salt,
+      deadline,
+      sig,
+      daily_cap_jbm: capJbm.toString(),
+      daily_distributed_jbm: distributedAfter.toString(),
+      daily_remaining_jbm: remainingAfter.toString(),
+    };
+  });
+
+  return c.json(response);
+});
+
+claimsRoute.post("/claims/memetics/confirm", requirePrivyAuth, async (c) => {
+  const rawClaims = c.get("privyClaims") as Record<string, unknown> | undefined;
+  const claims = rawClaims ?? null;
+  const privyUserId = getPrivyUserIdFromClaims(claims);
+  const body = await c.req.json<{
+    wallet?: unknown;
+  }>();
+  const authorizedWallets = await resolveAuthorizedClaimWallets(c, privyUserId);
+  const claimWallet = assertAuthorizedClaimWallet(
+    body.wallet,
+    c.get("walletAddress") as string | null | undefined,
+    authorizedWallets,
+  );
+  const profileId = await readWalletProfileId(claimWallet);
+  if (!profileId) {
+    throw new ApiError(
+      403,
+      "profile_required",
+      "Create your onchain profile and link this wallet before claiming rewards",
+    );
+  }
+
+  const periodId = getCurrentPeriodId();
+  const claimedToday = await isMemeticsDailyClaimed(profileId, periodId);
+  if (!claimedToday) {
+    throw new ApiError(409, "claim_pending", "Claim is not confirmed onchain yet");
+  }
+
+  const identity = await resolveIdentity({
+    requesterWallet: claimWallet,
+    claims,
+    allowClaimsEnrichment: true,
+  });
+
+  const rows = await db<Array<{ claimed_at: string }>>`
+    UPDATE ${db(CONFIG.SCHEMA)}.claim_daily_allocations
+    SET
+      claimed_at = COALESCE(claimed_at, NOW()),
+      claimant_wallet = ${claimWallet}
+    WHERE identity_key = ${identity.identity_key}
+      AND period_id = ${periodId}
+      AND COALESCE(amount_wei, 0) > 0
+    RETURNING claimed_at::text AS claimed_at
+  `;
+
+  if (rows.length === 0) {
+    throw new ApiError(404, "allocation_not_found", "Claim allocation not found");
+  }
+
+  return c.json({
+    ok: true,
+    claimed_at: rows[0].claimed_at,
+    wallet: claimWallet,
+    profile_id: profileId,
+    period_id: periodId,
   });
 });
 

@@ -9,8 +9,10 @@
   "scripts": {
     "build:frontend": "./scripts/build.sh",
     "deploy:backend": "./scripts/deploy-backend.sh",
-    "dev:backend": "bun --cwd backend run dev",
-    "dev:frontend": "bun --cwd island run dev",
-    "typecheck": "bun --cwd backend run typecheck && bun --cwd island run typecheck"
+    "dev:backend": "cd backend && bun run dev",
+    "dev:frontend": "cd island && bun run dev",
+    "typecheck:backend": "cd backend && bun run typecheck",
+    "typecheck:frontend": "cd island && bun run typecheck",
+    "typecheck": "bun run typecheck:backend && bun run typecheck:frontend"
   }
 }

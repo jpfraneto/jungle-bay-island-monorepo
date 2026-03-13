@@ -6,10 +6,10 @@ import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
 import { JBM_ADDRESS } from "../utils/constants";
 import { formatJbmAmount } from "../utils/formatters";
 import {
-  MEMETICS_CONTRACT_ADDRESS,
+  COMMISSION_MANAGER_CONTRACT_ADDRESS,
+  commissionManagerAbi,
   erc20ApprovalAbi,
   getMemeticsErrorMessage,
-  memeticsAbi,
 } from "../utils/memetics";
 import {
   normalizeCommissionDetailResponse,
@@ -54,7 +54,7 @@ function buildDefaultDeadlineValue(): string {
 function deriveClaimDeadlinePreview(value: string): string {
   const delivery = new Date(value);
   if (Number.isNaN(delivery.getTime())) {
-    return "A claim window will be derived automatically after you pick a valid deadline.";
+    return "An acceptance window will open automatically when you select an artist.";
   }
 
   const deliveryUnix = Math.floor(delivery.getTime() / 1000);
@@ -64,10 +64,10 @@ function deriveClaimDeadlinePreview(value: string): string {
     nowUnix + 7 * 24 * 60 * 60,
   );
   if (claimUnix <= nowUnix) {
-    return "Pick a delivery deadline at least 48 hours away so artists have time to claim the job.";
+    return "Pick a delivery deadline at least 48 hours away so the selected artist has time to accept.";
   }
 
-  return `Artists will have until ${new Date(claimUnix * 1000).toLocaleString()} to claim after you approve them.`;
+  return `Once you select an artist, they will have until ${new Date(claimUnix * 1000).toLocaleString()} to accept the job.`;
 }
 
 export default function CommissionCreateModal({
@@ -230,8 +230,17 @@ export default function CommissionCreateModal({
         throw new Error("VITE_JBM_ADDRESS is not configured for Base.");
       }
 
-      if (!isHexAddress(MEMETICS_CONTRACT_ADDRESS)) {
-        throw new Error("VITE_MEMETICS_CONTRACT_ADDRESS is not configured.");
+      const commissionManagerAddress = isHexAddress(
+        draft.commission_manager_address ?? draft.contract_address,
+      )
+        ? (draft.commission_manager_address ?? draft.contract_address)
+        : COMMISSION_MANAGER_CONTRACT_ADDRESS;
+      if (!isHexAddress(commissionManagerAddress)) {
+        throw new Error("VITE_COMMISSION_MANAGER_CONTRACT_ADDRESS is not configured.");
+      }
+
+      if (!draft.bungalow.contract_bungalow_id) {
+        throw new Error("This bungalow does not have an onchain id yet.");
       }
 
       if (selectedWallet && selectedWallet.toLowerCase() !== activeWallet?.address.toLowerCase()) {
@@ -249,7 +258,7 @@ export default function CommissionCreateModal({
         address: JBM_ADDRESS,
         abi: erc20ApprovalAbi,
         functionName: "allowance",
-        args: [address, MEMETICS_CONTRACT_ADDRESS],
+        args: [address, commissionManagerAddress],
       });
 
       if (allowance < requiredBudgetWei) {
@@ -258,7 +267,7 @@ export default function CommissionCreateModal({
           address: JBM_ADDRESS,
           abi: erc20ApprovalAbi,
           functionName: "approve",
-          args: [MEMETICS_CONTRACT_ADDRESS, requiredBudgetWei],
+          args: [commissionManagerAddress, requiredBudgetWei],
           account: address,
           chain: undefined,
         });
@@ -272,14 +281,14 @@ export default function CommissionCreateModal({
 
       setStatus("Creating the onchain commission escrow...");
       const hash = await walletClient.writeContract({
-        address: MEMETICS_CONTRACT_ADDRESS,
-        abi: memeticsAbi,
+        address: commissionManagerAddress,
+        abi: commissionManagerAbi,
         functionName: "createCommission",
         args: [
-          draft.brief_uri,
-          requiredBudgetWei,
-          BigInt(draft.claim_deadline),
+          BigInt(draft.bungalow.contract_bungalow_id),
           BigInt(draft.delivery_deadline),
+          requiredBudgetWei,
+          draft.brief_uri,
         ],
         account: address,
         chain: undefined,
@@ -448,7 +457,7 @@ export default function CommissionCreateModal({
             />
           </label>
           <div className={styles.previewCard}>
-            <strong>Claim window</strong>
+            <strong>Acceptance window</strong>
             <span>{deadlinePreview}</span>
           </div>
         </section>

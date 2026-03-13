@@ -19,8 +19,9 @@ export default function Layout() {
   const location = useLocation();
   const { bungalows, isLoading, error } = useHomeTeam();
 
-  const isIslandRoute = location.pathname === "/";
-  const showSidebar = true;
+  const isIslandRoute = location.pathname === "/island";
+  const isLandingRoute = location.pathname === "/";
+  const showSidebar = !isLandingRoute;
   const sidebarOpen =
     sidebarState.open && sidebarState.pathname === location.pathname;
 

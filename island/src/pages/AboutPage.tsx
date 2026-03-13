@@ -31,6 +31,43 @@ export default function AboutPage() {
       </article>
 
       <article className={styles.card}>
+        <h2 className={styles.heading}>The Current Onchain Model</h2>
+        <p>
+          Jungle Bay Island now runs on four contracts with one clear graph.
+          <strong> IslandIdentity</strong> is the root of personhood, linked
+          wallets, bungalow heat, and daily JBM eligibility.{" "}
+          <strong>JungleBayIsland</strong> is the bungalow NFT registry and the
+          canonical resolver from any linked asset into the same place.
+          <strong> Bodega</strong> lists and installs items into bungalows, and
+          the first successful install activates the permanent JBM bond.
+          <strong> CommissionManager</strong> turns a bungalow plus a budget
+          into a full onchain creative workflow.
+        </p>
+        <p>
+          The blockchain is the durable write layer. The backend exists to sign
+          only the small set of actions the contracts require, confirm
+          receipts, index events, and serve the fast read model the UI needs.
+        </p>
+      </article>
+
+      <article className={styles.card}>
+        <h2 className={styles.heading}>The New Front Door</h2>
+        <p>
+          The Island now opens through a server-guided landing shell instead of
+          dropping everyone straight into the same interface. The backend makes
+          the first routing decision from the request itself: mobile or
+          desktop, logged in or not, and whether the user should be entering
+          the island, their profile, or the market loops next.
+        </p>
+        <p>
+          X is the beginning of the relationship. That handle anchors the user
+          account, then wallets are linked under it, and then the contract
+          becomes the durable record for bungalow, bodega, claim, and
+          commission state.
+        </p>
+      </article>
+
+      <article className={styles.card}>
         <h2 className={styles.heading}>What The Island Optimizes For</h2>
         <ul className={styles.list}>
           <li>
@@ -108,6 +145,13 @@ export default function AboutPage() {
             supporters backing the same CA, or the JBAC shortcut. That now
             happens as a Memetics onchain petition flow instead of a separate
             construction-fee transfer.
+          </li>
+          <li>
+            <strong>Payment can replace formal qualification</strong> &mdash;
+            if a user does not meet the construction thresholds, the backend
+            can quote a USDC amount at 0.1% of token market cap, verify the
+            payment transaction, and use the contract owner path to create the
+            bungalow onchain for that user&apos;s linked profile.
           </li>
           <li>
             <strong>Assets live inside the bungalow</strong> &mdash; one
@@ -211,14 +255,14 @@ export default function AboutPage() {
         <h2 className={styles.heading}>Identity And Wallet Ownership</h2>
         <p>
           The Island now has two aligned identity layers on purpose. Your app
-          session is still your Privy account, but contract-native actions now
-          route through a Memetics onchain profile that starts from your X
-          handle and can hold multiple linked wallets.
+          session now starts from an X login, and contract-native actions route
+          through a Memetics onchain profile that starts from that same handle
+          and can hold multiple linked wallets.
         </p>
         <ul className={styles.list}>
           <li>
             <strong>Session identity</strong> &mdash; authenticated frontend
-            flows anchor to your Privy account, not to whichever wallet is
+            flows anchor to your X-backed account, not to whichever wallet is
             active in the moment.
           </li>
           <li>
@@ -227,10 +271,9 @@ export default function AboutPage() {
             that onchain profile can sign those contract calls.
           </li>
           <li>
-            <strong>Handles are X-based</strong> &mdash; email users can claim a
-            handle by linking X; X-login users are verified from login; that
-            handle then becomes the readable entry point for the onchain
-            profile.
+            <strong>Handles are X-based</strong> &mdash; X is now the only
+            login path, and that verified handle becomes the readable entry
+            point for the onchain profile.
           </li>
           <li>
             <strong>Main wallet is explicit</strong> &mdash; users can choose
@@ -260,15 +303,16 @@ export default function AboutPage() {
             for, the prompt, the delivery deadline, and the JBM budget.
           </li>
           <li>
-            <strong>Artists gather before the contract claim</strong> &mdash;
-            applications happen in the product first, so a requester can choose
-            the right artist before the approved artist claims the job onchain.
+            <strong>Artist selection now lives onchain</strong> &mdash;
+            artists apply against the commission itself, the requester selects
+            one application onchain, and only that selected artist can accept
+            the job and carry it forward.
           </li>
           <li>
             <strong>Money still lives onchain</strong> &mdash; once the
-            commission is opened, the budget is locked in Memetics escrow and
-            the payout only resolves through the contract&apos;s settlement
-            path.
+            commission is opened, the budget is locked in CommissionManager
+            escrow and the payout only resolves through the contract&apos;s
+            settlement path.
           </li>
           <li>
             <strong>The bungalow stays central</strong> &mdash; the work is not

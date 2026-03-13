@@ -69,6 +69,9 @@ function pickFallbackWallet(
 
 export function usePrivyBaseWallet() {
   const { authenticated, connectWallet, login, user } = usePrivy();
+  const hasXSession =
+    typeof user?.twitter?.username === "string" &&
+    user.twitter.username.trim().length > 0;
   const { wallets } = useWallets();
   const { wallet: sdkActiveWallet, setActiveWallet: setPrivyActiveWallet } =
     useActiveWallet();
@@ -140,7 +143,11 @@ export function usePrivyBaseWallet() {
   const requireWallet = useCallback(async () => {
     if (!authenticated) {
       login();
-      throw new Error("Connect your wallet first");
+      throw new Error("Sign in with X first");
+    }
+
+    if (!hasXSession) {
+      throw new Error("This session is no longer valid. Sign out and sign back in with X.");
     }
 
     if (!activeWallet) {
@@ -148,7 +155,7 @@ export function usePrivyBaseWallet() {
         walletChainType: getPrivyWalletChainType(),
         walletList: getPrivyWalletList(),
       });
-      throw new Error("Connect an external Ethereum wallet in Privy");
+      throw new Error("Connect an external Ethereum wallet after signing in with X");
     }
 
     if (!isHexAddress(activeWallet.address)) {
@@ -175,7 +182,7 @@ export function usePrivyBaseWallet() {
       wallet: activeWallet,
       walletClient,
     };
-  }, [activeWallet, authenticated, connectWallet, login, privyUserId]);
+  }, [activeWallet, authenticated, connectWallet, hasXSession, login, privyUserId]);
 
   return {
     activeWallet,

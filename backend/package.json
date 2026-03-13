@@ -4,6 +4,7 @@
     "dev": "bun --env-file=.env.local --hot src/index.ts",
     "start": "bun --watch --env-file=.env.local src/index.ts",
     "start:3000": "PORT=3000 bun --env-file=.env.local src/index.ts",
+    "test": "bun --env-file=.env.local test",
     "typecheck": "bunx tsc --noEmit",
     "migrate:v13": "bun --env-file=.env.local scripts/migrate-v13.ts",
     "migrate:v14": "bun --env-file=.env.local scripts/migrate-v14.ts",

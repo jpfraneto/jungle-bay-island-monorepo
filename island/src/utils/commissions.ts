@@ -3,6 +3,7 @@ import type { DirectoryBungalow } from "./bodega";
 export type CommissionStatus =
   | "draft"
   | "open"
+  | "selected"
   | "claimed"
   | "submitted"
   | "disputed"
@@ -10,10 +11,13 @@ export type CommissionStatus =
   | "cancelled";
 
 export type CommissionApplicationStatus =
+  | "draft"
   | "pending"
-  | "approved"
+  | "selected"
+  | "accepted"
   | "rejected"
-  | "withdrawn";
+  | "withdrawn"
+  | "expired";
 
 export interface CommissionRecord {
   brief_id: string;
@@ -59,6 +63,8 @@ export interface CommissionRecord {
 
 export interface CommissionApplication {
   id: number;
+  application_ref: string | null;
+  application_uri: string | null;
   commission_id: number;
   artist_privy_user_id: string;
   artist_wallet: string;
@@ -118,6 +124,7 @@ export interface CommissionDraftResponse {
   claim_deadline: number;
   delivery_deadline: number;
   contract_address: string | null;
+  commission_manager_address?: string | null;
 }
 
 function asObject(input: unknown): Record<string, unknown> {
@@ -240,6 +247,8 @@ export function normalizeCommissionApplication(
 
   return {
     id,
+    application_ref: asString(item.application_ref) || null,
+    application_uri: asString(item.application_uri) || null,
     commission_id: commissionId,
     artist_privy_user_id: asString(item.artist_privy_user_id),
     artist_wallet: artistWallet,
@@ -356,6 +365,8 @@ export function normalizeCommissionDraftResponse(
     claim_deadline: asNumber(payload.claim_deadline),
     delivery_deadline: asNumber(payload.delivery_deadline),
     contract_address: asString(payload.contract_address) || null,
+    commission_manager_address:
+      asString(payload.commission_manager_address) || null,
   };
 }
 
@@ -365,6 +376,8 @@ export function getCommissionStatusLabel(status: CommissionStatus): string {
       return "Open"
     case "claimed":
       return "Claimed"
+    case "selected":
+      return "Selected"
     case "submitted":
       return "Submitted"
     case "disputed":
@@ -384,6 +397,8 @@ export function getCommissionStatusTone(status: CommissionStatus): string {
       return "open"
     case "claimed":
       return "claimed"
+    case "selected":
+      return "selected"
     case "submitted":
       return "submitted"
     case "completed":

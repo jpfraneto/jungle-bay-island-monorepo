@@ -4,8 +4,8 @@ import { JBM_ADDRESS, TREASURY_ADDRESS } from "../utils/constants";
 import { jbmAbi } from "../utils/jbmAbi";
 import { usePrivyBaseWallet } from "./usePrivyBaseWallet";
 
-function isHexAddress(value: string): value is `0x${string}` {
-  return /^0x[0-9a-fA-F]{40}$/.test(value);
+function isHexAddress(value: string | null | undefined): value is `0x${string}` {
+  return typeof value === "string" && /^0x[0-9a-fA-F]{40}$/.test(value);
 }
 
 export function useJBMTransfer() {
@@ -15,11 +15,13 @@ export function useJBMTransfer() {
 
   const transfer = useCallback(
     async (amountJbm: number | string) => {
-      if (!isHexAddress(JBM_ADDRESS)) {
+      const jbmAddress = JBM_ADDRESS;
+      if (!isHexAddress(jbmAddress)) {
         throw new Error("Invalid VITE_JBM_ADDRESS");
       }
 
-      if (!isHexAddress(TREASURY_ADDRESS)) {
+      const treasuryAddress = TREASURY_ADDRESS;
+      if (!isHexAddress(treasuryAddress)) {
         throw new Error("Set a valid VITE_TREASURY_ADDRESS");
       }
 
@@ -27,7 +29,7 @@ export function useJBMTransfer() {
         throw new Error("Missing Base public client");
       }
 
-      const code = await publicClient.getCode({ address: JBM_ADDRESS });
+      const code = await publicClient.getCode({ address: jbmAddress });
       if (!code || code === "0x") {
         throw new Error(
           "VITE_JBM_ADDRESS must be a deployed ERC-20 contract on Base",
@@ -35,7 +37,7 @@ export function useJBMTransfer() {
       }
 
       const decimals = await publicClient.readContract({
-        address: JBM_ADDRESS,
+        address: jbmAddress,
         abi: jbmAbi,
         functionName: "decimals",
       });
@@ -47,7 +49,7 @@ export function useJBMTransfer() {
 
       const { address, walletClient } = await requireWallet();
       const currentBalance = await publicClient.readContract({
-        address: JBM_ADDRESS,
+        address: jbmAddress,
         abi: jbmAbi,
         functionName: "balanceOf",
         args: [address],
@@ -75,10 +77,10 @@ export function useJBMTransfer() {
       let hash: `0x${string}`;
       try {
         hash = await walletClient.writeContract({
-          address: JBM_ADDRESS,
+          address: jbmAddress,
           abi: jbmAbi,
           functionName: "transfer",
-          args: [TREASURY_ADDRESS, amountBaseUnits],
+          args: [treasuryAddress, amountBaseUnits],
           account: address,
         });
       } finally {
@@ -100,9 +102,9 @@ export function useJBMTransfer() {
 
         const hasExpectedTransfer = transferEvents.some(
           (event) =>
-            event.address.toLowerCase() === JBM_ADDRESS.toLowerCase() &&
+            event.address.toLowerCase() === jbmAddress.toLowerCase() &&
             event.args.from?.toLowerCase() === address.toLowerCase() &&
-            event.args.to?.toLowerCase() === TREASURY_ADDRESS.toLowerCase() &&
+            event.args.to?.toLowerCase() === treasuryAddress.toLowerCase() &&
             event.args.value === amountBaseUnits,
         );
 

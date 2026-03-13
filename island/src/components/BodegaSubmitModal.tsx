@@ -65,6 +65,10 @@ interface PublishEligibility {
   can_publish: boolean;
 }
 
+function isHexAddress(value: string | null | undefined): value is `0x${string}` {
+  return typeof value === "string" && /^0x[0-9a-fA-F]{40}$/.test(value);
+}
+
 /**
  * Restores a pending onchain listing transaction so retries can survive refreshes.
  */
@@ -824,6 +828,9 @@ export default function BodegaSubmitModal({
         }
 
         const { address, walletClient } = await requireWallet();
+        if (!isHexAddress(MEMETICS_CONTRACT_ADDRESS)) {
+          throw new Error("Memetics contract address is not configured.");
+        }
         const artifactUri = getOnchainArtifactUri({
           assetType,
           previewUrl: resolvedPreviewUrl,
@@ -1332,7 +1339,7 @@ export default function BodegaSubmitModal({
                   type="button"
                   className={styles.secondaryButton}
                   onClick={() => {
-                    navigate("/");
+                    navigate("/island");
                     onClose();
                   }}
                 >

@@ -1,307 +1,218 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { usePrivy } from "@privy-io/react-auth";
-import { useNavigate } from "react-router-dom";
-import CommissionCreateModal from "../components/CommissionCreateModal";
-import { useBungalowDirectory } from "../hooks/useBungalowDirectory";
-import { formatAddress, formatJbmAmount } from "../utils/formatters";
-import {
-  formatCommissionDate,
-  getCommissionBungalowLabel,
-  getCommissionPath,
-  getCommissionStatusLabel,
-  getCommissionStatusTone,
-  normalizeCommissionListResponse,
-  type CommissionListResponse,
-} from "../utils/commissions";
+import { type Address, parseUnits } from "viem";
+import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
 import styles from "../styles/commissions-page.module.css";
+import {
+  commissionManagerAbi,
+  confirmTrackedTx,
+  fetchAuthedJson,
+  fetchJson,
+  formatUnixDate,
+  formatUsdcAmount,
+  normalizeTxError,
+  ONCHAIN_CONTRACTS,
+  trackSubmittedTx,
+  type OnchainCommissionListItem,
+  type OnchainMeResponse,
+} from "../utils/onchain";
 
-type CommissionScope = "open" | "all" | "mine" | "applied" | "assigned";
-
-const SCOPE_LABELS: Record<CommissionScope, string> = {
-  open: "Open",
-  all: "All",
-  mine: "Mine",
-  applied: "Applied",
-  assigned: "Assigned",
-};
-
-const AUTH_REQUIRED_SCOPES = new Set<CommissionScope>([
-  "mine",
-  "applied",
-  "assigned",
-]);
-
-function getEmptyListResponse(scope: CommissionScope): CommissionListResponse {
-  return {
-    items: [],
-    total: 0,
-    scope,
-    viewer: {
-      authenticated: false,
-      profile_id: null,
-      wallets: [],
-    },
-  };
+interface CommissionListResponse {
+  items: OnchainCommissionListItem[];
+  scope: string;
+  viewer_profile_id: number | null;
 }
 
+const SCOPES = ["open", "requesting", "working", "resolved"] as const;
+
 export default function CommissionsPage() {
-  const navigate = useNavigate();
-  const { authenticated, getAccessToken, login } = usePrivy();
-  const {
-    bungalows,
-    isLoading: isDirectoryLoading,
-  } = useBungalowDirectory({
-    enabled: true,
-    fetchAll: true,
-    limit: 200,
+  const { authenticated, getAccessToken } = usePrivy();
+  const { publicClient, requireWallet } = usePrivyBaseWallet();
+  const [scope, setScope] = useState<(typeof SCOPES)[number]>("open");
+  const [data, setData] = useState<CommissionListResponse | null>(null);
+  const [me, setMe] = useState<OnchainMeResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [txBusy, setTxBusy] = useState(false);
+  const [form, setForm] = useState({
+    bungalowId: "",
+    promptUri: "",
+    budgetUsdc: "",
+    deadline: "",
   });
 
-  const [scope, setScope] = useState<CommissionScope>("open");
-  const [data, setData] = useState<CommissionListResponse>(
-    getEmptyListResponse("open"),
-  );
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [refreshToken, setRefreshToken] = useState(0);
-
-  const loadCommissions = useCallback(async () => {
-    if (AUTH_REQUIRED_SCOPES.has(scope) && !authenticated) {
-      setData(getEmptyListResponse(scope));
-      setIsLoading(false);
-      setError("Connect your account to see your personal commission flows.");
-      return;
-    }
-
+  const refetch = async () => {
     setIsLoading(true);
     setError(null);
-
     try {
-      const headers: Record<string, string> = {};
-      if (authenticated) {
-        const token = await getAccessToken();
-        if (token) {
-          headers.Authorization = `Bearer ${token}`;
-        }
-      }
-
-      const response = await fetch(`/api/commissions?scope=${scope}&limit=48`, {
-        headers,
-        cache: "no-store",
-      });
-      const payload = await response.json().catch(() => null);
-      if (!response.ok) {
-        const message =
-          typeof payload?.error === "string"
-            ? payload.error
-            : `Request failed (${response.status})`;
-        throw new Error(message);
-      }
-
-      setData(normalizeCommissionListResponse(payload));
-    } catch (loadError) {
-      setData(getEmptyListResponse(scope));
+      const [listPayload, mePayload] = await Promise.all([
+        fetchJson<CommissionListResponse>(`/api/onchain/commissions?scope=${scope}`),
+        authenticated
+          ? fetchAuthedJson<OnchainMeResponse>("/api/onchain/me", getAccessToken)
+          : Promise.resolve(null),
+      ]);
+      setData(listPayload);
+      setMe(mePayload);
+    } catch (fetchError) {
       setError(
-        loadError instanceof Error
-          ? loadError.message
-          : "Failed to load commissions",
+        fetchError instanceof Error ? fetchError.message : "Failed to load commissions",
       );
     } finally {
       setIsLoading(false);
     }
-  }, [authenticated, getAccessToken, scope]);
+  };
 
   useEffect(() => {
-    void loadCommissions();
-  }, [loadCommissions, refreshToken]);
+    void refetch();
+  }, [authenticated, scope]);
+
+  const handlePublish = async () => {
+    setTxBusy(true);
+    setError(null);
+    setStatus("Publishing commission...");
+
+    try {
+      const { address, walletClient } = await requireWallet();
+      const bungalowId = Number.parseInt(form.bungalowId, 10);
+      const budget = parseUnits(form.budgetUsdc.trim(), 6);
+      const deadline = Math.floor(new Date(form.deadline).getTime() / 1000);
+
+      const txHash = await walletClient.writeContract({
+        account: address as Address,
+        address: ONCHAIN_CONTRACTS.commissionManager,
+        abi: commissionManagerAbi,
+        functionName: "publishCommission",
+        args: [BigInt(bungalowId), form.promptUri.trim(), budget, BigInt(deadline)],
+      });
+
+      await trackSubmittedTx({
+        getAccessToken,
+        txHash,
+        action: "commission_publish",
+        functionName: "publishCommission",
+        contractAddress: ONCHAIN_CONTRACTS.commissionManager,
+        wallet: address,
+        bungalowId,
+      });
+
+      setStatus("Waiting for confirmation...");
+      await publicClient.waitForTransactionReceipt({ hash: txHash });
+      await confirmTrackedTx(getAccessToken, txHash);
+      await refetch();
+      setStatus("Commission published.");
+    } catch (txError) {
+      setError(normalizeTxError(txError, "Publish failed"));
+      setStatus(null);
+    } finally {
+      setTxBusy(false);
+    }
+  };
 
   return (
     <section className={styles.page}>
-      <header className={styles.hero}>
-        <div className={styles.heroCopy}>
-          <p className={styles.kicker}>Commission Board</p>
-          <h1>Creative work routed through bungalow culture.</h1>
+      <div className={styles.hero}>
+        <div>
+          <p className={styles.kicker}>Commission board</p>
+          <h1>Publish work with a bungalow, a budget, and a deadline.</h1>
           <p className={styles.summary}>
-            Requesters lock JBM in onchain escrow, artists apply, and one
-            approved artist can claim the piece and get paid when the work lands.
+            Publishing does not lock USDC. Locking happens only when you select
+            an artist on the detail page. Review windows, timeout payout, and
+            missed-deadline reclaim are all enforced onchain.
           </p>
         </div>
-
-        <div className={styles.heroActions}>
-          <button
-            type="button"
-            className={styles.primaryButton}
-            onClick={() => {
-              if (!authenticated) {
-                login();
-                return;
-              }
-              setIsCreateOpen(true);
-            }}
-          >
-            Create commission
-          </button>
-          <div className={styles.heroStat}>
-            <strong>{data.total}</strong>
-            <span>{SCOPE_LABELS[scope].toLowerCase()} commissions</span>
-          </div>
+        <div className={styles.callout}>
+          <strong>USDC lock spender</strong>
+          <span>{ONCHAIN_CONTRACTS.commissionManager}</span>
         </div>
-      </header>
+      </div>
 
-      <div className={styles.scopeBar}>
-        {(Object.keys(SCOPE_LABELS) as CommissionScope[]).map((entry) => (
+      {error ? <p className={styles.error}>{error}</p> : null}
+      {status ? <p className={styles.status}>{status}</p> : null}
+      {isLoading ? <p className={styles.loading}>Loading commission board...</p> : null}
+
+      <div className={styles.formCard}>
+        <span className={styles.cardLabel}>Publish commission</span>
+        <label>
+          Bungalow id
+          <input
+            value={form.bungalowId}
+            onChange={(event) => setForm((current) => ({ ...current, bungalowId: event.target.value }))}
+            placeholder="123"
+          />
+        </label>
+        <label>
+          Prompt URI
+          <input
+            value={form.promptUri}
+            onChange={(event) => setForm((current) => ({ ...current, promptUri: event.target.value }))}
+            placeholder="ipfs://..."
+          />
+        </label>
+        <label>
+          Budget in USDC
+          <input
+            value={form.budgetUsdc}
+            onChange={(event) => setForm((current) => ({ ...current, budgetUsdc: event.target.value }))}
+            placeholder="250"
+          />
+        </label>
+        <label>
+          Submission deadline
+          <input
+            type="datetime-local"
+            value={form.deadline}
+            onChange={(event) => setForm((current) => ({ ...current, deadline: event.target.value }))}
+          />
+        </label>
+        <button
+          type="button"
+          className={styles.primaryButton}
+          onClick={() => void handlePublish()}
+          disabled={txBusy || !me?.profile || !form.bungalowId || !form.promptUri || !form.budgetUsdc || !form.deadline}
+        >
+          Publish commission
+        </button>
+        {!me?.profile ? (
+          <p className={styles.inlineHint}>Create your profile first before publishing or applying.</p>
+        ) : null}
+      </div>
+
+      <div className={styles.scopeRow}>
+        {SCOPES.map((entry) => (
           <button
             key={entry}
             type="button"
-            className={`${styles.scopeButton} ${
-              scope === entry ? styles.scopeButtonActive : ""
-            }`}
-            onClick={() => {
-              if (AUTH_REQUIRED_SCOPES.has(entry) && !authenticated) {
-                login();
-                return;
-              }
-              setScope(entry);
-            }}
+            className={scope === entry ? styles.scopeActive : styles.scopeButton}
+            onClick={() => setScope(entry)}
           >
-            {SCOPE_LABELS[entry]}
+            {entry}
           </button>
         ))}
       </div>
 
-      {error ? (
-        <div className={styles.statusCard}>
-          <strong>Could not load the board.</strong>
-          <span>{error}</span>
-          <div className={styles.inlineActions}>
-            <button
-              type="button"
-              className={styles.secondaryButton}
-              onClick={() => {
-                void loadCommissions();
-              }}
-            >
-              Retry
-            </button>
-            {!authenticated ? (
-              <button
-                type="button"
-                className={styles.secondaryButton}
-                onClick={() => login()}
-              >
-                Connect account
-              </button>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
-
-      {isLoading ? (
-        <div className={styles.grid}>
-          {Array.from({ length: 6 }).map((_, index) => (
-            <div key={`commission-skeleton-${index}`} className={styles.skeletonCard} />
-          ))}
-        </div>
-      ) : null}
-
-      {!isLoading && data.items.length === 0 && !error ? (
-        <div className={styles.statusCard}>
-          <strong>No commissions in this lane yet.</strong>
-          <span>
-            {scope === "open"
-              ? "Open the first commission and set the tone for the island."
-              : "Switch lanes or create a new brief to get activity moving."}
-          </span>
-        </div>
-      ) : null}
-
-      {!isLoading && data.items.length > 0 ? (
-        <div className={styles.grid}>
-          {data.items.map((item) => (
-            <article
-              key={item.brief_id}
-              className={styles.card}
-              onClick={() => navigate(getCommissionPath(item.commission_id))}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  navigate(getCommissionPath(item.commission_id));
-                }
-              }}
-              role="button"
-              tabIndex={0}
-            >
-              <div className={styles.cardTop}>
-                <span
-                  className={styles.statusPill}
-                  data-tone={getCommissionStatusTone(item.status)}
-                >
-                  {getCommissionStatusLabel(item.status)}
-                </span>
-                <span className={styles.metaText}>
-                  due {formatCommissionDate(item.delivery_deadline)}
-                </span>
-              </div>
-
-              <h2>{item.rate_label}</h2>
-              <p className={styles.prompt}>{item.prompt}</p>
-
-              <dl className={styles.metaGrid}>
-                <div>
-                  <dt>Bungalow</dt>
-                  <dd>{getCommissionBungalowLabel(item)}</dd>
-                </div>
-                <div>
-                  <dt>Budget</dt>
-                  <dd>{formatJbmAmount(item.budget_jbm)}</dd>
-                </div>
-                <div>
-                  <dt>Requester</dt>
-                  <dd>
-                    {item.requester_handle
-                      ? `@${item.requester_handle}`
-                      : formatAddress(item.requester_wallet)}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Applications</dt>
-                  <dd>
-                    {item.applications_count}
-                    {item.pending_applications > 0
-                      ? ` (${item.pending_applications} pending)`
-                      : ""}
-                  </dd>
-                </div>
-              </dl>
-
-              <footer className={styles.cardFooter}>
-                {item.viewer_application ? (
-                  <span className={styles.viewerBadge}>
-                    You applied · {item.viewer_application.status}
-                  </span>
-                ) : null}
-                {item.approved_artist_handle ? (
-                  <span className={styles.viewerBadge}>
-                    Approved artist · @{item.approved_artist_handle}
-                  </span>
-                ) : null}
-                <span className={styles.openLink}>Open commission</span>
-              </footer>
-            </article>
-          ))}
-        </div>
-      ) : null}
-
-      <CommissionCreateModal
-        open={isCreateOpen}
-        bungalowOptions={bungalows}
-        isDirectoryLoading={isDirectoryLoading}
-        onClose={() => setIsCreateOpen(false)}
-        onCreated={() => {
-          setScope("mine");
-          setRefreshToken((current) => current + 1);
-        }}
-      />
+      <div className={styles.list}>
+        {data?.items.map((item) => (
+          <Link
+            key={item.commission_id}
+            to={`/commissions/${item.commission_id}`}
+            className={styles.listCard}
+          >
+            <div className={styles.itemHeader}>
+              <strong>Commission #{item.commission_id}</strong>
+              <span>{item.status}</span>
+            </div>
+            <p>{item.prompt_uri}</p>
+            <div className={styles.metaRow}>
+              <span>{formatUsdcAmount(item.budget_usdc)} USDC</span>
+              <span>{item.bungalow_name ?? `${item.seed_chain}:${item.seed_token_address}`}</span>
+              <span>{item.application_count} application(s)</span>
+              <span>{formatUnixDate(item.deadline_unix)}</span>
+            </div>
+          </Link>
+        ))}
+      </div>
     </section>
   );
 }

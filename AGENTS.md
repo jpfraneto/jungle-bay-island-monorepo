@@ -76,7 +76,7 @@ FINAL/
 | DB schema         | `"prod-v11"` (hardcoded in `backend/src/config.ts`)         |
 | Frontend          | React + Vite, TypeScript                                    |
 | Styling           | CSS Modules                                                 |
-| Auth              | Privy (JWT + linked accounts) + Agent API keys (X-API-Key)  |
+| Auth              | Privy (X login + linked wallets) + Agent API keys (X-API-Key) |
 | Web3              | Viem, Wagmi, Privy embedded wallets                         |
 | Identity          | Neynar (Farcaster), Privy (wallets + X/Twitter)             |
 | Chains            | Base (primary), Ethereum, Solana                            |
@@ -304,13 +304,14 @@ Always use: `base`, `ethereum`, or `solana` (lowercase).
 
 ## 8. Authentication System
 
-Privy handles wallet auth. The flow:
+Privy handles X-first auth plus linked-wallet identity. The flow:
 
-1. User connects wallet or logs in via Privy on the frontend
+1. User logs in with X via Privy on the frontend
 2. Frontend gets a JWT from Privy
 3. Frontend sends `Authorization: Bearer <jwt>` on API calls
 4. Backend verifies the JWT against Privy's public key (`PRIVY_VERIFICATION_KEY`)
-5. Wallet address is extracted from JWT claims or `linked_accounts`
+5. Backend only accepts Privy sessions that include an X account in `linked_accounts`
+6. Wallet addresses are extracted from JWT claims or linked-wallet records and used for signing/payment flows
 
 Agents (automated callers) use `X-API-Key`. Register via `POST /api/agents/register`.
 

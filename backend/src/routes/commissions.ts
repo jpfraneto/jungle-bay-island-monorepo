@@ -20,11 +20,13 @@ import { getCanonicalProjectContext } from '../services/canonicalProjects'
 import { ApiError } from '../services/errors'
 import {
   computeMemeticsPrimaryAssetKey,
-  decodeMemeticsLog,
+  decodeCommissionManagerLog,
   findMemeticsProfileByWallets,
+  getCommissionManagerContractAddress,
   inferMemeticsAssetKind,
+  readCommissionManagerApplications,
+  readCommissionManagerCommission,
   readMemeticsBungalowIdByAssetKey,
-  readMemeticsCommission,
   readMemeticsProfile,
   readWalletProfileId,
   toMemeticsAssetChain,
@@ -48,6 +50,7 @@ let commissionsShapePromise: Promise<void> | null = null
 type CommissionStatus =
   | 'draft'
   | 'open'
+  | 'selected'
   | 'claimed'
   | 'submitted'
   | 'disputed'
@@ -98,6 +101,10 @@ function asPositiveInt(input: string | null | undefined): number {
 }
 
 function createBriefId(): string {
+  return randomBytes(16).toString('hex')
+}
+
+function createApplicationRef(): string {
   return randomBytes(16).toString('hex')
 }
 
@@ -164,17 +171,38 @@ function deriveClaimDeadline(deliveryDeadlineUnix: number): number {
 function normalizeCommissionStatus(statusCode: number): CommissionStatus {
   switch (statusCode) {
     case 1:
-      return 'claimed'
+      return 'selected'
     case 2:
-      return 'submitted'
+      return 'claimed'
     case 3:
-      return 'disputed'
+      return 'submitted'
     case 4:
-      return 'completed'
+      return 'disputed'
     case 5:
+      return 'completed'
+    case 6:
       return 'cancelled'
     default:
       return 'open'
+  }
+}
+
+function normalizeApplicationStatus(statusCode: number): CommissionApplicationRow['status'] {
+  switch (statusCode) {
+    case 1:
+      return 'pending'
+    case 2:
+      return 'withdrawn'
+    case 3:
+      return 'selected'
+    case 4:
+      return 'accepted'
+    case 5:
+      return 'rejected'
+    case 6:
+      return 'expired'
+    default:
+      return 'draft'
   }
 }
 
@@ -230,7 +258,9 @@ function normalizeCommissionRow(row: CommissionRecordRow, extras?: {
 
 function normalizeApplicationRow(row: CommissionApplicationRow) {
   return {
-    id: row.id,
+    id: row.application_id ?? row.id,
+    application_ref: row.application_ref,
+    application_uri: row.application_uri,
     commission_id: row.commission_id,
     artist_privy_user_id: row.artist_privy_user_id,
     artist_wallet: row.artist_wallet,
@@ -323,6 +353,9 @@ async function ensureCommissionsShape(): Promise<void> {
       await db`
         CREATE TABLE IF NOT EXISTS ${db(CONFIG.SCHEMA)}.commission_applications (
           id BIGSERIAL PRIMARY KEY,
+          application_id BIGINT UNIQUE,
+          application_ref TEXT UNIQUE,
+          application_uri TEXT UNIQUE,
           commission_id BIGINT NOT NULL,
           artist_privy_user_id TEXT NOT NULL,
           artist_wallet TEXT NOT NULL,
@@ -336,6 +369,9 @@ async function ensureCommissionsShape(): Promise<void> {
       `
 
       for (const definition of [
+        'application_id BIGINT UNIQUE',
+        'application_ref TEXT UNIQUE',
+        'application_uri TEXT UNIQUE',
         'artist_profile_id BIGINT',
         'artist_handle TEXT',
         'message TEXT',
@@ -356,6 +392,8 @@ async function ensureCommissionsShape(): Promise<void> {
          ON "${CONFIG.SCHEMA}".commission_records (bungalow_chain, bungalow_token_address)`,
         `CREATE INDEX IF NOT EXISTS idx_commission_applications_commission
          ON "${CONFIG.SCHEMA}".commission_applications (commission_id, created_at ASC)`,
+        `CREATE INDEX IF NOT EXISTS idx_commission_applications_onchain
+         ON "${CONFIG.SCHEMA}".commission_applications (application_id)`,
         `CREATE INDEX IF NOT EXISTS idx_commission_applications_artist
          ON "${CONFIG.SCHEMA}".commission_applications (artist_profile_id, created_at DESC)`,
         `CREATE UNIQUE INDEX IF NOT EXISTS idx_commission_applications_unique_profile
@@ -468,7 +506,7 @@ function buildCommissionListWhere(input: {
     params.push(input.viewer.profileId)
     params.push(input.viewer.profileId)
     clause = `(cr.approved_artist_profile_id = $${params.length - 1} OR cr.artist_profile_id = $${params.length})
-      AND cr.status IN ('open', 'claimed', 'submitted', 'disputed')`
+      AND cr.status IN ('selected', 'claimed', 'submitted', 'disputed')`
   } else if (input.scope !== 'all') {
     throw new ApiError(400, 'invalid_scope', 'Unsupported commission scope')
   }
@@ -665,11 +703,12 @@ async function getViewerApplicationMap(
   const rows = await db<ViewerApplicationRow[]>`
     SELECT
       commission_id,
-      id AS application_id,
+      COALESCE(application_id, id) AS application_id,
       status
     FROM ${db(CONFIG.SCHEMA)}.commission_applications
     WHERE commission_id IN ${db(commissionIds)}
       AND artist_profile_id = ${viewerProfileId}
+      AND status <> 'draft'
   `
 
   return new Map(rows.map((row) => [row.commission_id, row]))
@@ -684,6 +723,9 @@ async function getCommissionApplications(
     return db<CommissionApplicationRow[]>`
       SELECT
         id,
+        application_id,
+        application_ref,
+        application_uri,
         commission_id,
         artist_privy_user_id,
         artist_wallet,
@@ -695,12 +737,15 @@ async function getCommissionApplications(
         updated_at::text AS updated_at
       FROM ${db(CONFIG.SCHEMA)}.commission_applications
       WHERE commission_id = ${commissionId}
+        AND status <> 'draft'
       ORDER BY
         CASE status
-          WHEN 'approved' THEN 0
-          WHEN 'pending' THEN 1
-          WHEN 'rejected' THEN 2
-          ELSE 3
+          WHEN 'selected' THEN 0
+          WHEN 'accepted' THEN 1
+          WHEN 'pending' THEN 2
+          WHEN 'rejected' THEN 3
+          WHEN 'expired' THEN 4
+          ELSE 5
         END,
         created_at ASC
     `
@@ -710,6 +755,9 @@ async function getCommissionApplications(
     return db<CommissionApplicationRow[]>`
       SELECT
         id,
+        application_id,
+        application_ref,
+        application_uri,
         commission_id,
         artist_privy_user_id,
         artist_wallet,
@@ -723,8 +771,10 @@ async function getCommissionApplications(
       WHERE commission_id = ${commissionId}
         AND (
           artist_profile_id = ${viewer.profileId}
-          OR status = 'approved'
+          OR status = 'selected'
+          OR status = 'accepted'
         )
+        AND status <> 'draft'
       ORDER BY created_at ASC
     `
   }
@@ -732,6 +782,9 @@ async function getCommissionApplications(
   return db<CommissionApplicationRow[]>`
     SELECT
       id,
+      application_id,
+      application_ref,
+      application_uri,
       commission_id,
       artist_privy_user_id,
       artist_wallet,
@@ -743,9 +796,163 @@ async function getCommissionApplications(
       updated_at::text AS updated_at
     FROM ${db(CONFIG.SCHEMA)}.commission_applications
     WHERE commission_id = ${commissionId}
-      AND status = 'approved'
+      AND (status = 'selected' OR status = 'accepted')
     ORDER BY created_at ASC
   `
+}
+
+function extractApplicationRefFromUri(uri: string | null | undefined): string | null {
+  const value = asString(uri)
+  if (!value) return null
+  const match = value.match(/\/api\/commissions\/applications\/([a-f0-9]+)$/i)
+  return match?.[1] ?? null
+}
+
+function decodeCommissionManagerReceiptLogs(receipt: Awaited<ReturnType<typeof publicClients.base.getTransactionReceipt>>) {
+  return receipt.logs
+    .map((log) =>
+      decodeCommissionManagerLog({
+        address: log.address,
+        data: log.data,
+        topics: log.topics as `0x${string}`[],
+      }),
+    )
+    .filter((log): log is NonNullable<ReturnType<typeof decodeCommissionManagerLog>> => Boolean(log))
+}
+
+async function resolveCommissionContractBungalowId(row: CommissionRecordRow): Promise<number | null> {
+  const chain = toSupportedChain(row.bungalow_chain)
+  if (!chain) return null
+
+  const projectContext = await getCanonicalProjectContext(chain, row.bungalow_token_address)
+  const primaryDeployment = projectContext.primaryDeployment
+  const tokenRegistry = await getTokenRegistry(primaryDeployment.token_address, primaryDeployment.chain)
+  const primaryAssetKey = computeMemeticsPrimaryAssetKey(
+    toMemeticsAssetChain(primaryDeployment.chain as SupportedChain),
+    inferMemeticsAssetKind({
+      chain: primaryDeployment.chain as SupportedChain,
+      decimals: tokenRegistry?.decimals ?? null,
+    }),
+    primaryDeployment.token_address,
+  )
+
+  return readMemeticsBungalowIdByAssetKey(primaryAssetKey)
+}
+
+async function syncCommissionApplicationsWithChain(commissionId: number): Promise<void> {
+  if (!commissionId) return
+
+  const [chainApplications, existingRows] = await Promise.all([
+    readCommissionManagerApplications(commissionId),
+    db<CommissionApplicationRow[]>`
+      SELECT
+        id,
+        application_id,
+        application_ref,
+        application_uri,
+        commission_id,
+        artist_privy_user_id,
+        artist_wallet,
+        artist_profile_id,
+        artist_handle,
+        message,
+        status,
+        created_at::text AS created_at,
+        updated_at::text AS updated_at
+      FROM ${db(CONFIG.SCHEMA)}.commission_applications
+      WHERE commission_id = ${commissionId}
+    `,
+  ])
+
+  if (chainApplications.length === 0) {
+    return
+  }
+
+  const byApplicationId = new Map(
+    existingRows
+      .filter((row) => typeof row.application_id === 'number' && row.application_id > 0)
+      .map((row) => [row.application_id as number, row]),
+  )
+  const byUri = new Map(
+    existingRows
+      .filter((row) => row.application_uri)
+      .map((row) => [row.application_uri as string, row]),
+  )
+
+  for (const chainApplication of chainApplications) {
+    const nextStatus = normalizeApplicationStatus(chainApplication.status)
+    const artistProfileId = chainApplication.artistProfileId > 0
+      ? chainApplication.artistProfileId
+      : null
+    const artistProfile = artistProfileId
+      ? await readMemeticsProfile(artistProfileId)
+      : null
+    const artistHandle = artistProfile?.handle ?? null
+    const artistWallet = artistProfile?.mainWallet ?? ''
+    const applicationRef = extractApplicationRefFromUri(chainApplication.applicationURI)
+    const existing = byApplicationId.get(chainApplication.id) ?? byUri.get(chainApplication.applicationURI)
+
+    if (!existing) {
+      await db`
+        INSERT INTO ${db(CONFIG.SCHEMA)}.commission_applications (
+          application_id,
+          application_ref,
+          application_uri,
+          commission_id,
+          artist_privy_user_id,
+          artist_wallet,
+          artist_profile_id,
+          artist_handle,
+          message,
+          status,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          ${chainApplication.id},
+          ${applicationRef},
+          ${chainApplication.applicationURI},
+          ${commissionId},
+          '',
+          ${artistWallet},
+          ${artistProfileId},
+          ${artistHandle},
+          NULL,
+          ${nextStatus},
+          ${new Date(chainApplication.createdAt * 1000).toISOString()},
+          NOW()
+        )
+      `
+      continue
+    }
+
+    const hasChanges =
+      existing.application_id !== chainApplication.id ||
+      existing.application_ref !== applicationRef ||
+      existing.application_uri !== chainApplication.applicationURI ||
+      existing.artist_profile_id !== artistProfileId ||
+      existing.artist_handle !== artistHandle ||
+      existing.artist_wallet !== artistWallet ||
+      existing.status !== nextStatus
+
+    if (!hasChanges) {
+      continue
+    }
+
+    await db`
+      UPDATE ${db(CONFIG.SCHEMA)}.commission_applications
+      SET
+        application_id = ${chainApplication.id},
+        application_ref = ${applicationRef},
+        application_uri = ${chainApplication.applicationURI},
+        artist_profile_id = ${artistProfileId},
+        artist_handle = ${artistHandle},
+        artist_wallet = ${artistWallet},
+        status = ${nextStatus},
+        updated_at = NOW()
+      WHERE id = ${existing.id}
+    `
+  }
 }
 
 async function syncCommissionRecordWithChain(
@@ -755,13 +962,16 @@ async function syncCommissionRecordWithChain(
     return row
   }
 
-  const chainCommission = await readMemeticsCommission(row.commission_id)
+  const chainCommission = await readCommissionManagerCommission(row.commission_id)
   if (!chainCommission || chainCommission.id === 0) {
     return row
   }
 
   const nextStatus = normalizeCommissionStatus(chainCommission.status)
-  const nextClaimDeadline = new Date(chainCommission.claimDeadline * 1000).toISOString()
+  const nextClaimDeadline =
+    chainCommission.acceptanceDeadline > 0
+      ? new Date(chainCommission.acceptanceDeadline * 1000).toISOString()
+      : row.claim_deadline
   const nextDeliveryDeadline = new Date(chainCommission.deliveryDeadline * 1000).toISOString()
   const nextSubmittedAt = chainCommission.submittedAt > 0
     ? new Date(chainCommission.submittedAt * 1000).toISOString()
@@ -770,9 +980,17 @@ async function syncCommissionRecordWithChain(
   const nextRequesterProfileId = chainCommission.requesterProfileId > 0
     ? chainCommission.requesterProfileId
     : null
-  const nextArtistProfileId = chainCommission.artistProfileId > 0
-    ? chainCommission.artistProfileId
+  const nextApprovedApplicationId = chainCommission.selectedApplicationId > 0
+    ? chainCommission.selectedApplicationId
     : null
+  const nextApprovedArtistProfileId =
+    nextApprovedApplicationId && chainCommission.artistProfileId > 0
+      ? chainCommission.artistProfileId
+      : null
+  const nextArtistProfileId =
+    chainCommission.status >= 2 && chainCommission.artistProfileId > 0
+      ? chainCommission.artistProfileId
+      : null
 
   let requesterHandle = row.requester_handle
   if (nextRequesterProfileId && nextRequesterProfileId !== row.requester_profile_id) {
@@ -780,12 +998,26 @@ async function syncCommissionRecordWithChain(
     requesterHandle = requesterProfile?.handle ?? requesterHandle
   }
 
+  let approvedArtistHandle = row.approved_artist_handle
+  let approvedArtistWallet = row.approved_artist_wallet
+  if (nextApprovedArtistProfileId) {
+    const approvedArtistProfile = await readMemeticsProfile(nextApprovedArtistProfileId)
+    approvedArtistHandle = approvedArtistProfile?.handle ?? approvedArtistHandle
+    approvedArtistWallet = approvedArtistProfile?.mainWallet ?? approvedArtistWallet
+  } else {
+    approvedArtistHandle = null
+    approvedArtistWallet = null
+  }
+
   let artistHandle = row.artist_handle
   let artistWallet = row.artist_wallet
-  if (nextArtistProfileId && nextArtistProfileId !== row.artist_profile_id) {
+  if (nextArtistProfileId) {
     const artistProfile = await readMemeticsProfile(nextArtistProfileId)
     artistHandle = artistProfile?.handle ?? artistHandle
     artistWallet = artistProfile?.mainWallet ?? artistWallet
+  } else {
+    artistHandle = null
+    artistWallet = null
   }
 
   const hasChanges =
@@ -796,6 +1028,10 @@ async function syncCommissionRecordWithChain(
     nextDeliverableUri !== row.deliverable_uri ||
     nextRequesterProfileId !== row.requester_profile_id ||
     requesterHandle !== row.requester_handle ||
+    nextApprovedApplicationId !== row.approved_application_id ||
+    nextApprovedArtistProfileId !== row.approved_artist_profile_id ||
+    approvedArtistHandle !== row.approved_artist_handle ||
+    approvedArtistWallet !== row.approved_artist_wallet ||
     nextArtistProfileId !== row.artist_profile_id ||
     artistHandle !== row.artist_handle ||
     artistWallet !== row.artist_wallet
@@ -809,6 +1045,10 @@ async function syncCommissionRecordWithChain(
     SET
       requester_profile_id = ${nextRequesterProfileId},
       requester_handle = ${requesterHandle},
+      approved_application_id = ${nextApprovedApplicationId},
+      approved_artist_profile_id = ${nextApprovedArtistProfileId},
+      approved_artist_handle = ${approvedArtistHandle},
+      approved_artist_wallet = ${approvedArtistWallet},
       artist_profile_id = ${nextArtistProfileId},
       artist_handle = ${artistHandle},
       artist_wallet = ${artistWallet},
@@ -863,6 +1103,9 @@ async function buildCommissionDetailPayload(
   viewer: ViewerContext,
 ) {
   const syncedRow = await syncCommissionRecordWithChain(row)
+  if (syncedRow.commission_id) {
+    await syncCommissionApplicationsWithChain(syncedRow.commission_id)
+  }
   const isRequester = Boolean(
     viewer.privyUserId && viewer.privyUserId === syncedRow.requester_privy_user_id,
   )
@@ -880,14 +1123,32 @@ async function buildCommissionDetailPayload(
   const submittedAtUnix = syncedRow.submitted_at
     ? Math.floor(new Date(syncedRow.submitted_at).getTime() / 1000)
     : 0
+  const acceptanceDeadlineUnix = syncedRow.claim_deadline
+    ? Math.floor(new Date(syncedRow.claim_deadline).getTime() / 1000)
+    : 0
+  const deliveryDeadlineUnix = syncedRow.delivery_deadline
+    ? Math.floor(new Date(syncedRow.delivery_deadline).getTime() / 1000)
+    : 0
   const nowUnix = Math.floor(Date.now() / 1000)
+  const viewerApplicationStatus = viewerApplication?.status ?? null
+  const hasActiveViewerApplication =
+    viewerApplicationStatus === 'pending' ||
+    viewerApplicationStatus === 'selected' ||
+    viewerApplicationStatus === 'accepted'
+  const selectionExpired =
+    syncedRow.status === 'selected' &&
+    acceptanceDeadlineUnix > 0 &&
+    nowUnix > acceptanceDeadlineUnix
+  const deliveryExpired =
+    syncedRow.status === 'claimed' &&
+    deliveryDeadlineUnix > 0 &&
+    nowUnix > deliveryDeadlineUnix
+  const pendingApplications = applications.filter((entry) => entry.status === 'pending').length
 
   return {
     commission: normalizeCommissionRow(syncedRow, {
       applicationsCount: isRequester ? applications.length : 0,
-      pendingApplications: isRequester
-        ? applications.filter((entry) => entry.status === 'pending').length
-        : 0,
+      pendingApplications: isRequester ? pendingApplications : 0,
       viewerApplication: viewerApplication
         ? { id: viewerApplication.id, status: viewerApplication.status }
         : null,
@@ -906,19 +1167,18 @@ async function buildCommissionDetailPayload(
         viewer.profileId &&
           syncedRow.status === 'open' &&
           !isRequester &&
-          !viewerApplication &&
-          !syncedRow.artist_profile_id,
+          !hasActiveViewerApplication,
       ),
       can_approve_artist: Boolean(
         isRequester &&
-          syncedRow.status === 'open' &&
-          !syncedRow.artist_profile_id,
+          pendingApplications > 0 &&
+          (syncedRow.status === 'open' || selectionExpired),
       ),
       can_claim: Boolean(
         viewer.profileId &&
-          syncedRow.status === 'open' &&
+          syncedRow.status === 'selected' &&
           viewer.profileId === syncedRow.approved_artist_profile_id &&
-          !syncedRow.artist_profile_id,
+          !selectionExpired,
       ),
       can_submit: Boolean(
         viewer.profileId &&
@@ -930,7 +1190,11 @@ async function buildCommissionDetailPayload(
       ),
       can_cancel: Boolean(
         isRequester &&
-          (syncedRow.status === 'open' || syncedRow.status === 'claimed'),
+          (
+            syncedRow.status === 'open' ||
+            selectionExpired ||
+            deliveryExpired
+          ),
       ),
       can_claim_timeout_payout: Boolean(
         viewer.profileId &&
@@ -963,6 +1227,7 @@ commissionsRoute.get('/commissions', async (c) => {
   const commissionIds = syncedRows
     .map((row) => row.commission_id)
     .filter((value): value is number => typeof value === 'number' && value > 0)
+  await Promise.all(commissionIds.map((commissionId) => syncCommissionApplicationsWithChain(commissionId)))
   const [countMap, viewerApplicationMap] = await Promise.all([
     getApplicationCounts(commissionIds),
     getViewerApplicationMap(commissionIds, viewer.profileId),
@@ -1172,7 +1437,8 @@ commissionsRoute.post('/commissions/drafts', requirePrivyAuth, async (c) => {
     budget_wei: parseUnits(budgetJbm, 18).toString(),
     claim_deadline: claimDeadlineUnix,
     delivery_deadline: deliveryDeadline.unix,
-    contract_address: CONFIG.MEMETICS_CONTRACT_ADDRESS,
+    contract_address: CONFIG.COMMISSION_MANAGER_CONTRACT_ADDRESS,
+    commission_manager_address: getCommissionManagerContractAddress(),
   })
 })
 
@@ -1221,15 +1487,7 @@ commissionsRoute.post('/commissions/confirm-create', requirePrivyAuth, async (c)
     throw new ApiError(401, 'wallet_not_owned', 'The transaction wallet does not match this draft')
   }
 
-  const decodedLogs = receipt.logs
-    .map((log) =>
-      decodeMemeticsLog({
-        address: log.address,
-        data: log.data,
-        topics: log.topics as `0x${string}`[],
-      }),
-    )
-    .filter((log): log is NonNullable<ReturnType<typeof decodeMemeticsLog>> => Boolean(log))
+  const decodedLogs = decodeCommissionManagerReceiptLogs(receipt)
 
   const createdEvent = decodedLogs.find(
     (log) =>
@@ -1242,12 +1500,12 @@ commissionsRoute.post('/commissions/confirm-create', requirePrivyAuth, async (c)
 
   const commissionId = Number((createdEvent.args as Record<string, unknown>).commissionId ?? 0)
   const requesterProfileId = Number((createdEvent.args as Record<string, unknown>).requesterProfileId ?? 0)
+  const bungalowId = Number((createdEvent.args as Record<string, unknown>).bungalowId ?? 0)
   const budget = (createdEvent.args as Record<string, unknown>).budget
-  const claimDeadline = Number((createdEvent.args as Record<string, unknown>).claimDeadline ?? 0)
   const deliveryDeadline = Number((createdEvent.args as Record<string, unknown>).deliveryDeadline ?? 0)
   const briefUri = String((createdEvent.args as Record<string, unknown>).briefURI ?? '')
 
-  if (!commissionId || !requesterProfileId || !briefUri) {
+  if (!commissionId || !requesterProfileId || !bungalowId || !briefUri) {
     throw new ApiError(409, 'unexpected_receipt', 'CommissionCreated payload was incomplete')
   }
 
@@ -1259,10 +1517,14 @@ commissionsRoute.post('/commissions/confirm-create', requirePrivyAuth, async (c)
     throw new ApiError(409, 'unexpected_receipt', 'The onchain budget did not match this draft')
   }
 
-  const expectedClaimDeadline = Math.floor(new Date(record.claim_deadline).getTime() / 1000)
   const expectedDeliveryDeadline = Math.floor(new Date(record.delivery_deadline).getTime() / 1000)
-  if (claimDeadline !== expectedClaimDeadline || deliveryDeadline !== expectedDeliveryDeadline) {
-    throw new ApiError(409, 'unexpected_receipt', 'The onchain deadlines did not match this draft')
+  if (deliveryDeadline !== expectedDeliveryDeadline) {
+    throw new ApiError(409, 'unexpected_receipt', 'The onchain delivery deadline did not match this draft')
+  }
+
+  const expectedBungalowId = await resolveCommissionContractBungalowId(record)
+  if (!expectedBungalowId || bungalowId !== expectedBungalowId) {
+    throw new ApiError(409, 'unexpected_receipt', 'The onchain bungalow did not match this draft')
   }
 
   const requesterProfile = await readMemeticsProfile(requesterProfileId)
@@ -1308,15 +1570,14 @@ commissionsRoute.post('/commissions/:commissionId/apply', requirePrivyAuth, asyn
     throw new ApiError(400, 'invalid_payload', 'Request body must be a JSON object')
   }
 
-  const record = await getCommissionRecordByCommissionId(commissionId)
-  if (!record) {
+  const existingRecord = await getCommissionRecordByCommissionId(commissionId)
+  if (!existingRecord) {
     throw new ApiError(404, 'commission_not_found', 'Commission not found')
   }
+  const record = await syncCommissionRecordWithChain(existingRecord)
+  await syncCommissionApplicationsWithChain(commissionId)
   if (record.status !== 'open') {
     throw new ApiError(409, 'invalid_state', 'Only open commissions accept new applications')
-  }
-  if (record.approved_application_id || record.artist_profile_id) {
-    throw new ApiError(409, 'invalid_state', 'This commission already has an artist moving forward')
   }
 
   const authorizedWallets = await resolveAuthorizedEvmWallets(c, privyUserId)
@@ -1334,10 +1595,15 @@ commissionsRoute.post('/commissions/:commissionId/apply', requirePrivyAuth, asyn
 
   const artistProfile = await readMemeticsProfile(artistProfileId)
   const message = asOptionalString(body.message, MAX_APPLICATION_MESSAGE_LENGTH)
+  const applicationRef = createApplicationRef()
+  const applicationUri = `${getRequestSiteUrl(c.req.raw)}/api/commissions/applications/${applicationRef}`
 
   const existingRows = await db<CommissionApplicationRow[]>`
     SELECT
       id,
+      application_id,
+      application_ref,
+      application_uri,
       commission_id,
       artist_privy_user_id,
       artist_wallet,
@@ -1354,20 +1620,32 @@ commissionsRoute.post('/commissions/:commissionId/apply', requirePrivyAuth, asyn
   `
   const existing = existingRows[0] ?? null
 
+  if (existing && ['pending', 'selected', 'accepted'].includes(existing.status)) {
+    throw new ApiError(409, 'duplicate_application', 'You already have an active application for this commission')
+  }
+
   let application: CommissionApplicationRow
   if (existing) {
     const rows = await db<CommissionApplicationRow[]>`
       UPDATE ${db(CONFIG.SCHEMA)}.commission_applications
       SET
+        application_id = NULL,
+        application_ref = ${applicationRef},
+        application_uri = ${applicationUri},
         artist_privy_user_id = ${privyUserId},
         artist_wallet = ${selectedWallet},
+        artist_profile_id = ${artistProfileId},
         artist_handle = ${artistProfile?.handle ?? existing.artist_handle},
         message = ${message},
-        status = 'pending',
+        status = 'draft',
+        created_at = NOW(),
         updated_at = NOW()
       WHERE id = ${existing.id}
       RETURNING
         id,
+        application_id,
+        application_ref,
+        application_uri,
         commission_id,
         artist_privy_user_id,
         artist_wallet,
@@ -1382,6 +1660,8 @@ commissionsRoute.post('/commissions/:commissionId/apply', requirePrivyAuth, asyn
   } else {
     const rows = await db<CommissionApplicationRow[]>`
       INSERT INTO ${db(CONFIG.SCHEMA)}.commission_applications (
+        application_ref,
+        application_uri,
         commission_id,
         artist_privy_user_id,
         artist_wallet,
@@ -1391,16 +1671,21 @@ commissionsRoute.post('/commissions/:commissionId/apply', requirePrivyAuth, asyn
         status
       )
       VALUES (
+        ${applicationRef},
+        ${applicationUri},
         ${commissionId},
         ${privyUserId},
         ${selectedWallet},
         ${artistProfileId},
         ${artistProfile?.handle ?? null},
         ${message},
-        'pending'
+        'draft'
       )
       RETURNING
         id,
+        application_id,
+        application_ref,
+        application_uri,
         commission_id,
         artist_privy_user_id,
         artist_wallet,
@@ -1422,88 +1707,58 @@ commissionsRoute.post('/commissions/:commissionId/apply', requirePrivyAuth, asyn
 
   return c.json({
     application: normalizeApplicationRow(application),
+    contract_address: getCommissionManagerContractAddress(),
+    commission_manager_address: getCommissionManagerContractAddress(),
   })
 })
 
-commissionsRoute.post(
-  '/commissions/:commissionId/applications/:applicationId/approve',
-  requirePrivyAuth,
-  async (c) => {
-    await ensureCommissionsShape()
+commissionsRoute.get('/commissions/applications/:applicationRef', async (c) => {
+  await ensureCommissionsShape()
 
-    const privyUserId = c.get('privyUserId')
-    if (!privyUserId) {
-      throw new ApiError(401, 'auth_required', 'Privy authentication required')
-    }
+  const applicationRef = asString(c.req.param('applicationRef'))
+  if (!applicationRef) {
+    throw new ApiError(400, 'invalid_application', 'Invalid commission application reference')
+  }
 
-    const commissionId = asPositiveInt(c.req.param('commissionId'))
-    const applicationId = asPositiveInt(c.req.param('applicationId'))
-    if (!commissionId || !applicationId) {
-      throw new ApiError(400, 'invalid_commission', 'Invalid commission or application id')
-    }
+  const rows = await db<CommissionApplicationRow[]>`
+    SELECT
+      id,
+      application_id,
+      application_ref,
+      application_uri,
+      commission_id,
+      artist_privy_user_id,
+      artist_wallet,
+      artist_profile_id,
+      artist_handle,
+      message,
+      status,
+      created_at::text AS created_at,
+      updated_at::text AS updated_at
+    FROM ${db(CONFIG.SCHEMA)}.commission_applications
+    WHERE application_ref = ${applicationRef}
+    LIMIT 1
+  `
+  const application = rows[0] ?? null
+  if (!application) {
+    throw new ApiError(404, 'application_not_found', 'Commission application not found')
+  }
 
-    const record = await getCommissionRecordByCommissionId(commissionId)
-    if (!record || record.requester_privy_user_id !== privyUserId) {
-      throw new ApiError(404, 'commission_not_found', 'Commission not found')
-    }
-    if (record.status !== 'open') {
-      throw new ApiError(409, 'invalid_state', 'Only open commissions can approve artists')
-    }
-    if (record.artist_profile_id) {
-      throw new ApiError(409, 'invalid_state', 'This commission has already been claimed onchain')
-    }
+  return c.json({
+    application_ref: application.application_ref,
+    application_uri: application.application_uri,
+    commission_id: application.commission_id,
+    artist_profile_id: application.artist_profile_id,
+    artist_handle: application.artist_handle,
+    artist_wallet: application.artist_wallet,
+    message: application.message,
+    status: application.status,
+    created_at: application.created_at,
+    updated_at: application.updated_at,
+  })
+})
 
-    const applicationRows = await db<CommissionApplicationRow[]>`
-      SELECT
-        id,
-        commission_id,
-        artist_privy_user_id,
-        artist_wallet,
-        artist_profile_id,
-        artist_handle,
-        message,
-        status,
-        created_at::text AS created_at,
-        updated_at::text AS updated_at
-      FROM ${db(CONFIG.SCHEMA)}.commission_applications
-      WHERE id = ${applicationId}
-        AND commission_id = ${commissionId}
-      LIMIT 1
-    `
-    const application = applicationRows[0] ?? null
-    if (!application) {
-      throw new ApiError(404, 'application_not_found', 'Commission application not found')
-    }
-
-    await db`
-      UPDATE ${db(CONFIG.SCHEMA)}.commission_applications
-      SET
-        status = CASE WHEN id = ${applicationId} THEN 'approved' ELSE 'rejected' END,
-        updated_at = NOW()
-      WHERE commission_id = ${commissionId}
-    `
-
-    await db`
-      UPDATE ${db(CONFIG.SCHEMA)}.commission_records
-      SET
-        approved_application_id = ${application.id},
-        approved_artist_wallet = ${application.artist_wallet},
-        approved_artist_profile_id = ${application.artist_profile_id},
-        approved_artist_handle = ${application.artist_handle},
-        updated_at = NOW()
-      WHERE commission_id = ${commissionId}
-    `
-
-    const updated = await getCommissionRecordByCommissionId(commissionId)
-    if (!updated) {
-      throw new ApiError(500, 'commission_update_failed', 'Commission approval could not be persisted')
-    }
-
-    return c.json(await buildCommissionDetailPayload(updated, await getViewerContext(c)))
-  },
-)
-
-commissionsRoute.post('/commissions/:commissionId/claim/confirm', requirePrivyAuth, async (c) => {
+commissionsRoute.post('/commissions/:commissionId/apply/confirm', requirePrivyAuth, async (c) => {
   await ensureCommissionsShape()
 
   const privyUserId = c.get('privyUserId')
@@ -1526,21 +1781,16 @@ commissionsRoute.post('/commissions/:commissionId/claim/confirm', requirePrivyAu
     throw new ApiError(400, 'invalid_tx_hash', 'tx_hash must be a valid transaction hash')
   }
 
-  const record = await getCommissionRecordByCommissionId(commissionId)
-  if (!record) {
+  const existingRecord = await getCommissionRecordByCommissionId(commissionId)
+  if (!existingRecord) {
     throw new ApiError(404, 'commission_not_found', 'Commission not found')
   }
-  if (!record.approved_artist_profile_id) {
-    throw new ApiError(409, 'artist_not_approved', 'Approve an artist before they claim this commission')
-  }
-  if (record.claimed_tx_hash && record.claimed_tx_hash.toLowerCase() === txHash) {
-    return c.json(await buildCommissionDetailPayload(record, await getViewerContext(c)))
-  }
+  await syncCommissionRecordWithChain(existingRecord)
 
   const authorizedWallets = await resolveAuthorizedEvmWallets(c, privyUserId)
   const viewerProfileId = (await findMemeticsProfileByWallets(authorizedWallets))?.profile.id ?? null
-  if (!viewerProfileId || viewerProfileId !== record.approved_artist_profile_id) {
-    throw new ApiError(403, 'not_approved_artist', 'Only the approved artist can claim this commission')
+  if (!viewerProfileId) {
+    throw new ApiError(403, 'profile_required', 'Create your onchain profile before applying')
   }
 
   const receipt = await publicClients.base.getTransactionReceipt({ hash: txHash as `0x${string}` })
@@ -1551,28 +1801,304 @@ commissionsRoute.post('/commissions/:commissionId/claim/confirm', requirePrivyAu
     throw new ApiError(401, 'wallet_not_owned', 'wallet_not_owned')
   }
 
-  const decodedLogs = receipt.logs
-    .map((log) =>
-      decodeMemeticsLog({
-        address: log.address,
-        data: log.data,
-        topics: log.topics as `0x${string}`[],
-      }),
+  const decodedLogs = decodeCommissionManagerReceiptLogs(receipt)
+  const appliedEvent = decodedLogs.find(
+    (log) =>
+      log.eventName === 'CommissionApplicationCreated' &&
+      Number((log.args as Record<string, unknown>).commissionId ?? 0) === commissionId,
+  )
+  if (!appliedEvent) {
+    throw new ApiError(409, 'unexpected_receipt', 'The transaction did not emit CommissionApplicationCreated')
+  }
+
+  const applicationId = Number((appliedEvent.args as Record<string, unknown>).applicationId ?? 0)
+  const artistProfileId = Number((appliedEvent.args as Record<string, unknown>).artistProfileId ?? 0)
+  const applicationUri = String((appliedEvent.args as Record<string, unknown>).applicationURI ?? '')
+  if (!applicationId || !artistProfileId || !applicationUri) {
+    throw new ApiError(409, 'unexpected_receipt', 'The onchain application payload was incomplete')
+  }
+  if (artistProfileId !== viewerProfileId) {
+    throw new ApiError(403, 'not_artist', 'Only the applying artist can confirm this application')
+  }
+
+  await syncCommissionApplicationsWithChain(commissionId)
+  const alreadyConfirmedRows = await db<CommissionApplicationRow[]>`
+    SELECT
+      id,
+      application_id,
+      application_ref,
+      application_uri,
+      commission_id,
+      artist_privy_user_id,
+      artist_wallet,
+      artist_profile_id,
+      artist_handle,
+      message,
+      status,
+      created_at::text AS created_at,
+      updated_at::text AS updated_at
+    FROM ${db(CONFIG.SCHEMA)}.commission_applications
+    WHERE commission_id = ${commissionId}
+      AND application_id = ${applicationId}
+    LIMIT 1
+  `
+  if (alreadyConfirmedRows[0]) {
+    const updated = await getCommissionRecordByCommissionId(commissionId)
+    if (!updated) {
+      throw new ApiError(500, 'commission_update_failed', 'Commission application could not be indexed')
+    }
+    return c.json(await buildCommissionDetailPayload(updated, await getViewerContext(c)))
+  }
+
+  const artistProfile = await readMemeticsProfile(artistProfileId)
+  const draftRows = await db<CommissionApplicationRow[]>`
+    SELECT
+      id,
+      application_id,
+      application_ref,
+      application_uri,
+      commission_id,
+      artist_privy_user_id,
+      artist_wallet,
+      artist_profile_id,
+      artist_handle,
+      message,
+      status,
+      created_at::text AS created_at,
+      updated_at::text AS updated_at
+    FROM ${db(CONFIG.SCHEMA)}.commission_applications
+    WHERE commission_id = ${commissionId}
+      AND artist_profile_id = ${artistProfileId}
+    ORDER BY updated_at DESC, created_at DESC
+    LIMIT 1
+  `
+  const draft = draftRows[0] ?? null
+  const applicationRef = extractApplicationRefFromUri(applicationUri)
+
+  if (draft) {
+    await db`
+      UPDATE ${db(CONFIG.SCHEMA)}.commission_applications
+      SET
+        application_id = ${applicationId},
+        application_ref = ${applicationRef},
+        application_uri = ${applicationUri},
+        artist_privy_user_id = ${privyUserId},
+        artist_wallet = ${receipt.from},
+        artist_profile_id = ${artistProfileId},
+        artist_handle = ${artistProfile?.handle ?? draft.artist_handle},
+        status = 'pending',
+        updated_at = NOW()
+      WHERE id = ${draft.id}
+    `
+  } else {
+    await db`
+      INSERT INTO ${db(CONFIG.SCHEMA)}.commission_applications (
+        application_id,
+        application_ref,
+        application_uri,
+        commission_id,
+        artist_privy_user_id,
+        artist_wallet,
+        artist_profile_id,
+        artist_handle,
+        message,
+        status
+      )
+      VALUES (
+        ${applicationId},
+        ${applicationRef},
+        ${applicationUri},
+        ${commissionId},
+        ${privyUserId},
+        ${receipt.from},
+        ${artistProfileId},
+        ${artistProfile?.handle ?? null},
+        NULL,
+        'pending'
+      )
+    `
+  }
+
+  await db`
+    UPDATE ${db(CONFIG.SCHEMA)}.commission_records
+    SET updated_at = NOW()
+    WHERE commission_id = ${commissionId}
+  `
+
+  const updated = await getCommissionRecordByCommissionId(commissionId)
+  if (!updated) {
+    throw new ApiError(500, 'commission_update_failed', 'Commission application could not be indexed')
+  }
+
+  return c.json(await buildCommissionDetailPayload(updated, await getViewerContext(c)))
+})
+
+commissionsRoute.post(
+  '/commissions/:commissionId/applications/:applicationId/approve/confirm',
+  requirePrivyAuth,
+  async (c) => {
+    await ensureCommissionsShape()
+
+    const privyUserId = c.get('privyUserId')
+    if (!privyUserId) {
+      throw new ApiError(401, 'auth_required', 'Privy authentication required')
+    }
+
+    const commissionId = asPositiveInt(c.req.param('commissionId'))
+    const applicationId = asPositiveInt(c.req.param('applicationId'))
+    if (!commissionId || !applicationId) {
+      throw new ApiError(400, 'invalid_commission', 'Invalid commission or application id')
+    }
+
+    const body = asObject(await c.req.json().catch(() => null))
+    if (!body) {
+      throw new ApiError(400, 'invalid_payload', 'Request body must be a JSON object')
+    }
+
+    const txHash = asString(body.tx_hash).toLowerCase()
+    if (!/^0x[0-9a-fA-F]{64}$/.test(txHash)) {
+      throw new ApiError(400, 'invalid_tx_hash', 'tx_hash must be a valid transaction hash')
+    }
+
+    const existingRecord = await getCommissionRecordByCommissionId(commissionId)
+    if (!existingRecord || existingRecord.requester_privy_user_id !== privyUserId) {
+      throw new ApiError(404, 'commission_not_found', 'Commission not found')
+    }
+    const record = await syncCommissionRecordWithChain(existingRecord)
+
+    if (record.status === 'selected' && record.approved_application_id === applicationId) {
+      return c.json(await buildCommissionDetailPayload(record, await getViewerContext(c)))
+    }
+
+    const authorizedWallets = await resolveAuthorizedEvmWallets(c, privyUserId)
+    const receipt = await publicClients.base.getTransactionReceipt({ hash: txHash as `0x${string}` })
+    if (receipt.status !== 'success') {
+      throw new ApiError(409, 'tx_failed', 'Transaction did not succeed onchain')
+    }
+    if (!authorizedWallets.some((wallet) => wallet.toLowerCase() === receipt.from.toLowerCase())) {
+      throw new ApiError(401, 'wallet_not_owned', 'wallet_not_owned')
+    }
+
+    const decodedLogs = decodeCommissionManagerReceiptLogs(receipt)
+    const selectedEvent = decodedLogs.find(
+      (log) =>
+        log.eventName === 'CommissionArtistSelected' &&
+        Number((log.args as Record<string, unknown>).commissionId ?? 0) === commissionId,
     )
-    .filter((log): log is NonNullable<ReturnType<typeof decodeMemeticsLog>> => Boolean(log))
+    if (!selectedEvent) {
+      throw new ApiError(409, 'unexpected_receipt', 'The transaction did not emit CommissionArtistSelected')
+    }
+
+    const selectedApplicationId = Number((selectedEvent.args as Record<string, unknown>).applicationId ?? 0)
+    const artistProfileId = Number((selectedEvent.args as Record<string, unknown>).artistProfileId ?? 0)
+    const acceptanceDeadline = Number((selectedEvent.args as Record<string, unknown>).acceptanceDeadline ?? 0)
+    if (
+      !selectedApplicationId ||
+      selectedApplicationId !== applicationId ||
+      !artistProfileId ||
+      !acceptanceDeadline
+    ) {
+      throw new ApiError(409, 'unexpected_receipt', 'The onchain selection payload was incomplete')
+    }
+
+    const artistProfile = await readMemeticsProfile(artistProfileId)
+    await db`
+      UPDATE ${db(CONFIG.SCHEMA)}.commission_records
+      SET
+        approved_application_id = ${selectedApplicationId},
+        approved_artist_wallet = ${artistProfile?.mainWallet ?? null},
+        approved_artist_profile_id = ${artistProfileId},
+        approved_artist_handle = ${artistProfile?.handle ?? null},
+        claim_deadline = ${new Date(acceptanceDeadline * 1000).toISOString()},
+        status = 'selected',
+        updated_at = NOW()
+      WHERE commission_id = ${commissionId}
+    `
+
+    await db`
+      UPDATE ${db(CONFIG.SCHEMA)}.commission_applications
+      SET
+        status = CASE
+          WHEN application_id = ${selectedApplicationId} THEN 'selected'
+          ELSE status
+        END,
+        updated_at = NOW()
+      WHERE commission_id = ${commissionId}
+    `
+
+    const updated = await getCommissionRecordByCommissionId(commissionId)
+    if (!updated) {
+      throw new ApiError(500, 'commission_update_failed', 'Commission selection could not be persisted')
+    }
+
+    return c.json(await buildCommissionDetailPayload(updated, await getViewerContext(c)))
+  },
+)
+
+const confirmCommissionAcceptance = async (c: any) => {
+  await ensureCommissionsShape()
+
+  const privyUserId = c.get('privyUserId')
+  if (!privyUserId) {
+    throw new ApiError(401, 'auth_required', 'Privy authentication required')
+  }
+
+  const commissionId = asPositiveInt(c.req.param('commissionId'))
+  if (!commissionId) {
+    throw new ApiError(400, 'invalid_commission', 'Invalid commission id')
+  }
+
+  const body = asObject(await c.req.json().catch(() => null))
+  if (!body) {
+    throw new ApiError(400, 'invalid_payload', 'Request body must be a JSON object')
+  }
+
+  const txHash = asString(body.tx_hash).toLowerCase()
+  if (!/^0x[0-9a-fA-F]{64}$/.test(txHash)) {
+    throw new ApiError(400, 'invalid_tx_hash', 'tx_hash must be a valid transaction hash')
+  }
+
+  const existingRecord = await getCommissionRecordByCommissionId(commissionId)
+  if (!existingRecord) {
+    throw new ApiError(404, 'commission_not_found', 'Commission not found')
+  }
+  const record = await syncCommissionRecordWithChain(existingRecord)
+  if (!record.approved_artist_profile_id) {
+    throw new ApiError(409, 'artist_not_selected', 'Select an artist before they accept this commission')
+  }
+  if (record.claimed_tx_hash && record.claimed_tx_hash.toLowerCase() === txHash) {
+    return c.json(await buildCommissionDetailPayload(record, await getViewerContext(c)))
+  }
+
+  const authorizedWallets = await resolveAuthorizedEvmWallets(c, privyUserId)
+  const viewerProfileId = (await findMemeticsProfileByWallets(authorizedWallets))?.profile.id ?? null
+  if (!viewerProfileId || viewerProfileId !== record.approved_artist_profile_id) {
+    throw new ApiError(403, 'not_selected_artist', 'Only the selected artist can accept this commission')
+  }
+
+  const receipt = await publicClients.base.getTransactionReceipt({ hash: txHash as `0x${string}` })
+  if (receipt.status !== 'success') {
+    throw new ApiError(409, 'tx_failed', 'Transaction did not succeed onchain')
+  }
+  if (!authorizedWallets.some((wallet) => wallet.toLowerCase() === receipt.from.toLowerCase())) {
+    throw new ApiError(401, 'wallet_not_owned', 'wallet_not_owned')
+  }
+
+  const decodedLogs = decodeCommissionManagerReceiptLogs(receipt)
 
   const claimedEvent = decodedLogs.find(
     (log) =>
-      log.eventName === 'CommissionClaimed' &&
+      log.eventName === 'CommissionAccepted' &&
       Number((log.args as Record<string, unknown>).commissionId ?? 0) === commissionId,
   )
   if (!claimedEvent) {
-    throw new ApiError(409, 'unexpected_receipt', 'The transaction did not emit CommissionClaimed')
+    throw new ApiError(409, 'unexpected_receipt', 'The transaction did not emit CommissionAccepted')
   }
 
+  const applicationId = Number((claimedEvent.args as Record<string, unknown>).applicationId ?? 0)
   const artistProfileId = Number((claimedEvent.args as Record<string, unknown>).artistProfileId ?? 0)
   if (!artistProfileId || artistProfileId !== record.approved_artist_profile_id) {
-    throw new ApiError(409, 'unexpected_receipt', 'The onchain claimant did not match the approved artist')
+    throw new ApiError(409, 'unexpected_receipt', 'The onchain artist did not match the selected artist')
   }
 
   const artistProfile = await readMemeticsProfile(artistProfileId)
@@ -1587,14 +2113,27 @@ commissionsRoute.post('/commissions/:commissionId/claim/confirm', requirePrivyAu
       updated_at = NOW()
     WHERE commission_id = ${commissionId}
   `
+  await db`
+    UPDATE ${db(CONFIG.SCHEMA)}.commission_applications
+    SET
+      status = CASE
+        WHEN application_id = ${applicationId} THEN 'accepted'
+        ELSE status
+      END,
+      updated_at = NOW()
+    WHERE commission_id = ${commissionId}
+  `
 
   const updated = await getCommissionRecordByCommissionId(commissionId)
   if (!updated) {
-    throw new ApiError(500, 'commission_update_failed', 'Commission claim could not be persisted')
+    throw new ApiError(500, 'commission_update_failed', 'Commission acceptance could not be persisted')
   }
 
   return c.json(await buildCommissionDetailPayload(updated, await getViewerContext(c)))
-})
+}
+
+commissionsRoute.post('/commissions/:commissionId/claim/confirm', requirePrivyAuth, confirmCommissionAcceptance)
+commissionsRoute.post('/commissions/:commissionId/accept/confirm', requirePrivyAuth, confirmCommissionAcceptance)
 
 commissionsRoute.post('/commissions/:commissionId/submit/confirm', requirePrivyAuth, async (c) => {
   await ensureCommissionsShape()
@@ -1619,8 +2158,12 @@ commissionsRoute.post('/commissions/:commissionId/submit/confirm', requirePrivyA
     throw new ApiError(400, 'invalid_tx_hash', 'tx_hash must be a valid transaction hash')
   }
 
-  const record = await getCommissionRecordByCommissionId(commissionId)
-  if (!record || !record.artist_profile_id) {
+  const existingRecord = await getCommissionRecordByCommissionId(commissionId)
+  if (!existingRecord) {
+    throw new ApiError(404, 'commission_not_found', 'Commission not found')
+  }
+  const record = await syncCommissionRecordWithChain(existingRecord)
+  if (!record.artist_profile_id) {
     throw new ApiError(404, 'commission_not_found', 'Commission not found')
   }
   if (record.submitted_tx_hash && record.submitted_tx_hash.toLowerCase() === txHash) {
@@ -1641,15 +2184,7 @@ commissionsRoute.post('/commissions/:commissionId/submit/confirm', requirePrivyA
     throw new ApiError(401, 'wallet_not_owned', 'wallet_not_owned')
   }
 
-  const decodedLogs = receipt.logs
-    .map((log) =>
-      decodeMemeticsLog({
-        address: log.address,
-        data: log.data,
-        topics: log.topics as `0x${string}`[],
-      }),
-    )
-    .filter((log): log is NonNullable<ReturnType<typeof decodeMemeticsLog>> => Boolean(log))
+  const decodedLogs = decodeCommissionManagerReceiptLogs(receipt)
 
   const submittedEvent = decodedLogs.find(
     (log) =>
@@ -1707,10 +2242,11 @@ commissionsRoute.post('/commissions/:commissionId/approve/confirm', requirePrivy
     throw new ApiError(400, 'invalid_tx_hash', 'tx_hash must be a valid transaction hash')
   }
 
-  const record = await getCommissionRecordByCommissionId(commissionId)
-  if (!record || record.requester_privy_user_id !== privyUserId) {
+  const existingRecord = await getCommissionRecordByCommissionId(commissionId)
+  if (!existingRecord || existingRecord.requester_privy_user_id !== privyUserId) {
     throw new ApiError(404, 'commission_not_found', 'Commission not found')
   }
+  const record = await syncCommissionRecordWithChain(existingRecord)
   if (record.approved_tx_hash && record.approved_tx_hash.toLowerCase() === txHash) {
     return c.json(await buildCommissionDetailPayload(record, await getViewerContext(c)))
   }
@@ -1724,15 +2260,7 @@ commissionsRoute.post('/commissions/:commissionId/approve/confirm', requirePrivy
     throw new ApiError(401, 'wallet_not_owned', 'wallet_not_owned')
   }
 
-  const decodedLogs = receipt.logs
-    .map((log) =>
-      decodeMemeticsLog({
-        address: log.address,
-        data: log.data,
-        topics: log.topics as `0x${string}`[],
-      }),
-    )
-    .filter((log): log is NonNullable<ReturnType<typeof decodeMemeticsLog>> => Boolean(log))
+  const decodedLogs = decodeCommissionManagerReceiptLogs(receipt)
 
   const settledEvent = decodedLogs.find(
     (log) =>
@@ -1744,7 +2272,7 @@ commissionsRoute.post('/commissions/:commissionId/approve/confirm', requirePrivy
   }
 
   const statusCode = Number((settledEvent.args as Record<string, unknown>).status ?? 0)
-  if (statusCode !== 4) {
+  if (statusCode !== 5) {
     throw new ApiError(409, 'unexpected_receipt', 'The onchain settlement did not complete this commission')
   }
 
@@ -1788,10 +2316,11 @@ commissionsRoute.post('/commissions/:commissionId/cancel/confirm', requirePrivyA
     throw new ApiError(400, 'invalid_tx_hash', 'tx_hash must be a valid transaction hash')
   }
 
-  const record = await getCommissionRecordByCommissionId(commissionId)
-  if (!record || record.requester_privy_user_id !== privyUserId) {
+  const existingRecord = await getCommissionRecordByCommissionId(commissionId)
+  if (!existingRecord || existingRecord.requester_privy_user_id !== privyUserId) {
     throw new ApiError(404, 'commission_not_found', 'Commission not found')
   }
+  const record = await syncCommissionRecordWithChain(existingRecord)
   if (record.cancelled_tx_hash && record.cancelled_tx_hash.toLowerCase() === txHash) {
     return c.json(await buildCommissionDetailPayload(record, await getViewerContext(c)))
   }
@@ -1805,15 +2334,7 @@ commissionsRoute.post('/commissions/:commissionId/cancel/confirm', requirePrivyA
     throw new ApiError(401, 'wallet_not_owned', 'wallet_not_owned')
   }
 
-  const decodedLogs = receipt.logs
-    .map((log) =>
-      decodeMemeticsLog({
-        address: log.address,
-        data: log.data,
-        topics: log.topics as `0x${string}`[],
-      }),
-    )
-    .filter((log): log is NonNullable<ReturnType<typeof decodeMemeticsLog>> => Boolean(log))
+  const decodedLogs = decodeCommissionManagerReceiptLogs(receipt)
 
   const cancelledEvent = decodedLogs.find(
     (log) =>
@@ -1832,7 +2353,7 @@ commissionsRoute.post('/commissions/:commissionId/cancel/confirm', requirePrivyA
 
   if (settledEvent) {
     const statusCode = Number((settledEvent.args as Record<string, unknown>).status ?? 0)
-    if (statusCode !== 5) {
+    if (statusCode !== 6) {
       throw new ApiError(409, 'unexpected_receipt', 'The onchain settlement did not cancel this commission')
     }
   }
@@ -1877,8 +2398,12 @@ commissionsRoute.post('/commissions/:commissionId/payout/confirm', requirePrivyA
     throw new ApiError(400, 'invalid_tx_hash', 'tx_hash must be a valid transaction hash')
   }
 
-  const record = await getCommissionRecordByCommissionId(commissionId)
-  if (!record || !record.artist_profile_id) {
+  const existingRecord = await getCommissionRecordByCommissionId(commissionId)
+  if (!existingRecord) {
+    throw new ApiError(404, 'commission_not_found', 'Commission not found')
+  }
+  const record = await syncCommissionRecordWithChain(existingRecord)
+  if (!record.artist_profile_id) {
     throw new ApiError(404, 'commission_not_found', 'Commission not found')
   }
   if (record.payout_claim_tx_hash && record.payout_claim_tx_hash.toLowerCase() === txHash) {
@@ -1899,15 +2424,7 @@ commissionsRoute.post('/commissions/:commissionId/payout/confirm', requirePrivyA
     throw new ApiError(401, 'wallet_not_owned', 'wallet_not_owned')
   }
 
-  const decodedLogs = receipt.logs
-    .map((log) =>
-      decodeMemeticsLog({
-        address: log.address,
-        data: log.data,
-        topics: log.topics as `0x${string}`[],
-      }),
-    )
-    .filter((log): log is NonNullable<ReturnType<typeof decodeMemeticsLog>> => Boolean(log))
+  const decodedLogs = decodeCommissionManagerReceiptLogs(receipt)
 
   const settledEvent = decodedLogs.find(
     (log) =>
@@ -1919,7 +2436,7 @@ commissionsRoute.post('/commissions/:commissionId/payout/confirm', requirePrivyA
   }
 
   const statusCode = Number((settledEvent.args as Record<string, unknown>).status ?? 0)
-  if (statusCode !== 4) {
+  if (statusCode !== 5) {
     throw new ApiError(409, 'unexpected_receipt', 'The onchain settlement did not complete this commission')
   }
 

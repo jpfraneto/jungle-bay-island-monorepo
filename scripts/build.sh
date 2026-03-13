@@ -19,13 +19,17 @@ echo "🏝️  Building Jungle Bay Island frontend..."
 cd "$ISLAND"
 bun run build
 
-echo "📦  Deploying to backend/public/island/ ..."
-# Atomic-ish swap: copy new build to a temp dir, then replace in one move.
-# This minimizes the window where the directory is partially updated.
-TEMP_DIR="$(mktemp -d)"
-cp -r "$ISLAND/dist/." "$TEMP_DIR/"
-rm -rf "$BACKEND_PUBLIC"
-mv "$TEMP_DIR" "$BACKEND_PUBLIC"
+if [ -d "$ISLAND/dist" ]; then
+  echo "📦  Deploying to backend/public/island/ ..."
+  # Atomic-ish swap: copy new build to a temp dir, then replace in one move.
+  # This minimizes the window where the directory is partially updated.
+  TEMP_DIR="$(mktemp -d)"
+  cp -r "$ISLAND/dist/." "$TEMP_DIR/"
+  rm -rf "$BACKEND_PUBLIC"
+  mv "$TEMP_DIR" "$BACKEND_PUBLIC"
+else
+  echo "📦  Vite already emitted the build to backend/public/island/."
+fi
 
 echo ""
 echo "✅  Frontend deployed. No backend restart needed."

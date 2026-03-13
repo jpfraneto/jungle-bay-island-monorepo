@@ -103,7 +103,7 @@ claimRoute.post('/bungalow/claim', requireWalletAuth, async (c) => {
     throw new ApiError(
       400,
       'no_evm_wallet',
-      'No EVM wallet linked to this account. Link a Base/Ethereum wallet in Privy before claiming.',
+      'No EVM wallet linked to this account. Link a Base or Ethereum wallet to your X-backed account before claiming.',
     )
   }
 

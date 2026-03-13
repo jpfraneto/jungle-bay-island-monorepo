@@ -13,7 +13,7 @@ export default function NotFoundPage() {
         <button
           type="button"
           className={styles.button}
-          onClick={() => navigate("/")}
+          onClick={() => navigate("/island")}
         >
           Back to Island
         </button>

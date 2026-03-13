@@ -1,7 +1,6 @@
 import { Hono } from 'hono'
 import { normalizeAddress } from '../config'
 import {
-  clearUserXUsername,
   getAggregatedUserByWallets,
   getUserByWallet,
   getUserByWalletAddress,
@@ -12,7 +11,7 @@ import {
 import { requirePrivyAuth } from '../middleware/auth'
 import { ApiError } from '../services/errors'
 import { logInfo, logWarn } from '../services/logger'
-import { getPrivyLinkedAccounts } from '../services/privyClaims'
+import { extractPrivyXUsername } from '../services/privyClaims'
 import type { AppEnv } from '../types'
 
 const userRoute = new Hono<AppEnv>()
@@ -30,20 +29,10 @@ function getPrivyUserIdFromClaims(claims: Record<string, unknown> | undefined): 
   return privyUserId
 }
 
-function getEmailFromClaims(claims: Record<string, unknown> | undefined): string | null {
+function getXUsernameFromClaims(claims: Record<string, unknown> | undefined): string | null {
   if (!claims) return null
-
-  const linkedAccounts = getPrivyLinkedAccounts(claims)
-  for (const account of linkedAccounts) {
-    const candidate = account as Record<string, unknown>
-    if (candidate.type !== 'email') continue
-    const email = typeof candidate.address === 'string' ? candidate.address.trim().toLowerCase() : ''
-    if (email) {
-      return email
-    }
-  }
-
-  return null
+  const xUsername = extractPrivyXUsername(claims)
+  return xUsername ? normalizeXUsername(xUsername) : null
 }
 
 function buildWalletMap(wallets: string[], requesterWallet: string) {
@@ -122,17 +111,17 @@ userRoute.get('/wallet/:wallet', async (c) => {
 userRoute.get('/me', requirePrivyAuth, async (c) => {
   const claims = c.get('privyClaims') as Record<string, unknown> | undefined
   const privyUserId = getPrivyUserIdFromClaims(claims)
-  const email = getEmailFromClaims(claims)
+  const xUsername = getXUsernameFromClaims(claims)
 
   await upsertUser(privyUserId, {
-    email: email ?? undefined,
+    x_username: xUsername ?? undefined,
   })
 
   const wallets = await getUserWallets(privyUserId)
 
   return c.json({
     privy_user_id: privyUserId,
-    email,
+    x_username: xUsername,
     wallets,
   })
 })
@@ -140,10 +129,10 @@ userRoute.get('/me', requirePrivyAuth, async (c) => {
 userRoute.post('/me/setup', requirePrivyAuth, async (c) => {
   const claims = c.get('privyClaims') as Record<string, unknown> | undefined
   const privyUserId = getPrivyUserIdFromClaims(claims)
-  const email = getEmailFromClaims(claims)
+  const xUsername = getXUsernameFromClaims(claims)
 
   const user = await upsertUser(privyUserId, {
-    email: email ?? undefined,
+    x_username: xUsername ?? undefined,
   })
 
   const wallets = await getUserWallets(privyUserId)
@@ -151,7 +140,6 @@ userRoute.post('/me/setup', requirePrivyAuth, async (c) => {
   return c.json({
     success: true,
     privy_user_id: privyUserId,
-    email: user.email,
     x_username: user.x_username,
     wallets,
   })
@@ -160,22 +148,10 @@ userRoute.post('/me/setup', requirePrivyAuth, async (c) => {
 userRoute.post('/user/link-x', requirePrivyAuth, async (c) => {
   const claims = c.get('privyClaims') as Record<string, unknown> | undefined
   const privyUserId = getPrivyUserIdFromClaims(claims)
-  const email = getEmailFromClaims(claims)
-
-  if (!email) {
-    throw new ApiError(
-      403,
-      'invalid_link_x',
-      'X-login accounts are already verified and cannot link a secondary X handle',
-    )
-  }
-
-  const body = await c.req.json<{ x_username?: unknown }>()
-  const rawUsername = typeof body.x_username === 'string' ? body.x_username : ''
-  const xUsername = normalizeXUsername(rawUsername)
+  const xUsername = getXUsernameFromClaims(claims)
 
   if (!xUsername) {
-    throw new ApiError(400, 'invalid_x_username', 'x_username is required')
+    throw new ApiError(403, 'x_account_required', 'Sign in with X to sync your handle')
   }
 
   const existing = await getUserByXUsername(xUsername)
@@ -195,7 +171,6 @@ userRoute.post('/user/link-x', requirePrivyAuth, async (c) => {
   }
 
   await upsertUser(privyUserId, {
-    email: email ?? undefined,
     x_username: xUsername,
   })
 
@@ -206,14 +181,11 @@ userRoute.post('/user/link-x', requirePrivyAuth, async (c) => {
 })
 
 userRoute.post('/user/unlink-x', requirePrivyAuth, async (c) => {
-  const claims = c.get('privyClaims') as Record<string, unknown> | undefined
-  const privyUserId = getPrivyUserIdFromClaims(claims)
-
-  await clearUserXUsername(privyUserId)
-
-  return c.json({
-    success: true,
-  })
+  throw new ApiError(
+    403,
+    'x_handle_locked',
+    'X is the only login method now. Handles can no longer be unlinked from the active account.',
+  )
 })
 
 export default userRoute

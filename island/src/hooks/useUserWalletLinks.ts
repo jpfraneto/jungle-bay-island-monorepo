@@ -94,9 +94,12 @@ function normalizeWalletRows(input: unknown): LinkedWallet[] {
 
 export function useUserWalletLinks(enabled = true) {
   const { authenticated, getAccessToken, user } = usePrivy();
+  const hasXSession =
+    typeof user?.twitter?.username === "string" &&
+    user.twitter.username.trim().length > 0;
   const [wallets, setWallets] = useState<LinkedWallet[]>(
     () =>
-      authenticated && enabled
+      authenticated && hasXSession && enabled
         ? getUserWalletLinksCacheEntry(user?.id)?.wallets ?? []
         : [],
   );
@@ -107,7 +110,7 @@ export function useUserWalletLinks(enabled = true) {
   );
 
   useEffect(() => {
-    if (!enabled || !authenticated) {
+    if (!enabled || !authenticated || !hasXSession) {
       setWallets([]);
       setIsLoading(false);
       setError(null);
@@ -118,10 +121,10 @@ export function useUserWalletLinks(enabled = true) {
     activeCacheKeyRef.current = getUserWalletLinksCacheKey(user?.id);
     setError(null);
     setWallets(getUserWalletLinksCacheEntry(user?.id)?.wallets ?? []);
-  }, [authenticated, enabled, user?.id]);
+  }, [authenticated, enabled, hasXSession, user?.id]);
 
   const refetch = useCallback(async (options?: { force?: boolean }) => {
-    if (!enabled || !authenticated) {
+    if (!enabled || !authenticated || !hasXSession) {
       setWallets([]);
       setIsLoading(false);
       setError(null);
@@ -209,7 +212,7 @@ export function useUserWalletLinks(enabled = true) {
         setIsLoading(false);
       }
     }
-  }, [authenticated, enabled, getAccessToken, user?.id]);
+  }, [authenticated, enabled, getAccessToken, hasXSession, user?.id]);
 
   useEffect(() => {
     void refetch().catch(() => undefined);

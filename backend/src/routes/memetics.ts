@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { keccak256 } from 'viem'
+import { keccak256, parseUnits } from 'viem'
 import {
   CONFIG,
   db,
@@ -21,16 +21,21 @@ import { getPrivyLinkedAccounts } from '../services/privyClaims'
 import { clearCache } from '../services/cache'
 import { getCanonicalProjectContext } from '../services/canonicalProjects'
 import { COMMUNITY_POLICY } from '../services/communityPolicy'
+import { fetchDexScreenerData } from '../services/dexscreener'
 import { ApiError } from '../services/errors'
+import { recordOnchainInteraction } from '../services/interactionLedger'
 import {
+  MEMETICS_ABI,
   MEMETICS_EIP712_DOMAIN,
   computeMemeticsPrimaryAssetKey,
   createMemeticsSalt,
   decodeMemeticsLog,
   findMemeticsProfileByWallets,
+  getCommissionManagerContractAddress,
   getMemeticsContractAddress,
   getMemeticsDeadline,
   getMemeticsHandleHash,
+  getMemeticsOwnerWalletClient,
   getMemeticsSigner,
   hasMemeticsPetitionSignature,
   inferMemeticsAssetKind,
@@ -42,6 +47,7 @@ import {
   readWalletProfileId,
   toMemeticsAssetChain,
 } from '../services/memetics'
+import { TREASURY_ADDRESS, USDC_ADDRESS, verifyPayment } from '../services/payment'
 import { resolveTokenMetadata } from '../services/tokenMetadata'
 import type { AppEnv } from '../types'
 
@@ -174,6 +180,42 @@ function getCanonicalPath(input: { slug?: string | null; tokenAddress: string })
   return `/bungalow/${input.slug?.trim() || input.tokenAddress}`
 }
 
+async function getBungalowPaymentQuote(input: {
+  chain: SupportedChain
+  tokenAddress: string
+}): Promise<{
+  marketCap: number | null
+  priceUsdc: number | null
+  priceRaw: bigint | null
+}> {
+  if (input.chain === 'solana') {
+    return {
+      marketCap: null,
+      priceUsdc: null,
+      priceRaw: null,
+    }
+  }
+
+  const dexData = await fetchDexScreenerData(input.tokenAddress, input.chain).catch(() => null)
+  const marketCap = Number(dexData?.marketCap ?? 0)
+  if (!Number.isFinite(marketCap) || marketCap <= 0) {
+    return {
+      marketCap: null,
+      priceUsdc: null,
+      priceRaw: null,
+    }
+  }
+
+  const rawPriceUsdc = Math.max(marketCap * 0.001, 1)
+  const priceUsdc = Math.round(rawPriceUsdc * 100) / 100
+
+  return {
+    marketCap,
+    priceUsdc,
+    priceRaw: parseUnits(priceUsdc.toFixed(2), 6),
+  }
+}
+
 async function resolvePrimaryAsset(input: {
   chain: SupportedChain
   tokenAddress: string
@@ -210,6 +252,59 @@ async function resolvePrimaryAsset(input: {
   }
 }
 
+async function syncCreatedBungalowToDb(input: {
+  primaryAsset: Awaited<ReturnType<typeof resolvePrimaryAsset>>
+  adminProfileId: number
+  fallbackWallet: string
+  privyUserId: string | null
+}) {
+  const adminProfile = input.adminProfileId > 0
+    ? await readMemeticsProfile(input.adminProfileId)
+    : null
+  const adminWallet = adminProfile?.mainWallet ?? input.fallbackWallet
+
+  await db`
+    INSERT INTO ${db(CONFIG.SCHEMA)}.bungalows (
+      token_address,
+      chain,
+      name,
+      symbol,
+      verified_admin,
+      claimed_by_privy_user_id,
+      is_claimed,
+      updated_at
+    )
+    VALUES (
+      ${input.primaryAsset.primaryDeployment.token_address},
+      ${input.primaryAsset.primaryDeployment.chain},
+      ${input.primaryAsset.tokenName},
+      ${input.primaryAsset.tokenSymbol},
+      ${adminWallet},
+      ${input.privyUserId},
+      TRUE,
+      NOW()
+    )
+    ON CONFLICT (token_address)
+    DO UPDATE SET
+      chain = EXCLUDED.chain,
+      name = COALESCE(EXCLUDED.name, ${db(CONFIG.SCHEMA)}.bungalows.name),
+      symbol = COALESCE(EXCLUDED.symbol, ${db(CONFIG.SCHEMA)}.bungalows.symbol),
+      verified_admin = EXCLUDED.verified_admin,
+      claimed_by_privy_user_id = COALESCE(EXCLUDED.claimed_by_privy_user_id, ${db(CONFIG.SCHEMA)}.bungalows.claimed_by_privy_user_id),
+      is_claimed = TRUE,
+      updated_at = NOW()
+  `
+
+  for (const deployment of input.primaryAsset.projectContext.deployments) {
+    clearCache(`bungalow:${deployment.chain}:${deployment.token_address}`)
+  }
+
+  return getBungalow(
+    input.primaryAsset.primaryDeployment.token_address,
+    input.primaryAsset.primaryDeployment.chain,
+  )
+}
+
 memeticsRoute.get('/memetics/me', requirePrivyAuth, async (c) => {
   const claims = c.get('privyClaims') as Record<string, unknown> | undefined
   const privyUserId = c.get('privyUserId')
@@ -234,6 +329,7 @@ memeticsRoute.get('/memetics/me', requirePrivyAuth, async (c) => {
 
   return c.json({
     contract_address: getMemeticsContractAddress(),
+    commission_manager_address: getCommissionManagerContractAddress(),
     preferred_handle: preferredHandle,
     backend_heat_score: aggregated?.island_heat ?? 0,
     authenticated_wallets: authorizedWallets,
@@ -393,6 +489,7 @@ memeticsRoute.post('/memetics/link-wallet/sign', requirePrivyAuth, async (c) => 
   return c.json({
     contract_address: contractAddress,
     profile_id: existingProfile.profile.id,
+    handle: existingProfile.profile.handle,
     wallet: selectedWallet,
     heat_score: heatScore,
     salt,
@@ -477,9 +574,13 @@ memeticsRoute.get('/memetics/bungalow/:chain/:ca/qualification', async (c) => {
     chain,
     tokenAddress,
   })
-  const [bungalowId, activePetitionId] = await Promise.all([
+  const [bungalowId, activePetitionId, paymentQuote] = await Promise.all([
     readMemeticsBungalowIdByAssetKey(primaryAsset.primaryAssetKey),
     readMemeticsActivePetitionIdByAssetKey(primaryAsset.primaryAssetKey),
+    getBungalowPaymentQuote({
+      chain: primaryAsset.primaryDeployment.chain,
+      tokenAddress: primaryAsset.primaryDeployment.token_address,
+    }),
   ])
   const petition = activePetitionId > 0
     ? await readMemeticsPetition(activePetitionId)
@@ -548,6 +649,13 @@ memeticsRoute.get('/memetics/bungalow/:chain/:ca/qualification', async (c) => {
             activePetitionId === 0 &&
             (viewerSnapshot.islandHeat >= 50 ||
               viewerSnapshot.jbacBalance >= COMMUNITY_POLICY.jbac_shortcut_min_balance),
+          can_pay_to_create:
+            bungalowId === 0 &&
+            activePetitionId === 0 &&
+            viewerProfileId > 0 &&
+            viewerSnapshot.islandHeat < 50 &&
+            viewerSnapshot.jbacBalance < COMMUNITY_POLICY.jbac_shortcut_min_balance &&
+            Boolean(paymentQuote.priceUsdc),
           profile_ready: viewerProfileId > 0,
           qualifies_to_construct_now:
             bungalowId === 0 &&
@@ -576,6 +684,198 @@ memeticsRoute.get('/memetics/bungalow/:chain/:ca/qualification', async (c) => {
       primary_asset_chain: primaryAsset.primaryAssetChain,
       primary_asset_kind: primaryAsset.primaryAssetKind,
       primary_asset_ref: primaryAsset.primaryAssetRef,
+    },
+    payment: {
+      eligible_for_paid_creation:
+        bungalowId === 0 &&
+        activePetitionId === 0 &&
+        Boolean(paymentQuote.priceUsdc),
+      market_cap: paymentQuote.marketCap,
+      quote_usdc: paymentQuote.priceUsdc,
+      treasury_address: TREASURY_ADDRESS,
+      usdc_contract: USDC_ADDRESS,
+      price_basis: paymentQuote.marketCap ? 'market_cap_0.1_percent' : null,
+    },
+  })
+})
+
+memeticsRoute.post('/memetics/bungalow/:chain/:ca/create/paid', requirePrivyAuth, async (c) => {
+  const chain = toSupportedChain(c.req.param('chain'))
+  if (!chain) {
+    throw new ApiError(400, 'invalid_chain', 'Invalid chain')
+  }
+
+  const tokenAddress = normalizeAddress(c.req.param('ca'), chain)
+  if (!tokenAddress) {
+    throw new ApiError(400, 'invalid_token', 'Invalid token address')
+  }
+
+  const privyUserId = c.get('privyUserId')
+  if (!privyUserId) {
+    throw new ApiError(401, 'auth_required', 'Privy authentication required')
+  }
+
+  const contractAddress = getMemeticsContractAddress()
+  const ownerWalletClient = getMemeticsOwnerWalletClient()
+  if (!contractAddress || !ownerWalletClient) {
+    throw new ApiError(500, 'memetics_not_configured', 'Memetics owner signer is not configured')
+  }
+
+  const body = await c.req.json<{
+    wallet?: unknown
+    payment_proof?: unknown
+    bungalow_name?: unknown
+    metadata_uri?: unknown
+  }>()
+
+  const paymentProof = typeof body.payment_proof === 'string' ? body.payment_proof.trim() : ''
+  if (!paymentProof) {
+    throw new ApiError(402, 'payment_required', 'USDC payment is required before this bungalow can be created', {
+      accepts: ['x402', 'raw_tx_hash'],
+    })
+  }
+
+  const authorizedWallets = await resolveAuthorizedWallets(c, privyUserId)
+  const selectedWallet = assertWalletAuthorized(
+    typeof body.wallet === 'string' ? body.wallet : c.get('walletAddress') ?? null,
+    authorizedWallets,
+  )
+  const profileId = await readWalletProfileId(selectedWallet)
+  if (!profileId) {
+    throw new ApiError(403, 'profile_required', 'Create your onchain profile before paying to open a bungalow')
+  }
+
+  const primaryAsset = await resolvePrimaryAsset({
+    chain,
+    tokenAddress,
+  })
+  const [existingBungalowId, activePetitionId, viewerSnapshot, paymentQuote] = await Promise.all([
+    readMemeticsBungalowIdByAssetKey(primaryAsset.primaryAssetKey),
+    readMemeticsActivePetitionIdByAssetKey(primaryAsset.primaryAssetKey),
+    getViewerHeatSnapshot(selectedWallet),
+    getBungalowPaymentQuote({
+      chain: primaryAsset.primaryDeployment.chain,
+      tokenAddress: primaryAsset.primaryDeployment.token_address,
+    }),
+  ])
+
+  if (existingBungalowId > 0) {
+    throw new ApiError(409, 'already_exists', 'This bungalow is already open onchain')
+  }
+  if (activePetitionId > 0) {
+    throw new ApiError(409, 'petition_exists', 'A petition for this bungalow is already active')
+  }
+  if (!paymentQuote.priceRaw || !paymentQuote.priceUsdc) {
+    throw new ApiError(404, 'quote_unavailable', 'Unable to price this bungalow from current market data')
+  }
+  if (
+    viewerSnapshot.islandHeat >= 50 ||
+    viewerSnapshot.jbacBalance >= COMMUNITY_POLICY.jbac_shortcut_min_balance
+  ) {
+    throw new ApiError(409, 'formal_requirements_met', 'This wallet already qualifies to create the bungalow without payment')
+  }
+
+  const payment = await verifyPayment(
+    paymentProof,
+    primaryAsset.primaryDeployment.token_address,
+    paymentQuote.priceRaw,
+  )
+  if (!payment.valid) {
+    throw new ApiError(402, 'payment_failed', payment.error ?? 'Payment verification failed')
+  }
+
+  const bungalowName =
+    typeof body.bungalow_name === 'string' && body.bungalow_name.trim()
+      ? body.bungalow_name.trim().slice(0, 80)
+      : primaryAsset.tokenName || primaryAsset.tokenSymbol || primaryAsset.primaryDeployment.token_address
+  const metadataURI =
+    typeof body.metadata_uri === 'string'
+      ? body.metadata_uri.trim().slice(0, 512)
+      : ''
+
+  const args = [
+    BigInt(profileId),
+    bungalowName,
+    metadataURI,
+    primaryAsset.primaryAssetChain,
+    primaryAsset.primaryAssetKind,
+    primaryAsset.primaryAssetRef,
+  ] as const
+
+  const simulation = await publicClients.base.simulateContract({
+    address: contractAddress,
+    abi: MEMETICS_ABI,
+    functionName: 'adminCreateBungalow',
+    args,
+    account: ownerWalletClient.account,
+  })
+  const txHash = await ownerWalletClient.writeContract(simulation.request)
+  const receipt = await publicClients.base.waitForTransactionReceipt({
+    hash: txHash,
+  })
+  if (receipt.status !== 'success') {
+    throw new ApiError(409, 'tx_failed', 'The owner bungalow creation transaction failed')
+  }
+
+  const decodedLogs = receipt.logs
+    .map((log) =>
+      decodeMemeticsLog({
+        address: log.address,
+        data: log.data,
+        topics: log.topics as `0x${string}`[],
+      }),
+    )
+    .filter((log): log is NonNullable<ReturnType<typeof decodeMemeticsLog>> => Boolean(log))
+
+  const createdEvent = decodedLogs.find(
+    (log) =>
+      log.eventName === 'BungalowCreated' &&
+      log.args.primaryAssetKey?.toLowerCase() === primaryAsset.primaryAssetKey.toLowerCase(),
+  )
+  if (!createdEvent) {
+    throw new ApiError(409, 'unexpected_receipt', 'The owner transaction did not emit BungalowCreated')
+  }
+
+  const adminProfileId = Number((createdEvent.args as any).adminProfileId ?? profileId)
+  const bungalowId = Number((createdEvent.args as any).bungalowId ?? 0)
+  const bungalow = await syncCreatedBungalowToDb({
+    primaryAsset,
+    adminProfileId,
+    fallbackWallet: selectedWallet,
+    privyUserId,
+  })
+
+  await recordOnchainInteraction({
+    txHash,
+    contractAddress,
+    action: 'memetics_bungalow_admin_create',
+    chain: primaryAsset.primaryDeployment.chain,
+    tokenAddress: primaryAsset.primaryDeployment.token_address,
+    privyUserId,
+    wallet: selectedWallet,
+    profileId,
+    bungalowId,
+    paymentTxHash: paymentProof,
+    metadata: {
+      payment_quote_usdc: paymentQuote.priceUsdc,
+      market_cap: paymentQuote.marketCap,
+      primary_asset_key: primaryAsset.primaryAssetKey,
+    },
+  })
+
+  return c.json({
+    ok: true,
+    created: true,
+    payment_tx_hash: paymentProof.toLowerCase(),
+    tx_hash: txHash,
+    bungalow_id: bungalowId || null,
+    bungalow: {
+      canonical_path: getCanonicalPath({
+        slug: primaryAsset.projectContext.project?.slug ?? null,
+        tokenAddress: primaryAsset.primaryDeployment.token_address,
+      }),
+      token_address: primaryAsset.primaryDeployment.token_address,
+      name: bungalow?.name ?? primaryAsset.tokenName ?? primaryAsset.tokenSymbol,
     },
   })
 })
@@ -880,49 +1180,44 @@ memeticsRoute.post('/memetics/bungalow/:chain/:ca/confirm', requirePrivyAuth, as
 
   if (createdEvent) {
     const adminProfileId = Number((createdEvent.args as any).adminProfileId ?? 0)
-    const adminProfile = adminProfileId > 0 ? await readMemeticsProfile(adminProfileId) : null
-    const adminWallet = adminProfile?.mainWallet ?? receipt.from
+    bungalow = await syncCreatedBungalowToDb({
+      primaryAsset,
+      adminProfileId,
+      fallbackWallet: receipt.from,
+      privyUserId,
+    })
 
-    await db`
-      INSERT INTO ${db(CONFIG.SCHEMA)}.bungalows (
-        token_address,
-        chain,
-        name,
-        symbol,
-        verified_admin,
-        claimed_by_privy_user_id,
-        is_claimed,
-        updated_at
-      )
-      VALUES (
-        ${primaryAsset.primaryDeployment.token_address},
-        ${primaryAsset.primaryDeployment.chain},
-        ${primaryAsset.tokenName},
-        ${primaryAsset.tokenSymbol},
-        ${adminWallet},
-        ${privyUserId},
-        TRUE,
-        NOW()
-      )
-      ON CONFLICT (token_address)
-      DO UPDATE SET
-        chain = EXCLUDED.chain,
-        name = COALESCE(EXCLUDED.name, ${db(CONFIG.SCHEMA)}.bungalows.name),
-        symbol = COALESCE(EXCLUDED.symbol, ${db(CONFIG.SCHEMA)}.bungalows.symbol),
-        verified_admin = EXCLUDED.verified_admin,
-        claimed_by_privy_user_id = EXCLUDED.claimed_by_privy_user_id,
-        is_claimed = TRUE,
-        updated_at = NOW()
-    `
-
-    for (const deployment of primaryAsset.projectContext.deployments) {
-      clearCache(`bungalow:${deployment.chain}:${deployment.token_address}`)
-    }
-
-    bungalow = await getBungalow(
-      primaryAsset.primaryDeployment.token_address,
-      primaryAsset.primaryDeployment.chain,
-    )
+    await recordOnchainInteraction({
+      txHash,
+      contractAddress: getMemeticsContractAddress(),
+      action: 'memetics_bungalow_create_or_support',
+      chain: primaryAsset.primaryDeployment.chain,
+      tokenAddress: primaryAsset.primaryDeployment.token_address,
+      privyUserId,
+      wallet: receipt.from,
+      profileId: adminProfileId || null,
+      bungalowId: Number((createdEvent.args as any).bungalowId ?? 0) || null,
+      metadata: {
+        petition_id: petitionId || null,
+        created: true,
+      },
+    })
+  } else {
+    await recordOnchainInteraction({
+      txHash,
+      contractAddress: getMemeticsContractAddress(),
+      action: 'memetics_bungalow_create_or_support',
+      chain: primaryAsset.primaryDeployment.chain,
+      tokenAddress: primaryAsset.primaryDeployment.token_address,
+      privyUserId,
+      wallet: receipt.from,
+      profileId: null,
+      bungalowId: null,
+      metadata: {
+        petition_id: petitionId || null,
+        created: false,
+      },
+    })
   }
 
   const petition = petitionId > 0 ? await readMemeticsPetition(petitionId) : null

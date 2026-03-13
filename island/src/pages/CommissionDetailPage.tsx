@@ -1,731 +1,439 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useParams } from "react-router-dom";
 import { usePrivy } from "@privy-io/react-auth";
-import { useNavigate, useParams } from "react-router-dom";
-import WalletSelector, { type WalletSelectorState } from "../components/WalletSelector";
-import { useMemeticsProfile } from "../hooks/useMemeticsProfile";
+import { type Address, parseUnits } from "viem";
 import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
-import { formatAddress, formatJbmAmount, formatTimeAgo } from "../utils/formatters";
-import {
-  MEMETICS_CONTRACT_ADDRESS,
-  getMemeticsErrorMessage,
-  memeticsAbi,
-} from "../utils/memetics";
-import {
-  formatCommissionDate,
-  getCommissionStatusLabel,
-  getCommissionStatusTone,
-  normalizeCommissionDetailResponse,
-  type CommissionApplication,
-  type CommissionDetailResponse,
-} from "../utils/commissions";
 import styles from "../styles/commission-detail-page.module.css";
+import {
+  commissionManagerAbi,
+  confirmTrackedTx,
+  ensureUsdcAllowance,
+  fetchAuthedJson,
+  fetchJson,
+  formatUnixDate,
+  formatUsdcAmount,
+  normalizeTxError,
+  ONCHAIN_CONTRACTS,
+  parseUsdcRaw,
+  trackSubmittedTx,
+} from "../utils/onchain";
 
-function isHexAddress(value: string | null | undefined): value is `0x${string}` {
-  return typeof value === "string" && /^0x[0-9a-fA-F]{40}$/.test(value);
+interface CommissionDetailResponse {
+  commission: Record<string, unknown>;
+  applications: Array<Record<string, unknown>>;
+  viewer: Record<string, unknown>;
 }
 
-function getEmptyDetailResponse(): CommissionDetailResponse {
-  return {
-    commission: null,
-    applications: [],
-    viewer: {
-      authenticated: false,
-      profile_id: null,
-      wallets: [],
-    },
-  };
+function asNumber(value: unknown): number {
+  const numeric = Number(value ?? 0);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function asString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function asBoolean(value: unknown): boolean {
+  return Boolean(value);
 }
 
 export default function CommissionDetailPage() {
-  const { commission_id } = useParams();
-  const navigate = useNavigate();
-  const { authenticated, getAccessToken, login } = usePrivy();
-  const {
-    activeWallet,
-    publicClient,
-    requireWallet,
-    setActiveWallet,
-    walletAddress,
-  } = usePrivyBaseWallet();
-  const { data: memeticsProfile, refetch: refetchMemeticsProfile } =
-    useMemeticsProfile(authenticated);
-
-  const [data, setData] = useState<CommissionDetailResponse>(
-    getEmptyDetailResponse(),
-  );
-  const [isLoading, setIsLoading] = useState(true);
+  const { commission_id } = useParams<{ commission_id: string }>();
+  const { authenticated, getAccessToken } = usePrivy();
+  const { publicClient, requireWallet } = usePrivyBaseWallet();
+  const [data, setData] = useState<CommissionDetailResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedWallet, setSelectedWallet] = useState("");
-  const [walletState, setWalletState] = useState<WalletSelectorState>({
-    selectedWallet: null,
-    selectedWalletAvailable: false,
-    hasAvailableWallet: false,
-    availableWallets: [],
-    totalWallets: 0,
-  });
-  const [applicationMessage, setApplicationMessage] = useState("");
+  const [status, setStatus] = useState<string | null>(null);
+  const [txBusy, setTxBusy] = useState(false);
+  const [applyUri, setApplyUri] = useState("");
+  const [applyPrice, setApplyPrice] = useState("");
   const [deliverableUri, setDeliverableUri] = useState("");
-  const [actionStatus, setActionStatus] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [pendingAction, setPendingAction] = useState<string | null>(null);
 
-  const commissionId = Number(commission_id ?? 0);
-  const commission = data.commission;
-  const viewer = data.viewer;
-  const onchainWallets = memeticsProfile?.profile?.wallets ?? [];
+  const commissionId = Number.parseInt(commission_id ?? "0", 10);
 
-  useEffect(() => {
-    if (!walletAddress) return;
-    if (selectedWallet) return;
-    setSelectedWallet(walletAddress);
-  }, [selectedWallet, walletAddress]);
-
-  useEffect(() => {
-    if (commission?.deliverable_uri && !deliverableUri) {
-      setDeliverableUri(commission.deliverable_uri);
-    }
-  }, [commission?.deliverable_uri, deliverableUri]);
-
-  const loadCommission = useCallback(async () => {
-    if (!commissionId) {
+  const refetch = async () => {
+    if (!Number.isFinite(commissionId) || commissionId <= 0) {
       setError("Invalid commission id.");
-      setData(getEmptyDetailResponse());
-      setIsLoading(false);
       return;
     }
 
     setIsLoading(true);
     setError(null);
-
     try {
-      const headers: Record<string, string> = {};
-      if (authenticated) {
-        const token = await getAccessToken();
-        if (token) {
-          headers.Authorization = `Bearer ${token}`;
-        }
-      }
-
-      const response = await fetch(`/api/commissions/${commissionId}`, {
-        headers,
-        cache: "no-store",
-      });
-      const payload = await response.json().catch(() => null);
-      if (!response.ok) {
-        const message =
-          typeof payload?.error === "string"
-            ? payload.error
-            : `Request failed (${response.status})`;
-        throw new Error(message);
-      }
-
-      setData(normalizeCommissionDetailResponse(payload));
-    } catch (loadError) {
-      setError(
-        loadError instanceof Error
-          ? loadError.message
-          : "Failed to load commission",
-      );
-      setData(getEmptyDetailResponse());
+      const payload = authenticated
+        ? await fetchAuthedJson<CommissionDetailResponse>(
+            `/api/onchain/commissions/${commissionId}`,
+            getAccessToken,
+          )
+        : await fetchJson<CommissionDetailResponse>(`/api/onchain/commissions/${commissionId}`);
+      setData(payload);
+    } catch (fetchError) {
+      setError(fetchError instanceof Error ? fetchError.message : "Failed to load commission");
     } finally {
       setIsLoading(false);
     }
-  }, [authenticated, commissionId, getAccessToken]);
+  };
 
   useEffect(() => {
-    void loadCommission();
-  }, [loadCommission]);
+    void refetch();
+  }, [commissionId, authenticated]);
 
-  const getAuthHeaders = useCallback(async () => {
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
-    const token = await getAccessToken();
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
-    return headers;
-  }, [getAccessToken]);
+  const commission = data?.commission ?? null;
+  const viewer = data?.viewer ?? {};
+  const applications = data?.applications ?? [];
 
-  const prepareWallet = useCallback(async () => {
-    if (!authenticated) {
-      login();
-      throw new Error("Connect your wallet first.");
-    }
+  const runWrite = async (input: {
+    label: string;
+    action: string;
+    functionName:
+      | "applyToCommission"
+      | "selectArtist"
+      | "submitDeliverable"
+      | "approveCommission"
+      | "rejectCommission"
+      | "claimTimedOutPayout"
+      | "claimMissedDeadlineRefund"
+      | "expireCommission";
+    args: readonly unknown[];
+    usdcAmount?: bigint;
+    applicationId?: number | null;
+  }) => {
+    setTxBusy(true);
+    setError(null);
+    setStatus(input.label);
 
-    if (!walletState.hasAvailableWallet || !selectedWallet) {
-      throw new Error(
-        "Choose a connected wallet that is already linked to your onchain profile.",
-      );
-    }
-
-    if (selectedWallet.toLowerCase() !== activeWallet?.address.toLowerCase()) {
-      setActiveWallet(selectedWallet);
-      await new Promise((resolve) => window.setTimeout(resolve, 150));
-    }
-
-    const prepared = await requireWallet();
-    if (prepared.address.toLowerCase() !== selectedWallet.toLowerCase()) {
-      throw new Error("Switch to the selected wallet and try again.");
-    }
-
-    return prepared;
-  }, [
-    activeWallet?.address,
-    authenticated,
-    login,
-    requireWallet,
-    selectedWallet,
-    setActiveWallet,
-    walletState.hasAvailableWallet,
-  ]);
-
-  const postJson = useCallback(
-    async (path: string, body: Record<string, unknown>) => {
-      const response = await fetch(path, {
-        method: "POST",
-        headers: await getAuthHeaders(),
-        body: JSON.stringify(body),
-      });
-      const payload = await response.json().catch(() => null);
-      if (!response.ok) {
-        const message =
-          typeof payload?.error === "string"
-            ? payload.error
-            : `Request failed (${response.status})`;
-        throw new Error(message);
-      }
-      return payload;
-    },
-    [getAuthHeaders],
-  );
-
-  const refreshFromPayload = useCallback(
-    async (payload: unknown) => {
-      setData(normalizeCommissionDetailResponse(payload));
-      await refetchMemeticsProfile().catch(() => undefined);
-    },
-    [refetchMemeticsProfile],
-  );
-
-  const runContractAction = useCallback(
-    async (input: {
-      actionKey: string;
-      pendingLabel: string;
-      confirmPath: string;
-      functionName:
-        | "claimCommission"
-        | "submitCommission"
-        | "approveCommission"
-        | "cancelCommission"
-        | "claimTimedOutCommissionPayout";
-      args: readonly unknown[];
-    }) => {
-      if (!commissionId || !commission) return;
-      if (!isHexAddress(MEMETICS_CONTRACT_ADDRESS)) {
-        throw new Error("VITE_MEMETICS_CONTRACT_ADDRESS is not configured.");
-      }
-
-      setPendingAction(input.actionKey);
-      setActionError(null);
-      setActionStatus(input.pendingLabel);
-
-      try {
-        const { address, walletClient } = await prepareWallet();
-        const hash = await walletClient.writeContract({
-          address: MEMETICS_CONTRACT_ADDRESS,
-          abi: memeticsAbi,
-          functionName: input.functionName,
-          args: input.args as never,
-          account: address,
-          chain: undefined,
-        });
-        const receipt = await publicClient.waitForTransactionReceipt({ hash });
-        if (receipt.status !== "success") {
-          throw new Error("The transaction failed onchain.");
-        }
-
-        setActionStatus("Indexing the onchain change...");
-        const payload = await postJson(input.confirmPath, {
-          tx_hash: receipt.transactionHash,
-        });
-        await refreshFromPayload(payload);
-        setActionStatus("Done.");
-      } catch (contractError) {
-        setActionError(
-          getMemeticsErrorMessage(
-            contractError,
-            `Failed to ${input.actionKey.replace(/-/g, " ")}.`,
-          ),
+    try {
+      const { address, walletClient } = await requireWallet();
+      if ((input.usdcAmount ?? 0n) > 0n) {
+        setStatus(
+          `Approval required: allow USDC spending by ${ONCHAIN_CONTRACTS.commissionManager}.`,
         );
-        setActionStatus(null);
-      } finally {
-        setPendingAction(null);
+        const approvalTx = await ensureUsdcAllowance({
+          publicClient,
+          walletClient,
+          owner: address as Address,
+          spender: ONCHAIN_CONTRACTS.commissionManager,
+          amount: input.usdcAmount ?? 0n,
+        });
+        if (approvalTx) {
+          await publicClient.waitForTransactionReceipt({ hash: approvalTx });
+        }
       }
-    },
-    [commission, commissionId, postJson, prepareWallet, publicClient, refreshFromPayload],
-  );
 
-  const handleApply = async () => {
-    if (!authenticated) {
-      login();
-      return;
-    }
-
-    if (!walletState.hasAvailableWallet || !selectedWallet) {
-      setActionError("Choose an onchain-linked wallet before applying.");
-      return;
-    }
-
-    try {
-      setPendingAction("apply");
-      setActionError(null);
-      setActionStatus("Submitting your application...");
-      const payload = await postJson(`/api/commissions/${commissionId}/apply`, {
-        wallet: selectedWallet,
-        message: applicationMessage.trim(),
+      setStatus("Sending wallet transaction...");
+      const txHash = await walletClient.writeContract({
+        account: address as Address,
+        address: ONCHAIN_CONTRACTS.commissionManager,
+        abi: commissionManagerAbi,
+        functionName: input.functionName,
+        args: input.args as never,
       });
-      await loadCommission();
-      void refetchMemeticsProfile().catch(() => undefined);
-      setApplicationMessage("");
-      setActionStatus(
-        payload?.application?.status === "pending"
-          ? "Application sent."
-          : "Application updated.",
-      );
-    } catch (applyError) {
-      setActionError(
-        applyError instanceof Error
-          ? applyError.message
-          : "Failed to apply to this commission.",
-      );
-      setActionStatus(null);
+
+      await trackSubmittedTx({
+        getAccessToken,
+        txHash,
+        action: input.action,
+        functionName: input.functionName,
+        contractAddress: ONCHAIN_CONTRACTS.commissionManager,
+        wallet: address,
+        commissionId,
+        applicationId: input.applicationId ?? null,
+      });
+
+      setStatus("Waiting for confirmation...");
+      await publicClient.waitForTransactionReceipt({ hash: txHash });
+      await confirmTrackedTx(getAccessToken, txHash);
+      await refetch();
+      setStatus("Commission state updated.");
+    } catch (txError) {
+      setError(normalizeTxError(txError, "Transaction failed"));
+      setStatus(null);
     } finally {
-      setPendingAction(null);
+      setTxBusy(false);
     }
   };
 
-  const handleApproveApplication = async (application: CommissionApplication) => {
-    if (!authenticated) {
-      login();
-      return;
-    }
+  const selectedApplication = useMemo(() => {
+    const approvedArtistId = asNumber(commission?.selected_artist_profile_id);
+    return applications.find(
+      (entry) => asNumber(entry.artist_profile_id) === approvedArtistId,
+    ) ?? null;
+  }, [applications, commission]);
 
-    try {
-      setPendingAction(`approve-app-${application.id}`);
-      setActionError(null);
-      setActionStatus("Approving artist application...");
-      const payload = await postJson(
-        `/api/commissions/${commissionId}/applications/${application.id}/approve`,
-        {},
-      );
-      await refreshFromPayload(payload);
-      setActionStatus("Artist approved. They can now claim the commission onchain.");
-    } catch (approveError) {
-      setActionError(
-        approveError instanceof Error
-          ? approveError.message
-          : "Failed to approve this artist.",
-      );
-      setActionStatus(null);
-    } finally {
-      setPendingAction(null);
-    }
-  };
-
-  if (isLoading) {
-    return (
-      <section className={styles.page}>
-        <div className={styles.statusCard}>
-          <strong>Loading commission...</strong>
-        </div>
-      </section>
-    );
+  if (!Number.isFinite(commissionId) || commissionId <= 0) {
+    return <section className={styles.page}>Invalid commission id.</section>;
   }
 
-  if (error || !commission) {
+  if (isLoading && !data) {
+    return <section className={styles.page}>Loading commission...</section>;
+  }
+
+  if (!commission) {
     return (
       <section className={styles.page}>
-        <div className={styles.statusCard}>
-          <strong>Could not load this commission.</strong>
-          <span>{error ?? "The commission record is unavailable."}</span>
-          <div className={styles.inlineActions}>
-            <button
-              type="button"
-              className={styles.secondaryButton}
-              onClick={() => void loadCommission()}
-            >
-              Retry
-            </button>
-            <button
-              type="button"
-              className={styles.primaryButton}
-              onClick={() => navigate("/commissions")}
-            >
-              Back to board
-            </button>
-          </div>
-        </div>
+        <p className={styles.error}>{error ?? "Commission not found."}</p>
       </section>
     );
   }
 
   return (
     <section className={styles.page}>
-      <header className={styles.hero}>
-        <div className={styles.heroCopy}>
-          <div className={styles.kickerRow}>
-            <p className={styles.kicker}>Commission #{commission.commission_id}</p>
-            <span
-              className={styles.statusPill}
-              data-tone={getCommissionStatusTone(commission.status)}
-            >
-              {getCommissionStatusLabel(commission.status)}
-            </span>
-          </div>
-          <h1>{commission.rate_label}</h1>
-          <p className={styles.summary}>{commission.prompt}</p>
+      <div className={styles.hero}>
+        <div>
+          <p className={styles.kicker}>Commission #{commissionId}</p>
+          <h1>{asString(commission.bungalow_name) || `Bungalow ${asNumber(commission.bungalow_id)}`}</h1>
+          <p className={styles.summary}>{asString(commission.prompt_uri)}</p>
         </div>
-
-        <div className={styles.heroMeta}>
-          <div className={styles.metric}>
-            <span>Budget</span>
-            <strong>{formatJbmAmount(commission.budget_jbm)}</strong>
-          </div>
-          <div className={styles.metric}>
-            <span>Delivery</span>
-            <strong>{formatCommissionDate(commission.delivery_deadline)}</strong>
-          </div>
-          <div className={styles.metric}>
-            <span>Bungalow</span>
-            <strong>{commission.bungalow_name ?? commission.bungalow_token_address}</strong>
-          </div>
+        <div className={styles.callout}>
+          <strong>{String(commission.status)}</strong>
+          <span>{formatUsdcAmount(asString(commission.budget_usdc))} USDC budget</span>
+          <small>Deadline {formatUnixDate(asNumber(commission.deadline_unix))}</small>
         </div>
-      </header>
-
-      <div className={styles.layout}>
-        <div className={styles.mainColumn}>
-          <section className={styles.card}>
-            <div className={styles.cardHeader}>
-              <h2>Commission brief</h2>
-              <a
-                className={styles.inlineLink}
-                href={`/bungalow/${commission.bungalow_token_address}?chain=${encodeURIComponent(
-                  commission.bungalow_chain,
-                )}`}
-              >
-                View bungalow
-              </a>
-            </div>
-            <dl className={styles.metaGrid}>
-              <div>
-                <dt>Requester</dt>
-                <dd>
-                  {commission.requester_handle
-                    ? `@${commission.requester_handle}`
-                    : formatAddress(commission.requester_wallet)}
-                </dd>
-              </div>
-              <div>
-                <dt>Applications</dt>
-                <dd>{commission.applications_count}</dd>
-              </div>
-              <div>
-                <dt>Claim deadline</dt>
-                <dd>{formatCommissionDate(commission.claim_deadline)}</dd>
-              </div>
-              <div>
-                <dt>Created</dt>
-                <dd>{formatCommissionDate(commission.created_at)}</dd>
-              </div>
-            </dl>
-            <p className={styles.longCopy}>{commission.prompt}</p>
-          </section>
-
-          <section className={styles.card}>
-            <div className={styles.cardHeader}>
-              <h2>Artist queue</h2>
-              <span className={styles.cardMeta}>
-                {commission.applications_count} applications
-              </span>
-            </div>
-
-            {data.applications.length === 0 ? (
-              <div className={styles.emptyState}>
-                No artists are queued yet.
-              </div>
-            ) : (
-              <div className={styles.applicationList}>
-                {data.applications.map((application) => (
-                  <article
-                    key={application.id}
-                    className={styles.applicationCard}
-                    data-status={application.status}
-                  >
-                    <div className={styles.applicationTop}>
-                      <strong>
-                        {application.artist_handle
-                          ? `@${application.artist_handle}`
-                          : formatAddress(application.artist_wallet)}
-                      </strong>
-                      <span className={styles.applicationStatus}>
-                        {application.status}
-                      </span>
-                    </div>
-                    <p className={styles.applicationMeta}>
-                      applied {formatTimeAgo(application.created_at)}
-                    </p>
-                    <p className={styles.applicationMessage}>
-                      {application.message || "No note attached to this application."}
-                    </p>
-
-                    {viewer.can_approve_artist && application.status === "pending" ? (
-                      <button
-                        type="button"
-                        className={styles.primaryButton}
-                        disabled={Boolean(pendingAction)}
-                        onClick={() => {
-                          void handleApproveApplication(application);
-                        }}
-                      >
-                        Approve this artist
-                      </button>
-                    ) : null}
-                  </article>
-                ))}
-              </div>
-            )}
-          </section>
-        </div>
-
-        <aside className={styles.sidebar}>
-          {(viewer.can_apply ||
-            viewer.can_claim ||
-            viewer.can_submit ||
-            viewer.can_approve_completion ||
-            viewer.can_cancel ||
-            viewer.can_claim_timeout_payout) ? (
-            <section className={styles.card}>
-              <div className={styles.cardHeader}>
-                <h2>Transaction wallet</h2>
-              </div>
-              <WalletSelector
-                value={selectedWallet}
-                onSelect={(wallet) => {
-                  setSelectedWallet(wallet);
-                  setActionError(null);
-                }}
-                label="Act with"
-                panelMode="inline"
-                eligibleWallets={onchainWallets}
-                onStateChange={setWalletState}
-              />
-              <p className={styles.note}>
-                Contract actions must come from a wallet already linked to your
-                onchain profile.
-              </p>
-            </section>
-          ) : null}
-
-          {viewer.can_apply ? (
-            <section className={styles.card}>
-              <div className={styles.cardHeader}>
-                <h2>Apply as artist</h2>
-              </div>
-              <textarea
-                className={styles.textarea}
-                value={applicationMessage}
-                onChange={(event) => setApplicationMessage(event.target.value)}
-                placeholder="Tell the requester how you’d approach this piece."
-                rows={5}
-                maxLength={1000}
-              />
-              <button
-                type="button"
-                className={styles.primaryButton}
-                disabled={pendingAction === "apply"}
-                onClick={() => {
-                  void handleApply();
-                }}
-              >
-                {pendingAction === "apply" ? "Applying..." : "Apply"}
-              </button>
-            </section>
-          ) : null}
-
-          {viewer.can_claim ? (
-            <section className={styles.card}>
-              <div className={styles.cardHeader}>
-                <h2>Claim commission</h2>
-              </div>
-              <p className={styles.note}>
-                You were approved offchain. Claiming onchain starts the paid job.
-              </p>
-              <button
-                type="button"
-                className={styles.primaryButton}
-                disabled={pendingAction === "claim"}
-                onClick={() => {
-                  void runContractAction({
-                    actionKey: "claim",
-                    pendingLabel: "Claiming the commission onchain...",
-                    confirmPath: `/api/commissions/${commissionId}/claim/confirm`,
-                    functionName: "claimCommission",
-                    args: [BigInt(commissionId)],
-                  });
-                }}
-              >
-                {pendingAction === "claim" ? "Claiming..." : "Claim onchain"}
-              </button>
-            </section>
-          ) : null}
-
-          {viewer.can_submit ? (
-            <section className={styles.card}>
-              <div className={styles.cardHeader}>
-                <h2>Submit deliverable</h2>
-              </div>
-              <input
-                className={styles.input}
-                value={deliverableUri}
-                onChange={(event) => setDeliverableUri(event.target.value)}
-                placeholder="https://..."
-              />
-              <button
-                type="button"
-                className={styles.primaryButton}
-                disabled={pendingAction === "submit"}
-                onClick={() => {
-                  if (!deliverableUri.trim()) {
-                    setActionError("Add a deliverable URL before submitting.");
-                    return;
-                  }
-                  void runContractAction({
-                    actionKey: "submit",
-                    pendingLabel: "Submitting the deliverable onchain...",
-                    confirmPath: `/api/commissions/${commissionId}/submit/confirm`,
-                    functionName: "submitCommission",
-                    args: [BigInt(commissionId), deliverableUri.trim()],
-                  });
-                }}
-              >
-                {pendingAction === "submit" ? "Submitting..." : "Submit work"}
-              </button>
-            </section>
-          ) : null}
-
-          {viewer.can_approve_completion ? (
-            <section className={styles.card}>
-              <div className={styles.cardHeader}>
-                <h2>Approve payout</h2>
-              </div>
-              <p className={styles.note}>
-                Approving settles the escrow: 92% to the artist and 8% to the
-                platform wallet.
-              </p>
-              <button
-                type="button"
-                className={styles.primaryButton}
-                disabled={pendingAction === "approve"}
-                onClick={() => {
-                  void runContractAction({
-                    actionKey: "approve",
-                    pendingLabel: "Approving payout onchain...",
-                    confirmPath: `/api/commissions/${commissionId}/approve/confirm`,
-                    functionName: "approveCommission",
-                    args: [BigInt(commissionId)],
-                  });
-                }}
-              >
-                {pendingAction === "approve" ? "Approving..." : "Approve and pay"}
-              </button>
-            </section>
-          ) : null}
-
-          {viewer.can_cancel ? (
-            <section className={styles.card}>
-              <div className={styles.cardHeader}>
-                <h2>Cancel commission</h2>
-              </div>
-              <p className={styles.note}>
-                Cancelling refunds the remaining escrow back to the requester.
-              </p>
-              <button
-                type="button"
-                className={styles.secondaryButton}
-                disabled={pendingAction === "cancel"}
-                onClick={() => {
-                  void runContractAction({
-                    actionKey: "cancel",
-                    pendingLabel: "Cancelling the commission onchain...",
-                    confirmPath: `/api/commissions/${commissionId}/cancel/confirm`,
-                    functionName: "cancelCommission",
-                    args: [BigInt(commissionId)],
-                  });
-                }}
-              >
-                {pendingAction === "cancel" ? "Cancelling..." : "Cancel"}
-              </button>
-            </section>
-          ) : null}
-
-          {viewer.can_claim_timeout_payout ? (
-            <section className={styles.card}>
-              <div className={styles.cardHeader}>
-                <h2>Timeout payout</h2>
-              </div>
-              <p className={styles.note}>
-                The review window expired. You can settle your payout directly from
-                the contract.
-              </p>
-              <button
-                type="button"
-                className={styles.primaryButton}
-                disabled={pendingAction === "timeout-payout"}
-                onClick={() => {
-                  void runContractAction({
-                    actionKey: "timeout-payout",
-                    pendingLabel: "Claiming the timed-out payout...",
-                    confirmPath: `/api/commissions/${commissionId}/payout/confirm`,
-                    functionName: "claimTimedOutCommissionPayout",
-                    args: [BigInt(commissionId)],
-                  });
-                }}
-              >
-                {pendingAction === "timeout-payout"
-                  ? "Claiming..."
-                  : "Claim payout"}
-              </button>
-            </section>
-          ) : null}
-
-          {commission.deliverable_uri ? (
-            <section className={styles.card}>
-              <div className={styles.cardHeader}>
-                <h2>Deliverable</h2>
-              </div>
-              <a
-                className={styles.inlineLink}
-                href={commission.deliverable_uri}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Open final asset
-              </a>
-            </section>
-          ) : null}
-
-          {actionStatus || actionError ? (
-            <section className={styles.card}>
-              <div className={styles.cardHeader}>
-                <h2>Action feed</h2>
-              </div>
-              {actionStatus ? <p className={styles.status}>{actionStatus}</p> : null}
-              {actionError ? <p className={styles.error}>{actionError}</p> : null}
-            </section>
-          ) : null}
-        </aside>
       </div>
+
+      {error ? <p className={styles.error}>{error}</p> : null}
+      {status ? <p className={styles.status}>{status}</p> : null}
+
+      <div className={styles.metaGrid}>
+        <article className={styles.card}>
+          <span className={styles.cardLabel}>Requester</span>
+          <strong>{asString(commission.requester_handle) || `Profile ${asNumber(commission.requester_profile_id)}`}</strong>
+          <p>{asString(commission.seed_chain)}:{asString(commission.seed_token_address)}</p>
+          <p>Rejections {asString(commission.requester_rejections)}</p>
+        </article>
+
+        <article className={styles.card}>
+          <span className={styles.cardLabel}>Selected artist</span>
+          <strong>
+            {asString(commission.selected_artist_handle) || (asNumber(commission.selected_artist_profile_id) ? `Profile ${asNumber(commission.selected_artist_profile_id)}` : "No artist selected")}
+          </strong>
+          <p>Reputation {asString(commission.artist_reputation)}</p>
+          <p>{asBoolean(commission.artist_warning) ? "Warning flag onchain." : "No warning flag."}</p>
+        </article>
+      </div>
+
+      <div className={styles.actionsGrid}>
+        {asBoolean(viewer.can_apply) ? (
+          <article className={styles.actionCard}>
+            <span className={styles.cardLabel}>Apply</span>
+            <label>
+              Pitch URI
+              <input value={applyUri} onChange={(event) => setApplyUri(event.target.value)} placeholder="ipfs://..." />
+            </label>
+            <label>
+              Proposed price in USDC
+              <input value={applyPrice} onChange={(event) => setApplyPrice(event.target.value)} placeholder="150" />
+            </label>
+            <button
+              type="button"
+              className={styles.primaryButton}
+              onClick={() =>
+                void runWrite({
+                  label: "Applying to commission...",
+                  action: "commission_apply",
+                  functionName: "applyToCommission",
+                  args: [
+                    BigInt(commissionId),
+                    applyUri.trim(),
+                    parseUnits(applyPrice.trim(), 6),
+                  ],
+                })
+              }
+              disabled={txBusy || !applyUri.trim() || !applyPrice.trim()}
+            >
+              Apply
+            </button>
+          </article>
+        ) : null}
+
+        {asBoolean(viewer.can_submit_work) ? (
+          <article className={styles.actionCard}>
+            <span className={styles.cardLabel}>Submit work</span>
+            <label>
+              Deliverable URI
+              <input value={deliverableUri} onChange={(event) => setDeliverableUri(event.target.value)} placeholder="ipfs://..." />
+            </label>
+            <button
+              type="button"
+              className={styles.primaryButton}
+              onClick={() =>
+                void runWrite({
+                  label: "Submitting deliverable...",
+                  action: "commission_submit",
+                  functionName: "submitDeliverable",
+                  args: [BigInt(commissionId), deliverableUri.trim()],
+                })
+              }
+              disabled={txBusy || !deliverableUri.trim()}
+            >
+              Submit work
+            </button>
+          </article>
+        ) : null}
+
+        {asBoolean(viewer.can_approve_payout) ? (
+          <article className={styles.actionCard}>
+            <span className={styles.cardLabel}>Approve payout</span>
+            <p>Approving pays the artist and lists the deliverable in Bodega as a free infinite item.</p>
+            <button
+              type="button"
+              className={styles.primaryButton}
+              onClick={() =>
+                void runWrite({
+                  label: "Approving payout...",
+                  action: "commission_approve",
+                  functionName: "approveCommission",
+                  args: [BigInt(commissionId)],
+                })
+              }
+              disabled={txBusy}
+            >
+              Approve payout
+            </button>
+          </article>
+        ) : null}
+
+        {asBoolean(viewer.can_reject_refund) ? (
+          <article className={styles.actionCard}>
+            <span className={styles.cardLabel}>Reject and refund</span>
+            <p>Rejecting returns the locked USDC and increments the requester rejection count onchain.</p>
+            <button
+              type="button"
+              className={styles.secondaryButton}
+              onClick={() =>
+                void runWrite({
+                  label: "Rejecting commission...",
+                  action: "commission_reject",
+                  functionName: "rejectCommission",
+                  args: [BigInt(commissionId)],
+                })
+              }
+              disabled={txBusy}
+            >
+              Reject and refund
+            </button>
+          </article>
+        ) : null}
+
+        {asBoolean(viewer.can_claim_timeout) ? (
+          <article className={styles.actionCard}>
+            <span className={styles.cardLabel}>Timeout payout</span>
+            <p>The review window is over. The selected artist can settle directly now.</p>
+            <button
+              type="button"
+              className={styles.secondaryButton}
+              onClick={() =>
+                void runWrite({
+                  label: "Claiming timeout payout...",
+                  action: "commission_timeout",
+                  functionName: "claimTimedOutPayout",
+                  args: [BigInt(commissionId)],
+                })
+              }
+              disabled={txBusy}
+            >
+              Claim timeout payout
+            </button>
+          </article>
+        ) : null}
+
+        {asBoolean(viewer.can_reclaim_missed_deadline) ? (
+          <article className={styles.actionCard}>
+            <span className={styles.cardLabel}>Missed-deadline reclaim</span>
+            <p>The artist missed the submission deadline. The requester can reclaim locked USDC.</p>
+            <button
+              type="button"
+              className={styles.secondaryButton}
+              onClick={() =>
+                void runWrite({
+                  label: "Reclaiming missed-deadline refund...",
+                  action: "commission_deadline_reclaim",
+                  functionName: "claimMissedDeadlineRefund",
+                  args: [BigInt(commissionId)],
+                })
+              }
+              disabled={txBusy}
+            >
+              Reclaim locked USDC
+            </button>
+          </article>
+        ) : null}
+
+        {asBoolean(viewer.can_expire) ? (
+          <article className={styles.actionCard}>
+            <span className={styles.cardLabel}>Expire commission</span>
+            <p>No artist was selected during the 24 hour selection window.</p>
+            <button
+              type="button"
+              className={styles.secondaryButton}
+              onClick={() =>
+                void runWrite({
+                  label: "Expiring commission...",
+                  action: "commission_expire",
+                  functionName: "expireCommission",
+                  args: [BigInt(commissionId)],
+                })
+              }
+              disabled={txBusy}
+            >
+              Expire
+            </button>
+          </article>
+        ) : null}
+      </div>
+
+      <section className={styles.section}>
+        <div className={styles.sectionHeader}>
+          <strong>Applications</strong>
+          <Link to="/commissions">Back to board</Link>
+        </div>
+        {applications.length === 0 ? (
+          <p className={styles.inlineCopy}>No applications yet.</p>
+        ) : (
+          <div className={styles.applicationList}>
+            {applications.map((application) => {
+              const applicationId = asNumber(application.application_id);
+              const proposedPrice = parseUsdcRaw(application.proposed_price_usdc);
+              const isSelected =
+                selectedApplication &&
+                asNumber(selectedApplication.application_id) === applicationId;
+
+              return (
+                <article key={applicationId} className={styles.applicationCard}>
+                  <div className={styles.itemHeader}>
+                    <strong>{asString(application.artist_handle) || `Profile ${asNumber(application.artist_profile_id)}`}</strong>
+                    <span>{formatUsdcAmount(asString(application.proposed_price_usdc))} USDC</span>
+                  </div>
+                  <p>{asString(application.pitch_uri)}</p>
+                  <small>{formatUnixDate(asNumber(application.applied_at_unix))}</small>
+                  {asBoolean(viewer.can_select_artist) && !isSelected ? (
+                    <button
+                      type="button"
+                      className={styles.primaryButton}
+                      onClick={() =>
+                        void runWrite({
+                          label: "Selecting artist and locking USDC...",
+                          action: "commission_select_artist",
+                          functionName: "selectArtist",
+                          args: [BigInt(commissionId), BigInt(applicationId)],
+                          applicationId,
+                          usdcAmount: proposedPrice,
+                        })
+                      }
+                      disabled={txBusy}
+                    >
+                      Select artist
+                    </button>
+                  ) : isSelected ? (
+                    <p className={styles.inlineHint}>Selected artist.</p>
+                  ) : null}
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
     </section>
   );
 }

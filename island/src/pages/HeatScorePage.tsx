@@ -89,9 +89,13 @@ function normalizeWalletRows(input: WalletHeat[] | undefined): WalletHeat[] {
 }
 
 export default function HeatScorePage() {
-  const { authenticated, login } = usePrivy();
+  const { authenticated, login, user } = usePrivy();
+  const isXAuthenticated =
+    authenticated &&
+    typeof user?.twitter?.username === "string" &&
+    user.twitter.username.trim().length > 0;
   const { walletAddress } = usePrivyBaseWallet();
-  const { wallets: linkedWalletRows } = useUserWalletLinks(authenticated);
+  const { wallets: linkedWalletRows } = useUserWalletLinks(isXAuthenticated);
   const { bungalows } = useOutletContext<LayoutOutletContext>();
   const [profile, setProfile] = useState<HeatScoreResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -100,7 +104,7 @@ export default function HeatScorePage() {
   const lookupWallet = linkedWalletRows[0]?.address ?? walletAddress ?? "";
 
   useEffect(() => {
-    if (!authenticated || !lookupWallet) {
+    if (!isXAuthenticated || !lookupWallet) {
       setProfile(null);
       setIsLoading(false);
       setError(null);
@@ -143,7 +147,7 @@ export default function HeatScorePage() {
     })();
 
     return () => controller.abort();
-  }, [authenticated, lookupWallet]);
+  }, [isXAuthenticated, lookupWallet]);
 
   const tableRows = useMemo(() => {
     const tokenBreakdown = Array.isArray(profile?.token_breakdown)
@@ -229,13 +233,13 @@ export default function HeatScorePage() {
             rolls into your island total.
           </p>
         </div>
-        {!authenticated ? (
+        {!isXAuthenticated ? (
           <button
             type="button"
             className={styles.connectButton}
             onClick={() => login()}
           >
-            Connect wallet
+            Sign in with X
           </button>
         ) : null}
       </article>
@@ -275,25 +279,25 @@ export default function HeatScorePage() {
               ))
             ) : (
               <span className={styles.walletPillMuted}>
-                {authenticated
+                {isXAuthenticated
                   ? "No linked wallets found yet."
-                  : "Connect a wallet to load your live breakdown."}
+                  : "Sign in with X to load your live breakdown."}
               </span>
             )}
           </div>
         </div>
 
-        {!authenticated ? (
+        {!isXAuthenticated ? (
           <div className={styles.statusCard}>
-            Connect a wallet to see your live overall heat and bungalow-by-bungalow breakdown.
+            Sign in with X to see your live overall heat and bungalow-by-bungalow breakdown.
           </div>
         ) : null}
 
-        {authenticated && isLoading ? (
+        {isXAuthenticated && isLoading ? (
           <div className={styles.statusCard}>Loading your heat breakdown...</div>
         ) : null}
 
-        {authenticated && error ? (
+        {isXAuthenticated && error ? (
           <div className={styles.errorCard}>{error}</div>
         ) : null}
 

@@ -1357,25 +1357,21 @@ export async function getUserByPrivyUserId(privyUserId: string): Promise<UserRow
 
 export async function upsertUser(
   privyUserId: string,
-  fields: { email?: string; x_username?: string },
+  fields: { x_username?: string },
 ): Promise<UserRow> {
-  const normalizedEmail = fields.email?.trim() || null
   const normalizedUsername = fields.x_username?.trim() || null
 
   const rows = await db<UserRow[]>`
     INSERT INTO ${db(CONFIG.SCHEMA)}.users (
       privy_user_id,
-      email,
       x_username
     )
     VALUES (
       ${privyUserId},
-      ${normalizedEmail},
       ${normalizedUsername}
     )
     ON CONFLICT (privy_user_id)
     DO UPDATE SET
-      email = COALESCE(EXCLUDED.email, ${db(CONFIG.SCHEMA)}.users.email),
       x_username = COALESCE(EXCLUDED.x_username, ${db(CONFIG.SCHEMA)}.users.x_username)
     RETURNING
       id::text AS id,

@@ -1,0 +1,204 @@
+.page {
+  min-height: calc(100vh - 52px);
+  padding: 28px;
+  background:
+    radial-gradient(circle at top left, rgba(255, 180, 73, 0.18), transparent 34%),
+    radial-gradient(circle at top right, rgba(57, 187, 119, 0.16), transparent 28%),
+    linear-gradient(180deg, #09110d 0%, #050806 100%);
+  color: #f4ecd6;
+}
+
+.hero {
+  max-width: 1160px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.9fr);
+  gap: 24px;
+}
+
+.copy,
+.panel {
+  border: 1px solid rgba(255, 239, 196, 0.12);
+  border-radius: 28px;
+  padding: 28px;
+  background: rgba(13, 20, 16, 0.82);
+  backdrop-filter: blur(10px);
+}
+
+.kicker {
+  margin: 0 0 8px;
+  color: #f7c96c;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.copy h1 {
+  margin: 0;
+  font-size: clamp(2.8rem, 6vw, 5.6rem);
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+}
+
+.summary {
+  max-width: 42rem;
+  margin: 18px 0 0;
+  color: rgba(244, 236, 214, 0.78);
+  font-size: 1.05rem;
+  line-height: 1.65;
+}
+
+.identityCard {
+  margin-top: 22px;
+  padding: 18px 20px;
+  border-radius: 18px;
+  background: rgba(247, 201, 108, 0.08);
+  border: 1px solid rgba(247, 201, 108, 0.18);
+}
+
+.identityLabel {
+  display: block;
+  margin-bottom: 8px;
+  color: rgba(244, 236, 214, 0.68);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+
+.identityCard strong {
+  display: block;
+  font-size: 1.15rem;
+}
+
+.identityCard p {
+  margin: 10px 0 0;
+  color: rgba(244, 236, 214, 0.78);
+  line-height: 1.55;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 22px;
+}
+
+.primaryButton,
+.secondaryButton,
+.quickGrid button {
+  border: none;
+  border-radius: 999px;
+  font: inherit;
+  cursor: pointer;
+  transition: transform 0.16s ease, opacity 0.16s ease, background 0.16s ease;
+}
+
+.primaryButton {
+  padding: 14px 22px;
+  background: #f7c96c;
+  color: #11120b;
+  font-weight: 700;
+}
+
+.secondaryButton {
+  padding: 14px 22px;
+  background: rgba(244, 236, 214, 0.1);
+  color: #f4ecd6;
+  border: 1px solid rgba(244, 236, 214, 0.18);
+}
+
+.panelHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.panelHeader span {
+  color: rgba(244, 236, 214, 0.68);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.76rem;
+}
+
+.panelHeader strong {
+  font-size: 1.1rem;
+}
+
+.steps {
+  margin: 0;
+  padding-left: 1.2rem;
+  color: rgba(244, 236, 214, 0.82);
+  line-height: 1.7;
+}
+
+.steps li + li {
+  margin-top: 10px;
+}
+
+.quickGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.quickGrid button {
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #f4ecd6;
+  text-align: left;
+}
+
+.primaryButton:hover,
+.secondaryButton:hover,
+.quickGrid button:hover {
+  opacity: 0.92;
+  transform: translateY(-1px);
+}
+
+.mobile .hero {
+  grid-template-columns: 1fr;
+}
+
+@media (max-width: 960px) {
+  .page {
+    padding: 18px;
+  }
+
+  .hero {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .page {
+    min-height: calc(100vh - 52px);
+    padding: 12px;
+  }
+
+  .copy,
+  .panel {
+    padding: 18px;
+    border-radius: 22px;
+  }
+
+  .copy h1 {
+    font-size: 2.6rem;
+  }
+
+  .summary {
+    font-size: 0.96rem;
+  }
+
+  .actions {
+    flex-direction: column;
+  }
+
+  .primaryButton,
+  .secondaryButton {
+    width: 100%;
+  }
+}

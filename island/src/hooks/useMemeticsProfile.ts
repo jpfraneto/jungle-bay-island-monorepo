@@ -3,13 +3,16 @@ import { usePrivy } from "@privy-io/react-auth";
 import type { MemeticsMeResponse } from "../utils/memetics";
 
 export function useMemeticsProfile(enabled = true) {
-  const { authenticated, getAccessToken } = usePrivy();
+  const { authenticated, getAccessToken, user } = usePrivy();
+  const hasXSession =
+    typeof user?.twitter?.username === "string" &&
+    user.twitter.username.trim().length > 0;
   const [data, setData] = useState<MemeticsMeResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(enabled && authenticated);
+  const [isLoading, setIsLoading] = useState(enabled && authenticated && hasXSession);
   const [error, setError] = useState<string | null>(null);
 
   const refetch = useCallback(async () => {
-    if (!enabled || !authenticated) {
+    if (!enabled || !authenticated || !hasXSession) {
       setData(null);
       setIsLoading(false);
       setError(null);
@@ -50,7 +53,7 @@ export function useMemeticsProfile(enabled = true) {
     } finally {
       setIsLoading(false);
     }
-  }, [authenticated, enabled, getAccessToken]);
+  }, [authenticated, enabled, getAccessToken, hasXSession]);
 
   useEffect(() => {
     void refetch().catch(() => undefined);

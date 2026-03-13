@@ -28,9 +28,12 @@ function wait(ms: number): Promise<void> {
 }
 
 export function useSiweWalletLink() {
-  const { authenticated, getAccessToken, linkWallet, login } = usePrivy();
+  const { authenticated, getAccessToken, linkWallet, login, user } = usePrivy();
+  const hasXSession =
+    typeof user?.twitter?.username === "string" &&
+    user.twitter.username.trim().length > 0;
   const { isOpen: isPrivyModalOpen } = useModalStatus();
-  const { wallets, refetch } = useUserWalletLinks(authenticated);
+  const { wallets, refetch } = useUserWalletLinks(authenticated && hasXSession);
 
   const [isLinking, setIsLinking] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -262,7 +265,11 @@ export function useSiweWalletLink() {
   const linkCurrentWallet = useCallback(async () => {
     if (!authenticated) {
       login();
-      throw new Error("Login required");
+      throw new Error("Sign in with X first");
+    }
+
+    if (!hasXSession) {
+      throw new Error("This session is no longer valid. Sign out and sign back in with X.");
     }
 
     if (pendingPromiseRef.current) {
@@ -307,7 +314,7 @@ export function useSiweWalletLink() {
     }
 
     return promise;
-  }, [authenticated, finishPendingPromise, linkWallet, login, wallets.length]);
+  }, [authenticated, finishPendingPromise, hasXSession, linkWallet, login, wallets.length]);
 
   return {
     linkCurrentWallet,

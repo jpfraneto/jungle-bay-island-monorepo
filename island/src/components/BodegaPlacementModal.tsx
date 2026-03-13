@@ -419,6 +419,9 @@ export default function BodegaPlacementModal({
         if (!isHexAddress(JBM_ADDRESS)) {
           throw new Error("JBM token address is not configured.");
         }
+        if (!isHexAddress(MEMETICS_CONTRACT_ADDRESS)) {
+          throw new Error("Memetics contract address is not configured.");
+        }
 
         const { address, walletClient } = await requireWallet();
         if (

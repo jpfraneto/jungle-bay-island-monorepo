@@ -46,9 +46,9 @@ export default function TopNav({
           <button
             type="button"
             className={`${styles.toggleItem} ${isIslandActive ? styles.active : ""}`}
-            onClick={() => navigate("/")}
+            onClick={() => navigate("/island")}
           >
-            Map
+            Island
           </button>
           <button
             type="button"

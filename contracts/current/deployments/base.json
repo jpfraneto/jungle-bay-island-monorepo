@@ -1,0 +1,32 @@
+{
+  "chain": "base",
+  "chainId": 8453,
+  "deploymentBlock": 43303971,
+  "contracts": {
+    "IslandIdentity": {
+      "address": "0x2e892E781a79E432Ca332cDa8C438AbEc30859bc",
+      "abi": "contracts/current/abi/IslandIdentity.json"
+    },
+    "JungleBayIsland": {
+      "address": "0xcF05B46fD0D2aA1a23241CE6f8F376e2f6e7D8Ed",
+      "abi": "contracts/current/abi/JungleBayIsland.json"
+    },
+    "Bodega": {
+      "address": "0xadf3873700A20381c7cd6dcf8EF00ce42606d0f7",
+      "abi": "contracts/current/abi/Bodega.json"
+    },
+    "CommissionManager": {
+      "address": "0x8D5dC82d314749c954f185f11c67729E885955BE",
+      "abi": "contracts/current/abi/CommissionManager.json"
+    }
+  },
+  "tokens": {
+    "USDC": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    "JBM": "0x3313338Fe4bB2A166B81483bfCb2d4A6A1ebBa8D"
+  },
+  "roles": {
+    "backendSigner": "0xCbED71C4495d0C2a13e0672AdCf60e7647b00a6e",
+    "owner": "0xe91B8920Ef5DBf6e1289991F1CE4eeF3671A610E",
+    "treasury": "0xe91B8920Ef5DBf6e1289991F1CE4eeF3671A610E"
+  }
+}

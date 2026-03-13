@@ -1,35 +1,27 @@
 import { parseUnits } from "viem";
 
 export const MEMETICS_CONTRACT_ADDRESS =
-  (import.meta.env.VITE_MEMETICS_CONTRACT_ADDRESS as `0x${string}` | undefined) ??
-  ("0xaa027CFC273e58BD19a5df9a803598DF9Bebad1C" as const);
+  import.meta.env.VITE_MEMETICS_CONTRACT_ADDRESS as `0x${string}` | undefined;
+
+export const COMMISSION_MANAGER_CONTRACT_ADDRESS =
+  (import.meta.env.VITE_COMMISSION_MANAGER_CONTRACT_ADDRESS as
+    | `0x${string}`
+    | undefined);
 
 export const memeticsAbi = [
-  {
-    type: "function",
-    name: "registerProfile",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "handle", type: "string" },
-      { name: "heatScore", type: "uint256" },
-      { name: "salt", type: "bytes32" },
-      { name: "deadline", type: "uint256" },
-      { name: "sig", type: "bytes" },
-    ],
-    outputs: [{ name: "profileId", type: "uint256" }],
-  },
   {
     type: "function",
     name: "linkWallet",
     stateMutability: "nonpayable",
     inputs: [
       { name: "profileId", type: "uint256" },
+      { name: "handle", type: "string" },
       { name: "heatScore", type: "uint256" },
       { name: "salt", type: "bytes32" },
       { name: "deadline", type: "uint256" },
       { name: "sig", type: "bytes" },
     ],
-    outputs: [],
+    outputs: [{ name: "resolvedProfileId", type: "uint256" }],
   },
   {
     type: "function",
@@ -87,56 +79,6 @@ export const memeticsAbi = [
       { name: "deadline", type: "uint256" },
       { name: "sig", type: "bytes" },
     ],
-    outputs: [],
-  },
-  {
-    type: "function",
-    name: "createCommission",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "briefURI", type: "string" },
-      { name: "budget", type: "uint256" },
-      { name: "claimDeadline", type: "uint64" },
-      { name: "deliveryDeadline", type: "uint64" },
-    ],
-    outputs: [{ name: "commissionId", type: "uint256" }],
-  },
-  {
-    type: "function",
-    name: "claimCommission",
-    stateMutability: "nonpayable",
-    inputs: [{ name: "commissionId", type: "uint256" }],
-    outputs: [],
-  },
-  {
-    type: "function",
-    name: "submitCommission",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "commissionId", type: "uint256" },
-      { name: "deliverableURI", type: "string" },
-    ],
-    outputs: [],
-  },
-  {
-    type: "function",
-    name: "approveCommission",
-    stateMutability: "nonpayable",
-    inputs: [{ name: "commissionId", type: "uint256" }],
-    outputs: [],
-  },
-  {
-    type: "function",
-    name: "cancelCommission",
-    stateMutability: "nonpayable",
-    inputs: [{ name: "commissionId", type: "uint256" }],
-    outputs: [],
-  },
-  {
-    type: "function",
-    name: "claimTimedOutCommissionPayout",
-    stateMutability: "nonpayable",
-    inputs: [{ name: "commissionId", type: "uint256" }],
     outputs: [],
   },
   {
@@ -201,6 +143,79 @@ export const memeticsAbi = [
   },
 ] as const;
 
+export const commissionManagerAbi = [
+  {
+    type: "function",
+    name: "createCommission",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "bungalowId", type: "uint256" },
+      { name: "deliveryDeadline", type: "uint64" },
+      { name: "budget", type: "uint256" },
+      { name: "briefURI", type: "string" },
+    ],
+    outputs: [{ name: "commissionId", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "applyForCommission",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "commissionId", type: "uint256" },
+      { name: "applicationURI", type: "string" },
+    ],
+    outputs: [{ name: "applicationId", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "selectCommissionArtist",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "commissionId", type: "uint256" },
+      { name: "applicationId", type: "uint256" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "acceptCommission",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "commissionId", type: "uint256" }],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "submitCommission",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "commissionId", type: "uint256" },
+      { name: "deliverableURI", type: "string" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "approveCommission",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "commissionId", type: "uint256" }],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "cancelCommission",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "commissionId", type: "uint256" }],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "claimTimedOutCommissionPayout",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "commissionId", type: "uint256" }],
+    outputs: [],
+  },
+] as const;
+
 export const erc20ApprovalAbi = [
   {
     type: "function",
@@ -238,6 +253,7 @@ export interface MemeticsProfileData {
 
 export interface MemeticsMeResponse {
   contract_address: string | null;
+  commission_manager_address?: string | null;
   preferred_handle: string | null;
   backend_heat_score: number;
   authenticated_wallets: string[];

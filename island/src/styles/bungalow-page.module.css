@@ -1,665 +1,148 @@
 .page {
-  height: 100%;
-  min-height: 100%;
-  padding: 18px;
-  background: radial-gradient(
-    circle at 48% 26%,
-    rgba(39, 92, 60, 0.24),
-    rgba(8, 18, 12, 0.96) 60%
-  );
-  overflow-x: clip;
-  overflow-y: visible;
+  display: grid;
+  gap: 1.5rem;
+  padding: 1.5rem;
 }
 
-.content {
+.hero,
+.grid,
+.ownerPanel,
+.twoColumn {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 280px);
-  gap: 16px;
+  gap: 1rem;
+}
+
+.hero {
+  grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
   align-items: start;
-  height: 100%;
-  min-height: 0;
-  min-width: 0;
 }
 
-.mainColumn {
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.headerCard {
-  background: rgba(20, 43, 26, 0.88);
-  border: 1px solid var(--border-subtle);
-  border-radius: 14px;
-  padding: 14px;
-}
-
-.headerTop {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-}
-
-.tokenImage,
-.tokenFallback {
-  width: 80px;
-  height: 80px;
-  border-radius: 14px;
-  border: 1px solid var(--border-subtle);
-}
-
-.tokenImage {
-  object-fit: cover;
-}
-
-.tokenFallback {
-  display: grid;
-  place-items: center;
-  background: #1f3b28;
-  font-size: 28px;
+.kicker,
+.cardLabel {
+  font-size: 0.75rem;
   font-weight: 700;
-}
-
-.title {
-  margin: 0;
-  font-size: 24px;
-  line-height: 1.2;
-}
-
-.headerText {
-  min-width: 0;
-}
-
-.titleRow {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
-}
-
-.chainIcon {
-  width: 20px;
-  height: 20px;
-  color: #98d0a4;
-  flex: 0 0 auto;
-}
-
-.headerMeta {
-  margin-top: 8px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.chainBadge {
-  display: inline-flex;
-  border-radius: 999px;
-  padding: 4px 10px;
-  font-size: 11px;
-  border: 1px solid transparent;
-}
-
-.standardBadge {
-  display: inline-flex;
-  border-radius: 999px;
-  padding: 4px 10px;
-  font-size: 11px;
-  border: 1px solid rgba(131, 183, 144, 0.5);
-  background: rgba(51, 94, 62, 0.35);
-  color: #d0f1d8;
-}
-
-.contractAddress {
-  margin: 8px 0 0;
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.3;
-  font-family: var(--font-mono);
-  overflow-wrap: anywhere;
-}
-
-.identityNote {
-  margin: 6px 0 0;
-  color: #9fc0aa;
-  font-size: 12px;
-}
-
-.description {
-  margin: 10px 0 0;
-  color: var(--text-secondary);
-  line-height: 1.6;
-}
-
-.base {
-  background: rgba(52, 152, 219, 0.2);
-  border-color: rgba(52, 152, 219, 0.55);
-}
-
-.ethereum {
-  background: rgba(155, 89, 182, 0.2);
-  border-color: rgba(155, 89, 182, 0.55);
-}
-
-.solana {
-  background: rgba(63, 186, 141, 0.22);
-  border-color: rgba(63, 186, 141, 0.58);
-}
-
-.stats {
-  display: grid;
-  margin-top: 14px;
-  gap: 10px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.stats div {
-  background: rgba(0, 0, 0, 0.2);
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  padding: 8px;
-}
-
-.stats span {
-  display: block;
-  color: var(--text-muted);
-  font-size: 11px;
-}
-
-.stats strong {
-  display: block;
-  margin-top: 3px;
-  font-family: var(--font-mono);
-  font-size: 13px;
-}
-
-.sideColumn {
-  min-width: 0;
-}
-
-.deploymentList {
-  display: grid;
-  gap: 14px;
-}
-
-.assetCard {
-  background: rgba(15, 33, 21, 0.78);
-  border: 1px solid var(--border-subtle);
-  border-radius: 16px;
-  padding: 14px;
-  display: grid;
-  gap: 12px;
-}
-
-.assetCardActive {
-  border-color: rgba(121, 181, 138, 0.42);
-  box-shadow: inset 0 0 0 1px rgba(121, 181, 138, 0.08);
-}
-
-.assetHeader {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  min-width: 0;
-}
-
-.assetHeader > div:first-child {
-  min-width: 0;
-  flex: 1 1 auto;
-}
-
-.assetEyebrow {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 10px;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
+  color: rgba(243, 230, 204, 0.62);
 }
 
-.assetTitle {
-  margin: 4px 0 0;
-  font-size: 18px;
-  line-height: 1.2;
-  overflow-wrap: anywhere;
+.summary,
+.inlineCopy,
+.inlineHint,
+.loading,
+.status,
+.error,
+.claimCard p,
+.card p,
+.ownerCard label,
+.installList span,
+.installList small {
+  color: rgba(243, 230, 204, 0.82);
 }
 
-.assetTicker {
-  margin-left: 8px;
-  color: var(--text-muted);
-  font-size: 12px;
-  font-family: var(--font-mono);
-  overflow-wrap: anywhere;
+.lookupPill,
+.claimCard,
+.card,
+.ownerCard,
+.section {
+  border: 1px solid rgba(243, 230, 204, 0.12);
+  border-radius: 1rem;
+  background: rgba(11, 19, 14, 0.74);
+  padding: 1rem;
 }
 
-.assetSummary {
+.lookupPill {
   display: grid;
-  gap: 8px;
+  gap: 0.35rem;
+}
+
+.grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.assetSummary div {
-  background: rgba(0, 0, 0, 0.16);
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  padding: 8px;
-}
-
-.assetSummary span {
-  display: block;
-  color: var(--text-muted);
-  font-size: 10px;
-}
-
-.assetSummary strong {
-  display: block;
-  margin-top: 4px;
-  font-family: var(--font-mono);
-  font-size: 12px;
-}
-
-.deploymentSublist {
-  display: grid;
-  gap: 10px;
-}
-
-.deploymentStack {
-  display: grid;
-  gap: 10px;
-}
-
-.deploymentCard {
-  background: rgba(20, 43, 26, 0.82);
-  border: 1px solid var(--border-subtle);
-  border-radius: 14px;
-  padding: 14px;
-}
-
-.deploymentCardActive {
-  border-color: rgba(88, 164, 108, 0.42);
-  box-shadow: inset 0 0 0 1px rgba(88, 164, 108, 0.08);
-}
-
-.deploymentHeader {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-  min-width: 0;
-  flex-wrap: wrap;
-}
-
-.deploymentTitle {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  min-width: 0;
-  flex: 1 1 auto;
-}
-
-.deploymentTitle strong {
-  font-size: 14px;
-  overflow-wrap: anywhere;
-}
-
-.deploymentChainIcon {
-  width: 18px;
-  height: 18px;
-  color: #98d0a4;
-  flex: 0 0 auto;
-}
-
-.deploymentTicker {
-  color: var(--text-muted);
-  font-size: 12px;
-  font-family: var(--font-mono);
-  overflow-wrap: anywhere;
-}
-
-.deploymentBadges {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  max-width: 100%;
-}
-
-.deploymentPill {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999px;
-  padding: 3px 8px;
-  font-size: 10px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: #d0f1d8;
-  border: 1px solid rgba(131, 183, 144, 0.4);
-  background: rgba(51, 94, 62, 0.25);
-}
-
-.deploymentPillActive {
-  border-color: rgba(88, 164, 108, 0.55);
-  background: rgba(46, 204, 113, 0.16);
-}
-
-.deploymentMeta {
-  margin-top: 10px;
-}
-
-.deploymentAddress {
-  margin: 10px 0 0;
-  color: var(--text-muted);
-  font-size: 11px;
-  line-height: 1.5;
-  font-family: var(--font-mono);
-  overflow-wrap: anywhere;
-}
-
-.deploymentStats {
-  margin-top: 12px;
-  display: grid;
+.ownerPanel,
+.twoColumn {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
 }
 
-.deploymentStats div {
-  background: rgba(0, 0, 0, 0.18);
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  padding: 8px;
+.twoColumn {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.deploymentStats span {
-  display: block;
-  color: var(--text-muted);
-  font-size: 10px;
-}
-
-.deploymentStats strong {
-  display: block;
-  margin-top: 4px;
-  font-family: var(--font-mono);
-  font-size: 12px;
-}
-
-.switchButton {
-  margin-top: 12px;
-  width: 100%;
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  background: rgba(8, 18, 12, 0.55);
-  color: #d6f5de;
-  padding: 9px 12px;
-  cursor: pointer;
-}
-
-.switchButton:hover {
-  background: rgba(8, 18, 12, 0.78);
-}
-
-.deploymentNote {
-  border: 1px dashed var(--border-subtle);
-  border-radius: 12px;
-  padding: 12px;
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.wallRegion {
-  margin-top: 12px;
-  min-height: 0;
-  flex: 1;
-  overflow: visible;
-  display: grid;
-  gap: 12px;
-}
-
-.marketStrip,
-.bodegaShelf {
-  background: rgba(15, 33, 21, 0.78);
-  border: 1px solid var(--border-subtle);
-  border-radius: 16px;
-  padding: 14px;
-}
-
-.marketStrip {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.marketCopy p,
-.sectionHeading p {
+.assetList,
+.installList {
+  list-style: none;
   margin: 0;
-  color: var(--text-muted);
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
 }
 
-.marketCopy strong,
-.sectionHeading strong {
-  display: block;
-  margin-top: 6px;
-  font-size: 16px;
-  line-height: 1.35;
+.assetList li,
+.installList li {
+  display: grid;
+  gap: 0.2rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(243, 230, 204, 0.08);
 }
 
-.marketButton {
-  border-radius: 999px;
-  border: 1px solid var(--border-subtle);
-  background: linear-gradient(135deg, #3aab68, #2b7e4b);
-  color: #f5fff7;
-  padding: 10px 16px;
-  cursor: pointer;
-  font-weight: 600;
+.ownerCard {
+  display: grid;
+  gap: 0.75rem;
 }
 
-.sectionHeading {
+.ownerCard input,
+.ownerCard select {
+  width: 100%;
+  margin-top: 0.35rem;
+  padding: 0.75rem;
+  border-radius: 0.8rem;
+  border: 1px solid rgba(243, 230, 204, 0.16);
+  background: rgba(5, 12, 8, 0.9);
+  color: #f3e6cc;
+}
+
+.sectionHeader {
   display: flex;
-  align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 1rem;
+  align-items: center;
 }
 
-.installedGrid {
-  margin-top: 12px;
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 8px;
+.sectionHeader a {
+  color: #f5dc9b;
 }
 
-.shelfStatus {
-  margin-top: 12px;
-  border: 1px dashed var(--border-subtle);
-  border-radius: 12px;
-  padding: 12px;
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.skeletonHeaderCard,
-.skeletonWallCard,
-.skeletonClaimCard {
-  background: rgba(20, 43, 26, 0.88);
-  border: 1px solid var(--border-subtle);
-  border-radius: 14px;
-  padding: 14px;
-}
-
-.skeletonHeaderText {
-  display: grid;
-  gap: 10px;
-  width: min(520px, 100%);
-}
-
-.skeletonStatCard {
-  background: rgba(0, 0, 0, 0.2);
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  padding: 8px;
-}
-
-.skeletonWallCard {
-  margin-top: 12px;
-}
-
-.skeletonWallGrid {
-  margin-top: 12px;
-  display: grid;
-  gap: 10px;
-}
-
-.skeletonWallItem {
-  border: 1px solid var(--border-subtle);
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 10px;
-  padding: 12px;
-  display: grid;
-  gap: 8px;
-}
-
-.skeletonClaimCard {
-  display: grid;
-  gap: 12px;
-}
-
-.skeletonBlock {
-  position: relative;
-  overflow: hidden;
-  border-radius: 8px;
-  background: linear-gradient(
-    90deg,
-    rgba(44, 82, 58, 0.45) 0%,
-    rgba(82, 134, 99, 0.62) 50%,
-    rgba(44, 82, 58, 0.45) 100%
-  );
-  background-size: 220% 100%;
-  animation: skeletonShimmer 1.3s ease-in-out infinite;
-}
-
-.skeletonTokenImage {
-  width: 80px;
-  height: 80px;
-  border-radius: 14px;
-}
-
-.skeletonTitle {
-  height: 22px;
-  width: min(420px, 100%);
-}
-
-.skeletonBadge {
-  height: 22px;
-  width: 96px;
+.primaryButton,
+.secondaryButton {
+  appearance: none;
+  border: 0;
   border-radius: 999px;
+  padding: 0.85rem 1.2rem;
+  font-weight: 700;
+  cursor: pointer;
 }
 
-.skeletonLabel {
-  height: 10px;
-  width: 58%;
-  border-radius: 999px;
+.primaryButton {
+  background: linear-gradient(135deg, #d8b36a, #f5dc9b);
+  color: #111;
 }
 
-.skeletonValue {
-  margin-top: 8px;
-  height: 16px;
-  width: 72%;
+.secondaryButton {
+  background: rgba(243, 230, 204, 0.08);
+  color: #f3e6cc;
+  border: 1px solid rgba(243, 230, 204, 0.16);
 }
 
-.skeletonWallHeader {
-  height: 14px;
-  width: 180px;
-}
-
-.skeletonWallLineLong {
-  height: 14px;
-  width: 78%;
-}
-
-.skeletonWallLineShort {
-  height: 12px;
-  width: 44%;
-}
-
-.skeletonClaimTitle {
-  height: 18px;
-  width: 140px;
-}
-
-.skeletonClaimMetric {
-  height: 44px;
-  width: 100%;
-}
-
-.skeletonClaimButton {
-  margin-top: 6px;
-  height: 38px;
-  width: 100%;
-  border-radius: 10px;
-}
-
-@media (max-width: 720px) {
-  .marketStrip {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .marketButton {
-    width: 100%;
-  }
-
-  .installedGrid {
-    gap: 6px;
-  }
-}
-
-@keyframes skeletonShimmer {
-  0% {
-    background-position: 100% 0;
-  }
-
-  100% {
-    background-position: -100% 0;
-  }
+.error {
+  color: #ff9d9d;
 }
 
 @media (max-width: 980px) {
-  .page {
-    height: auto;
-    min-height: 100%;
-  }
-
-  .content {
+  .hero,
+  .grid,
+  .ownerPanel,
+  .twoColumn {
     grid-template-columns: 1fr;
-    height: auto;
-    min-height: 100%;
-  }
-
-  .mainColumn,
-  .sideColumn {
-    min-height: auto;
-  }
-
-  .stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .wallRegion {
-    overflow: visible;
-  }
-
-  .deploymentStats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .assetSummary {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

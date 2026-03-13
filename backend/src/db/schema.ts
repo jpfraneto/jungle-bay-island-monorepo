@@ -244,7 +244,7 @@ export interface CommissionRecordRow {
   budget_jbm: string
   claim_deadline: string
   delivery_deadline: string
-  status: 'draft' | 'open' | 'claimed' | 'submitted' | 'disputed' | 'completed' | 'cancelled'
+  status: 'draft' | 'open' | 'selected' | 'claimed' | 'submitted' | 'disputed' | 'completed' | 'cancelled'
   created_tx_hash: string | null
   approved_application_id: number | null
   approved_artist_wallet: string | null
@@ -266,13 +266,16 @@ export interface CommissionRecordRow {
 
 export interface CommissionApplicationRow {
   id: number
+  application_id: number | null
+  application_ref: string | null
+  application_uri: string | null
   commission_id: number
   artist_privy_user_id: string
   artist_wallet: string
   artist_profile_id: number | null
   artist_handle: string | null
   message: string | null
-  status: 'pending' | 'approved' | 'rejected' | 'withdrawn'
+  status: 'draft' | 'pending' | 'selected' | 'accepted' | 'rejected' | 'withdrawn' | 'expired'
   created_at: string
   updated_at: string
 }

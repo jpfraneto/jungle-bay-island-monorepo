@@ -164,7 +164,7 @@ export default function AddToSlotModal({
 
     if (!authenticated) {
       login();
-      setError("Authenticate with Privy before placing an item.");
+      setError("Sign in with X before placing an item.");
       return;
     }
 

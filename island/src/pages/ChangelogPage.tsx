@@ -18,13 +18,137 @@ export default function ChangelogPage() {
 
       <article className={styles.entry}>
         <div className={styles.entryHeader}>
-          <span className={styles.date}>March 12, 2026</span>
-          <h2 className={styles.heading}>Commission Board Added For Escrowed Art Requests, Artist Applications, And Delivery Payouts</h2>
+          <span className={styles.date}>March 13, 2026</span>
+          <h2 className={styles.heading}>The App Now Runs On The Four-Contract IslandIdentity, JungleBayIsland, Bodega, And CommissionManager System</h2>
         </div>
         <p>
-          The Island now has a full commission workflow layered on top of the
-          deployed Memetics contract, so creative work can be commissioned,
-          selected, delivered, and paid without leaving the product.
+          The deprecated Memetics contract path has been isolated from the main
+          product flow. The active app now treats the deployed four-contract
+          suite in <code>contracts/current/</code> as the only write truth.
+        </p>
+        <ul className={styles.list}>
+          <li>
+            Profile now starts from X identity and routes into onchain profile
+            creation, wallet linking, per-bungalow heat sync, and daily JBM
+            claims through <code>IslandIdentity</code>.
+          </li>
+          <li>
+            Bungalow pages now resolve by any linked asset, mint through a
+            backend-signed USDC quote on <code>JungleBayIsland</code>, and
+            expose direct owner actions for metadata and asset linking.
+          </li>
+          <li>
+            Bodega now lists and installs ERC1155 items priced in USDC, makes
+            the heat gate explicit, and explains permanent bond activation on
+            the first install in a bungalow.
+          </li>
+          <li>
+            Commission flows now mirror the deployed publish, apply, select,
+            submit, approve, reject, timeout, and missed-deadline reclaim
+            lifecycle instead of the older split acceptance model.
+          </li>
+          <li>
+            The backend now stores tx hashes immediately, verifies receipts,
+            indexes raw events from all four contracts, and projects a local
+            read model from confirmed onchain state.
+          </li>
+        </ul>
+      </article>
+
+      <article className={styles.entry}>
+        <div className={styles.entryHeader}>
+          <span className={styles.date}>March 12, 2026</span>
+          <h2 className={styles.heading}>Server Bootstrap Now Chooses A Mobile Or Desktop Shell And The Island Opens On A Proper Landing Page</h2>
+        </div>
+        <p>
+          The app no longer drops every visitor straight onto the island map.
+          The backend now sends a lightweight bootstrap payload on page load so
+          the frontend can shape the first screen around device type and logged
+          in state.
+        </p>
+        <ul className={styles.list}>
+          <li>
+            The root route is now a landing screen instead of the map, with a
+            sharper X-first onboarding message and different mobile vs desktop
+            presentation.
+          </li>
+          <li>
+            The backend now mirrors authenticated Privy X sessions into a
+            lightweight server cookie, which means later page loads can render
+            a smarter logged-in shell without waiting for the whole app to
+            hydrate first.
+          </li>
+          <li>
+            The island map now lives at <code>/island</code>, which makes the
+            home flow, app shell, and future mobile-specific surface easier to
+            evolve independently.
+          </li>
+        </ul>
+      </article>
+
+      <article className={styles.entry}>
+        <div className={styles.entryHeader}>
+          <span className={styles.date}>March 12, 2026</span>
+          <h2 className={styles.heading}>Unqualified Bungalow Creation Can Now Use A Backend-Verified USDC Quote And Owner-Minted Onchain Create Path</h2>
+        </div>
+        <p>
+          Bungalow opening now has a paid path for users who do not meet the
+          heat or JBAC thresholds. The backend prices the request off current
+          token market cap, verifies the payment transaction, and then creates
+          the bungalow onchain through the contract owner path.
+        </p>
+        <ul className={styles.list}>
+          <li>
+            Qualification responses now include a live payment quote, treasury
+            address, and USDC contract details when paid creation is available.
+          </li>
+          <li>
+            The bungalow construction modal now exposes that paid path directly
+            instead of forcing users into a dead-end qualification screen.
+          </li>
+          <li>
+            Paid bungalow creations now land in the backend&apos;s onchain
+            interaction ledger with both the payment proof and the resulting
+            contract transaction hash.
+          </li>
+        </ul>
+      </article>
+
+      <article className={styles.entry}>
+        <div className={styles.entryHeader}>
+          <span className={styles.date}>March 12, 2026</span>
+          <h2 className={styles.heading}>X Became The Only Login Path</h2>
+        </div>
+        <p>
+          The island&apos;s account model was simplified around one canonical
+          session type: X login first, linked wallets second.
+        </p>
+        <ul className={styles.list}>
+          <li>
+            Privy frontend auth now only exposes X login, so the old email
+            branch is no longer part of onboarding or profile state.
+          </li>
+          <li>
+            Backend auth now rejects Privy sessions without an attached X
+            account, which keeps identity, handles, and wallet linking on one
+            consistent path.
+          </li>
+          <li>
+            Profile copy and onchain profile setup now assume one verified X
+            handle instead of an email-to-X claim flow.
+          </li>
+        </ul>
+      </article>
+
+      <article className={styles.entry}>
+        <div className={styles.entryHeader}>
+          <span className={styles.date}>March 12, 2026</span>
+          <h2 className={styles.heading}>Commission Board Moved To A Split Onchain Flow With Artist Applications, Selection, Acceptance, And Payouts</h2>
+        </div>
+        <p>
+          The Island now runs commissions through two deployed contracts:
+          Memetics for identity and bungalow state, and CommissionManager for
+          application, artist selection, acceptance, delivery, and payout.
         </p>
         <ul className={styles.list}>
           <li>
@@ -33,12 +157,12 @@ export default function ChangelogPage() {
             budget, write the prompt, and lock the budget in onchain escrow.
           </li>
           <li>
-            Artists can apply from the commission detail page with any wallet
-            already linked to their Memetics profile.
+            Artists now apply onchain from the commission detail page with any
+            wallet already linked to their Memetics profile.
           </li>
           <li>
-            Requesters now approve one applicant in the app, then the approved
-            artist claims the commission onchain to start the paid job.
+            Requesters now select one applicant onchain, and only that selected
+            artist can accept the commission and move it into production.
           </li>
           <li>
             Deliverables now submit through the contract, requester approval
@@ -677,8 +801,8 @@ export default function ChangelogPage() {
         </div>
         <p>
           Authentication, handle ownership, and transaction wallets now follow one
-          strict model: identity is your Privy account, and transaction wallets
-          must be explicitly linked with SIWE.
+          strict model: identity is your X-backed Privy account, and transaction
+          wallets must be explicitly linked with SIWE.
         </p>
         <ul className={styles.list}>
           <li>
@@ -695,8 +819,8 @@ export default function ChangelogPage() {
             request is rejected.
           </li>
           <li>
-            Email users can claim handles by linking X, while duplicate X
-            account links are blocked and logged for manual resolution.
+            Handles now resolve from the linked X account itself, and duplicate
+            X account links are blocked and logged for manual resolution.
           </li>
         </ul>
       </article>

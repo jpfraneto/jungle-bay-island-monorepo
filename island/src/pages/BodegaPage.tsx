@@ -1,416 +1,286 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
-import { useLocation } from "react-router-dom";
-import BodegaCard from "../components/BodegaCard";
-import BodegaInstallModal from "../components/BodegaInstallModal";
-import BodegaSubmitModal from "../components/BodegaSubmitModal";
-import { useBungalowDirectory } from "../hooks/useBungalowDirectory";
+import { type Address, parseUnits } from "viem";
 import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
 import styles from "../styles/bodega-page.module.css";
 import {
-  BODEGA_ASSET_GROUP_LABELS,
-  getBungalowLookupKey,
-  normalizeBodegaCatalogItems,
-  normalizeDirectoryBungalows,
-  type BodegaCatalogItem,
-  type DirectoryBungalow,
-} from "../utils/bodega";
+  bodegaAbi,
+  confirmTrackedTx,
+  ensureUsdcAllowance,
+  fetchAuthedJson,
+  fetchJson,
+  formatUnixDate,
+  formatUsdcAmount,
+  normalizeTxError,
+  ONCHAIN_CONTRACTS,
+  trackSubmittedTx,
+  type OnchainBodegaItem,
+  type OnchainMeResponse,
+} from "../utils/onchain";
 
-type AssetFilter = "all" | "art" | "miniapp";
-
-interface BodegaCatalogResponse {
-  items?: unknown[];
-  error?: unknown;
-}
-
-interface BodegaPageState {
-  preselectedBungalow?: unknown;
-  highlightItemId?: unknown;
-}
-
-const PAGE_SIZE = 18;
-
-/**
- * Normalizes route state so bungalow pages can hand the Bodega a target install venue.
- */
-function parseLocationBungalow(input: unknown): DirectoryBungalow | null {
-  const items = normalizeDirectoryBungalows(input ? [input] : []);
-  return items[0] ?? null;
+interface BodegaResponse {
+  items: OnchainBodegaItem[];
 }
 
 export default function BodegaPage() {
-  const location = useLocation();
-  const { authenticated, login } = usePrivy();
-  const { walletAddress } = usePrivyBaseWallet();
-  const {
-    bungalows: selectorBungalows,
-    isLoading: isSelectorLoading,
-  } = useBungalowDirectory({
-    walletAddress,
-    limit: 200,
-  });
-  const {
-    bungalows: publicBungalows,
-    isLoading: isPublicDirectoryLoading,
-    error: publicDirectoryError,
-  } = useBungalowDirectory({
-    limit: 200,
-    enabled: true,
-    fetchAll: true,
-  });
-
-  const locationState = (location.state as BodegaPageState | null) ?? null;
-  const preselectedBungalow = useMemo(
-    () => parseLocationBungalow(locationState?.preselectedBungalow),
-    [locationState?.preselectedBungalow],
-  );
-  const isWalletScoped = Boolean(walletAddress);
-  const visibleBungalowOptions = publicBungalows;
-  const submitOriginOptions = isWalletScoped ? publicBungalows : selectorBungalows;
-  const originLookupBungalows = isWalletScoped ? publicBungalows : selectorBungalows;
-  const effectivePreselectedBungalow = useMemo(() => {
-    if (!preselectedBungalow) return null;
-
-    const targetKey = getBungalowLookupKey(
-      preselectedBungalow.chain,
-      preselectedBungalow.token_address,
-    );
-    if (!targetKey) return null;
-
-    return (
-      visibleBungalowOptions.find(
-        (bungalow) =>
-          getBungalowLookupKey(bungalow.chain, bungalow.token_address) === targetKey,
-      ) ?? preselectedBungalow
-    );
-  }, [preselectedBungalow, visibleBungalowOptions]);
-
-  const [filter, setFilter] = useState<AssetFilter>("all");
-  const [items, setItems] = useState<BodegaCatalogItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
+  const { authenticated, getAccessToken } = usePrivy();
+  const { publicClient, requireWallet } = usePrivyBaseWallet();
+  const [items, setItems] = useState<OnchainBodegaItem[]>([]);
+  const [me, setMe] = useState<OnchainMeResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedItem, setSelectedItem] = useState<BodegaCatalogItem | null>(
-    null,
-  );
-  const [isSubmitOpen, setIsSubmitOpen] = useState(false);
-  const [refreshToken, setRefreshToken] = useState(0);
-  const [highlightedItemId, setHighlightedItemId] = useState<number | null>(
-    typeof locationState?.highlightItemId === "number"
-      ? locationState.highlightItemId
-      : null,
-  );
+  const [status, setStatus] = useState<string | null>(null);
+  const [txBusy, setTxBusy] = useState(false);
+  const [listForm, setListForm] = useState({
+    ipfsUri: "",
+    supply: "0",
+    priceUsdc: "0",
+  });
+  const [installTargets, setInstallTargets] = useState<Record<number, string>>({});
 
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
-  const fetchGenerationRef = useRef(0);
-
-  const bungalowLookup = useMemo(() => {
-    const lookup = new Map<string, DirectoryBungalow>();
-    for (const bungalow of originLookupBungalows) {
-      const key = getBungalowLookupKey(bungalow.chain, bungalow.token_address);
-      if (key) {
-        lookup.set(key, bungalow);
-      }
+  const refetch = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const [catalog, mePayload] = await Promise.all([
+        fetchJson<BodegaResponse>("/api/onchain/bodega/items"),
+        authenticated
+          ? fetchAuthedJson<OnchainMeResponse>("/api/onchain/me", getAccessToken)
+          : Promise.resolve(null),
+      ]);
+      setItems(catalog.items);
+      setMe(mePayload);
+    } catch (fetchError) {
+      setError(fetchError instanceof Error ? fetchError.message : "Failed to load Bodega");
+    } finally {
+      setIsLoading(false);
     }
-    return lookup;
-  }, [originLookupBungalows]);
+  };
 
-  /**
-   * Loads one page of catalog results and preserves ordering for infinite scroll.
-   */
-  const loadCatalogPage = useCallback(
-    async (offset: number, append: boolean) => {
-      const currentGeneration = append
-        ? fetchGenerationRef.current
-        : fetchGenerationRef.current + 1;
+  useEffect(() => {
+    void refetch();
+  }, [authenticated]);
 
-      if (!append) {
-        fetchGenerationRef.current = currentGeneration;
-      }
+  const runWrite = async (input: {
+    label: string;
+    action: string;
+    functionName: "listItem" | "installItem";
+    args: readonly unknown[];
+    usdcAmount?: bigint;
+    bungalowId?: number | null;
+    itemId?: number | null;
+  }) => {
+    setTxBusy(true);
+    setError(null);
+    setStatus(input.label);
 
-      if (append) {
-        setIsLoadingMore(true);
-      } else {
-        setIsLoading(true);
-        setError(null);
-      }
-
-      try {
-        const params = new URLSearchParams();
-        params.set("limit", String(PAGE_SIZE));
-        params.set("offset", String(offset));
-        if (filter !== "all") {
-          params.set("asset_group", filter);
-        }
-
-        const response = await fetch(`/api/bodega/catalog?${params.toString()}`, {
-          cache: "no-store",
-        });
-
-        const data = (await response.json().catch(() => null)) as
-          | BodegaCatalogResponse
-          | null;
-
-        if (currentGeneration !== fetchGenerationRef.current) {
-          return;
-        }
-
-        const apiError =
-          typeof data?.error === "string" && data.error.trim().length > 0
-            ? data.error
-            : null;
-
-        if (!response.ok) {
-          throw new Error(apiError ?? `Request failed (${response.status})`);
-        }
-
-        const nextItems = normalizeBodegaCatalogItems(data?.items);
-
-        setItems((current) => {
-          if (!append) {
-            return nextItems;
-          }
-
-          const seen = new Set(current.map((item) => item.id));
-          const merged = [...current];
-          for (const nextItem of nextItems) {
-            if (!seen.has(nextItem.id)) {
-              merged.push(nextItem);
-              seen.add(nextItem.id);
-            }
-          }
-          return merged;
-        });
-        setHasMore(nextItems.length >= PAGE_SIZE);
-      } catch (err) {
-        if (!append) {
-          setItems([]);
-          setHasMore(false);
-        }
-        setError(
-          err instanceof Error ? err.message : "Failed to load Bodega catalog",
+    try {
+      const { address, walletClient } = await requireWallet();
+      if ((input.usdcAmount ?? 0n) > 0n) {
+        setStatus(
+          `Approval required: allow USDC spending by ${ONCHAIN_CONTRACTS.bodega}.`,
         );
-      } finally {
-        if (append) {
-          setIsLoadingMore(false);
-        } else {
-          setIsLoading(false);
+        const approvalTx = await ensureUsdcAllowance({
+          publicClient,
+          walletClient,
+          owner: address as Address,
+          spender: ONCHAIN_CONTRACTS.bodega,
+          amount: input.usdcAmount ?? 0n,
+        });
+
+        if (approvalTx) {
+          await publicClient.waitForTransactionReceipt({ hash: approvalTx });
         }
       }
-    },
-    [filter],
-  );
 
-  useEffect(() => {
-    setItems([]);
-    setHasMore(true);
-    void loadCatalogPage(0, false);
-  }, [filter, loadCatalogPage, refreshToken]);
+      setStatus("Sending wallet transaction...");
+      const txHash = await walletClient.writeContract({
+        account: address as Address,
+        address: ONCHAIN_CONTRACTS.bodega,
+        abi: bodegaAbi,
+        functionName: input.functionName,
+        args: input.args as never,
+      });
 
-  const loadMore = useCallback(() => {
-    if (isLoading || isLoadingMore || !hasMore) return;
-    void loadCatalogPage(items.length, true);
-  }, [hasMore, isLoading, isLoadingMore, items.length, loadCatalogPage]);
+      await trackSubmittedTx({
+        getAccessToken,
+        txHash,
+        action: input.action,
+        functionName: input.functionName,
+        contractAddress: ONCHAIN_CONTRACTS.bodega,
+        wallet: address,
+        bungalowId: input.bungalowId ?? null,
+        itemId: input.itemId ?? null,
+      });
 
-  useEffect(() => {
-    const target = sentinelRef.current;
-    if (!target || isLoading || isLoadingMore || !hasMore) {
+      setStatus("Waiting for confirmation...");
+      await publicClient.waitForTransactionReceipt({ hash: txHash });
+      await confirmTrackedTx(getAccessToken, txHash);
+      await refetch();
+      setStatus("Bodega state updated.");
+    } catch (txError) {
+      setError(normalizeTxError(txError, "Transaction failed"));
+      setStatus(null);
+    } finally {
+      setTxBusy(false);
+    }
+  };
+
+  const handleListItem = async () => {
+    const supply = BigInt(listForm.supply.trim() || "0");
+    const priceUsdc = listForm.priceUsdc.trim()
+      ? parseUnits(listForm.priceUsdc.trim(), 6)
+      : 0n;
+
+    await runWrite({
+      label: "Listing item...",
+      action: "bodega_list_item",
+      functionName: "listItem",
+      args: [listForm.ipfsUri.trim(), supply, priceUsdc],
+    });
+  };
+
+  const handleInstallItem = async (item: OnchainBodegaItem) => {
+    const bungalowId = Number.parseInt(installTargets[item.item_id] ?? "", 10);
+    if (!Number.isFinite(bungalowId) || bungalowId <= 0) {
+      setError("Enter a valid bungalow id before installing.");
       return;
     }
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          loadMore();
-        }
-      },
-      {
-        rootMargin: "220px 0px",
-      },
-    );
-
-    observer.observe(target);
-    return () => observer.disconnect();
-  }, [hasMore, isLoading, isLoadingMore, loadMore]);
-
-  useEffect(() => {
-    if (!highlightedItemId) return;
-    if (!items.some((item) => item.id === highlightedItemId)) return;
-
-    const frame = window.requestAnimationFrame(() => {
-      const element = document.getElementById(`bodega-item-${highlightedItemId}`);
-      element?.scrollIntoView({
-        behavior: "smooth",
-        block: "center",
-      });
+    await runWrite({
+      label: "Installing item...",
+      action: "bodega_install_item",
+      functionName: "installItem",
+      args: [BigInt(item.item_id), BigInt(bungalowId)],
+      bungalowId,
+      itemId: item.item_id,
+      usdcAmount: BigInt(item.price_usdc),
     });
-
-    return () => window.cancelAnimationFrame(frame);
-  }, [highlightedItemId, items]);
-
-  const selectionNote = publicDirectoryError
-    ? `Bungalow list is unavailable right now: ${publicDirectoryError}`
-    : "Choose any community bungalow on the island. You will pick the exact room spot there before paying.";
-  const submitSelectionNote = publicDirectoryError
-    ? `Bungalow list is unavailable right now: ${publicDirectoryError}`
-    : "Choose the bungalow this came from, or leave it blank. Local wall additions stay in their bungalow and do not publish here.";
+  };
 
   return (
     <section className={styles.page}>
       <div className={styles.hero}>
-        <div className={styles.heroCopy}>
-          <p className={styles.kicker}>Island Bodega</p>
-          <h1>The full browse and publish lane for items that can travel across the island.</h1>
+        <div>
+          <p className={styles.kicker}>Bodega</p>
+          <h1>List items. Install them where the heat is real.</h1>
           <p className={styles.summary}>
-            The Bodega is for portable art and builds that can be installed
-            across many bungalows. Project-specific wall art and links now stay
-            local to the bungalow where they were added.
+            Install is mint plus install in one atomic action. Heat must already
+            be at least 10 for that bungalow, and the first install there
+            activates the permanent JBM bond forever.
           </p>
-          {effectivePreselectedBungalow ? (
-            <div className={styles.targetChip}>
-              Installing into{" "}
-              <strong>
-                {effectivePreselectedBungalow.symbol ??
-                  effectivePreselectedBungalow.name ??
-                  "Current bungalow"}
-              </strong>
-            </div>
+        </div>
+        <div className={styles.callout}>
+          <strong>USDC spender</strong>
+          <span>{ONCHAIN_CONTRACTS.bodega}</span>
+          <small>Approval is requested only when the selected item is paid.</small>
+        </div>
+      </div>
+
+      {error ? <p className={styles.error}>{error}</p> : null}
+      {status ? <p className={styles.status}>{status}</p> : null}
+      {isLoading ? <p className={styles.loading}>Loading Bodega...</p> : null}
+
+      <div className={styles.grid}>
+        <article className={styles.formCard}>
+          <span className={styles.cardLabel}>List item</span>
+          <label>
+            IPFS URI
+            <input
+              value={listForm.ipfsUri}
+              onChange={(event) =>
+                setListForm((current) => ({ ...current, ipfsUri: event.target.value }))
+              }
+              placeholder="ipfs://..."
+            />
+          </label>
+          <label>
+            Supply
+            <input
+              value={listForm.supply}
+              onChange={(event) =>
+                setListForm((current) => ({ ...current, supply: event.target.value }))
+              }
+              placeholder="0 for infinite"
+            />
+          </label>
+          <label>
+            Price in USDC
+            <input
+              value={listForm.priceUsdc}
+              onChange={(event) =>
+                setListForm((current) => ({ ...current, priceUsdc: event.target.value }))
+              }
+              placeholder="0 for free"
+            />
+          </label>
+          <button
+            type="button"
+            className={styles.primaryButton}
+            onClick={() => void handleListItem()}
+            disabled={txBusy || !me?.profile || !listForm.ipfsUri.trim()}
+          >
+            List item
+          </button>
+          {!me?.profile ? (
+            <p className={styles.inlineHint}>
+              Create your profile first before listing anything in the Bodega.
+            </p>
           ) : null}
-        </div>
+        </article>
 
-        <div className={styles.heroActions}>
-          <button
-            type="button"
-            className={styles.submitButton}
-            onClick={() => setIsSubmitOpen(true)}
-          >
-            Submit to Bodega
-          </button>
-        </div>
+        <article className={styles.formCard}>
+          <span className={styles.cardLabel}>Install rules</span>
+          <strong>Heat gate: 10+</strong>
+          <p>
+            If install reverts for insufficient heat, sync your bungalow heat on
+            the bungalow page first.
+          </p>
+          <strong>Bond activation</strong>
+          <p>
+            The first successful install in a bungalow activates a permanent JBM
+            bond for your profile there.
+          </p>
+        </article>
       </div>
 
-      <div className={styles.filterBar}>
-        <label className={styles.filterField}>
-          <span>Filter</span>
-          <select
-            value={filter}
-            onChange={(event) => setFilter(event.target.value as AssetFilter)}
-          >
-            <option value="all">All listings</option>
-            {(Object.keys(BODEGA_ASSET_GROUP_LABELS) as Array<Exclude<AssetFilter, "all">>).map((assetGroup) => (
-              <option key={assetGroup} value={assetGroup}>
-                {BODEGA_ASSET_GROUP_LABELS[assetGroup]}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      {error && items.length === 0 ? (
-        <div className={styles.statusCard}>
-          <strong>Could not load the Bodega.</strong>
-          <span>{error}</span>
-          <button
-            type="button"
-            className={styles.retryButton}
-            onClick={() => setRefreshToken((current) => current + 1)}
-          >
-            Try again
-          </button>
-        </div>
-      ) : null}
-
-      {isLoading && items.length === 0 ? (
-        <div className={styles.loadingGrid}>
-          {Array.from({ length: 6 }).map((_, index) => (
-            <div key={`bodega-skeleton-${index}`} className={styles.skeletonCard} />
-          ))}
-        </div>
-      ) : null}
-
-      {!isLoading && items.length === 0 && !error ? (
-        <div className={styles.statusCard}>
-          <strong>No listings in this lane yet.</strong>
-          <span>Change the filter or be the first builder to stock this shelf.</span>
-        </div>
-      ) : null}
-
-      {items.length > 0 ? (
-        <div className={styles.grid}>
-          {items.map((item) => {
-            const originKey = getBungalowLookupKey(
-              item.origin_bungalow_chain,
-              item.origin_bungalow_token_address,
-            );
-
-            return (
-              <BodegaCard
-                key={item.id}
-                item={item}
-                domId={`bodega-item-${item.id}`}
-                highlighted={item.id === highlightedItemId}
-                originBungalow={originKey ? bungalowLookup.get(originKey) ?? null : null}
-                onAdd={() => {
-                  if (!authenticated) {
-                    login();
-                    return;
-                  }
-                  setSelectedItem(item);
-                }}
+      <div className={styles.catalog}>
+        {items.map((item) => (
+          <article key={item.item_id} className={styles.itemCard}>
+            <div className={styles.itemHeader}>
+              <strong>Item #{item.item_id}</strong>
+              <span>{item.commission_id ? "Commissioned" : "Open listing"}</span>
+            </div>
+            <p className={styles.uri}>{item.ipfs_uri}</p>
+            <div className={styles.metaRow}>
+              <span>{BigInt(item.price_usdc) > 0n ? `${formatUsdcAmount(item.price_usdc)} USDC` : "Free"}</span>
+              <span>{item.supply === "0" ? "Infinite supply" : `${item.total_minted}/${item.supply}`}</span>
+              <span>{item.creator_handle ? `@${item.creator_handle}` : `Profile ${item.creator_profile_id}`}</span>
+            </div>
+            <div className={styles.installRow}>
+              <input
+                value={installTargets[item.item_id] ?? ""}
+                onChange={(event) =>
+                  setInstallTargets((current) => ({
+                    ...current,
+                    [item.item_id]: event.target.value,
+                  }))
+                }
+                placeholder="Bungalow id"
               />
-            );
-          })}
-        </div>
-      ) : null}
-
-      <div ref={sentinelRef} className={styles.sentinel}>
-        {isLoadingMore ? "Loading more listings..." : hasMore ? " " : "End of the dock."}
+              <button
+                type="button"
+                className={styles.secondaryButton}
+                onClick={() => void handleInstallItem(item)}
+                disabled={txBusy || !me?.profile}
+              >
+                Install item
+              </button>
+            </div>
+            <small>{formatUnixDate(item.listed_at_unix)}</small>
+          </article>
+        ))}
       </div>
-
-      <BodegaInstallModal
-        open={Boolean(selectedItem)}
-        item={selectedItem}
-        bungalowOptions={visibleBungalowOptions}
-        isDirectoryLoading={isPublicDirectoryLoading}
-        isWalletScoped={false}
-        selectionNote={selectionNote}
-        preselectedBungalow={effectivePreselectedBungalow}
-        onClose={() => setSelectedItem(null)}
-        onInstalled={(install) => {
-          if (!selectedItem) return;
-
-          setItems((current) =>
-            current.map((item) =>
-              item.id === selectedItem.id
-                ? {
-                    ...item,
-                    install_count: item.install_count + 1,
-                  }
-                : item,
-            ),
-          );
-
-          if (install.id > 0) {
-            setHighlightedItemId(selectedItem.id);
-          }
-        }}
-      />
-
-      <BodegaSubmitModal
-        open={isSubmitOpen}
-        bungalowOptions={submitOriginOptions}
-        isDirectoryLoading={isWalletScoped ? isPublicDirectoryLoading : isSelectorLoading}
-        isWalletScoped={false}
-        selectionNote={submitSelectionNote}
-        defaultOriginBungalow={preselectedBungalow}
-        onClose={() => setIsSubmitOpen(false)}
-        onSubmitted={(item) => {
-          setFilter("all");
-          setHighlightedItemId(item.id);
-          setRefreshToken((current) => current + 1);
-        }}
-      />
     </section>
   );
 }

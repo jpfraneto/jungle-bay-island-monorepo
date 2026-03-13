@@ -143,7 +143,10 @@ export default function WalletSelector({
   onStateChange,
   onWalletLinked,
 }: WalletSelectorProps) {
-  const { authenticated, connectWallet, login } = usePrivy();
+  const { authenticated, connectWallet, login, user } = usePrivy();
+  const hasXSession =
+    typeof user?.twitter?.username === "string" &&
+    user.twitter.username.trim().length > 0;
   const {
     walletAddress,
     setActiveWallet,
@@ -432,7 +435,7 @@ export default function WalletSelector({
     }
   };
 
-  if (!authenticated) {
+  if (!authenticated || !hasXSession) {
     return (
       <div className={styles.selectorWrap}>
         <div className={styles.selectorHeader}>
@@ -442,7 +445,7 @@ export default function WalletSelector({
             className={styles.connectButton}
             onClick={login}
           >
-            Connect
+            Sign in with X
           </button>
         </div>
       </div>

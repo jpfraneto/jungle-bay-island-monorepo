@@ -170,11 +170,13 @@ export default function ClaimPanel({
       if (!isHexSignature(signData.signature)) {
         throw new Error("Invalid signature from backend");
       }
+      const fallbackClaimContract =
+        typeof CLAIM_CONTRACT_ADDRESS === "string" ? CLAIM_CONTRACT_ADDRESS : "";
       const claimContract =
         typeof signData.claim_contract === "string" &&
         isHexAddress(signData.claim_contract)
           ? signData.claim_contract
-          : CLAIM_CONTRACT_ADDRESS;
+          : fallbackClaimContract;
       if (!isHexAddress(claimContract)) {
         throw new Error(
           "Claim contract address is missing. Set VITE_CLAIM_CONTRACT_ADDRESS or return claim_contract from /sign.",
@@ -272,9 +274,9 @@ export default function ClaimPanel({
     return (
       <aside className={panelClassName}>
         <h3>Claim Rewards</h3>
-        <p>Connect wallet to see your rewards</p>
+        <p>Sign in with X to see your rewards</p>
         <button type="button" className={styles.actionButton} onClick={login}>
-          Connect
+          Sign in with X
         </button>
       </aside>
     );

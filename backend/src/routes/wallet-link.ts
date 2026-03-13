@@ -10,7 +10,7 @@ import {
 } from '../db/queries'
 import { requirePrivyAuth } from '../middleware/auth'
 import { ApiError } from '../services/errors'
-import { getPrivyLinkedAccounts } from '../services/privyClaims'
+import { extractPrivyXUsername, getPrivyLinkedAccounts } from '../services/privyClaims'
 import { fetchPrivyUserLinkedAccounts } from '../services/privyServer'
 import type { AppEnv } from '../types'
 
@@ -27,7 +27,6 @@ function normalizeXUsername(value: string): string {
 
 function extractUserIdentityFromClaims(claims: Record<string, unknown>): {
   privyUserId: string
-  email: string | null
   xUsername: string | null
 } {
   const privyUserId = typeof claims.sub === 'string' ? claims.sub.trim() : ''
@@ -35,39 +34,11 @@ function extractUserIdentityFromClaims(claims: Record<string, unknown>): {
     throw new ApiError(401, 'auth_required', 'Privy user id missing from token')
   }
 
-  let email: string | null = null
-  let xUsername: string | null = null
-
-  const linkedAccounts = getPrivyLinkedAccounts(claims)
-  for (const account of linkedAccounts) {
-    const candidate = account as Record<string, unknown>
-    const type = typeof candidate.type === 'string' ? candidate.type : ''
-
-    if (!email && type === 'email') {
-      const address = typeof candidate.address === 'string' ? candidate.address.trim().toLowerCase() : ''
-      if (address) {
-        email = address
-      }
-    }
-
-    if (!xUsername && (type === 'twitter_oauth' || type === 'twitter')) {
-      const username =
-        typeof candidate.username === 'string'
-          ? candidate.username
-          : typeof candidate.screen_name === 'string'
-            ? candidate.screen_name
-            : ''
-      const normalized = normalizeXUsername(username)
-      if (normalized) {
-        xUsername = normalized
-      }
-    }
-  }
+  const xUsername = extractPrivyXUsername(claims)
 
   return {
     privyUserId,
-    email,
-    xUsername,
+    xUsername: xUsername ? normalizeXUsername(xUsername) : null,
   }
 }
 
@@ -198,7 +169,7 @@ walletLinkRoute.post('/user/link-wallet', requirePrivyAuth, async (c) => {
     throw new ApiError(401, 'auth_required', 'Privy authentication required')
   }
 
-  const { privyUserId, email, xUsername } = extractUserIdentityFromClaims(claims)
+  const { privyUserId, xUsername } = extractUserIdentityFromClaims(claims)
 
   const body = await c.req.json<{
     address?: unknown
@@ -240,7 +211,6 @@ walletLinkRoute.post('/user/link-wallet', requirePrivyAuth, async (c) => {
   }
 
   await upsertUser(privyUserId, {
-    email: email ?? undefined,
     x_username: xUsername ?? undefined,
   })
 
@@ -259,10 +229,9 @@ walletLinkRoute.get('/user/wallets', requirePrivyAuth, async (c) => {
     throw new ApiError(401, 'auth_required', 'Privy authentication required')
   }
 
-  const { privyUserId, email, xUsername } = extractUserIdentityFromClaims(claims)
+  const { privyUserId, xUsername } = extractUserIdentityFromClaims(claims)
 
   await upsertUser(privyUserId, {
-    email: email ?? undefined,
     x_username: xUsername ?? undefined,
   })
 
@@ -276,10 +245,9 @@ walletLinkRoute.post('/user/sync-wallets', requirePrivyAuth, async (c) => {
     throw new ApiError(401, 'auth_required', 'Privy authentication required')
   }
 
-  const { privyUserId, email, xUsername } = extractUserIdentityFromClaims(claims)
+  const { privyUserId, xUsername } = extractUserIdentityFromClaims(claims)
 
   await upsertUser(privyUserId, {
-    email: email ?? undefined,
     x_username: xUsername ?? undefined,
   })
 

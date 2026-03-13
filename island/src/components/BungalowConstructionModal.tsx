@@ -43,6 +43,7 @@ interface QualificationResponse {
     can_submit_to_bungalow: boolean;
     can_support: boolean;
     can_create_petition: boolean;
+    can_pay_to_create: boolean;
     profile_ready: boolean;
     qualifies_to_construct_now: boolean;
     qualification_path: string | null;
@@ -62,6 +63,14 @@ interface QualificationResponse {
     primary_asset_chain: number;
     primary_asset_kind: number;
     primary_asset_ref: string;
+  };
+  payment: {
+    eligible_for_paid_creation: boolean;
+    market_cap: number | null;
+    quote_usdc: number | null;
+    treasury_address: string;
+    usdc_contract: string;
+    price_basis: string | null;
   };
 }
 
@@ -138,6 +147,7 @@ export default function BungalowConstructionModal({
   const [resolvedQueryKey, setResolvedQueryKey] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [paymentProof, setPaymentProof] = useState("");
   const [selectedWallet, setSelectedWallet] = useState("");
   const [walletSelectorState, setWalletSelectorState] =
     useState<WalletSelectorState>({
@@ -163,6 +173,7 @@ export default function BungalowConstructionModal({
     setResolvedQueryKey(null);
     setStatus(null);
     setError(null);
+    setPaymentProof("");
     setSelectedWallet(walletAddress ?? "");
   }, [open, walletAddress]);
 
@@ -290,6 +301,54 @@ export default function BungalowConstructionModal({
         (typeof qualification.contract.contract_address === "string"
           ? qualification.contract.contract_address
           : MEMETICS_CONTRACT_ADDRESS) as `0x${string}`;
+
+      if (
+        !qualification.contract.petition_id &&
+        !qualification.viewer?.qualifies_to_construct_now &&
+        qualification.viewer?.can_pay_to_create
+      ) {
+        if (!paymentProof.trim()) {
+          throw new Error(
+            `Send ${qualification.payment.quote_usdc ?? "the quoted"} USDC and paste the payment transaction hash.`,
+          );
+        }
+
+        setStatus("Verifying payment and creating bungalow...");
+        const response = await fetch(
+          `/api/memetics/bungalow/${encodeURIComponent(qualification.chain)}/${encodeURIComponent(qualification.token_address)}/create/paid`,
+          {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              wallet: viewerWallet,
+              payment_proof: paymentProof.trim(),
+            }),
+          },
+        );
+        const data = (await response.json().catch(() => null)) as
+          | (ConfirmResponse & {
+              tx_hash?: string;
+              payment_tx_hash?: string;
+              bungalow_id?: number | null;
+            })
+          | null;
+        if (!response.ok || !data?.created) {
+          throw new Error(
+            data?.error ?? `Paid bungalow creation failed (${response.status})`,
+          );
+        }
+
+        setPendingTxHash(null);
+        setPendingAction(null);
+        setStatus("Bungalow opened.");
+        navigate(
+          data.bungalow?.canonical_path ||
+            qualification.canonical_path ||
+            `/bungalow/${qualification.token_address}`,
+        );
+        onClose();
+        return;
+      }
 
       if (!txHash) {
         if (!publicClient) {
@@ -513,6 +572,13 @@ export default function BungalowConstructionModal({
     !qualification?.exists &&
     qualification?.viewer?.qualifies_to_construct_now &&
     !qualification?.contract.petition_id;
+  const shouldShowPaidCreateAction =
+    authenticated &&
+    Boolean(memeticsProfile?.profile) &&
+    !qualification?.exists &&
+    !qualification?.contract.petition_id &&
+    Boolean(qualification?.viewer?.can_pay_to_create) &&
+    Boolean(qualification?.payment.quote_usdc);
 
   return createPortal(
     <div className={styles.overlay}>
@@ -646,7 +712,7 @@ export default function BungalowConstructionModal({
                     ? qualification.viewer.island_heat.toFixed(1)
                     : viewerWallet
                       ? "Unavailable"
-                      : "Connect wallet"}
+                      : "Sign in with X"}
                 </strong>
               </div>
               <div className={styles.metricCard}>
@@ -656,7 +722,7 @@ export default function BungalowConstructionModal({
                     ? qualification.viewer.jbac_balance
                     : viewerWallet
                       ? "Unavailable"
-                      : "Connect wallet"}
+                      : "Sign in with X"}
                 </strong>
               </div>
             </div>
@@ -680,6 +746,14 @@ export default function BungalowConstructionModal({
                 Every write happens through the Memetics contract and requires
                 an onchain profile first.
               </p>
+              {qualification.payment.quote_usdc ? (
+                <p>
+                  If you do not meet the heat or JBAC requirements, you can
+                  still open the bungalow by paying{" "}
+                  <strong>{qualification.payment.quote_usdc} USDC</strong>,
+                  priced at 0.1% of current market cap.
+                </p>
+              ) : null}
             </div>
 
             {qualification.exists ? (
@@ -709,7 +783,7 @@ export default function BungalowConstructionModal({
                 className={styles.secondaryButton}
                 onClick={() => login()}
               >
-                Connect wallet to open or support this bungalow
+                Sign in with X to open or support this bungalow
               </button>
             ) : null}
 
@@ -760,6 +834,36 @@ export default function BungalowConstructionModal({
                     ? "Retry indexing petition"
                     : "Create bungalow petition"}
               </button>
+            ) : null}
+
+            {shouldShowPaidCreateAction ? (
+              <>
+                <div className={styles.notice}>
+                  Pay{" "}
+                  <strong>{qualification.payment.quote_usdc} USDC</strong> to{" "}
+                  {qualification.payment.treasury_address}, then paste the
+                  payment tx hash below. The backend will verify it and create
+                  the bungalow onchain for your linked profile.
+                </div>
+                <label className={styles.field}>
+                  Payment tx hash
+                  <input
+                    value={paymentProof}
+                    onChange={(event) => setPaymentProof(event.target.value)}
+                    placeholder="0x..."
+                  />
+                </label>
+                <button
+                  type="button"
+                  className={styles.primaryButton}
+                  onClick={() => {
+                    void handlePetitionAction();
+                  }}
+                  disabled={isActing}
+                >
+                  {isActing ? "Creating..." : "Create with payment"}
+                </button>
+              </>
             ) : null}
 
             {authenticated &&

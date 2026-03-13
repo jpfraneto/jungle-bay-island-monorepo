@@ -6,7 +6,11 @@ import { getAgentByKeyHash, getUserWallets } from '../db/queries'
 import type { AppEnv } from '../types'
 import { ApiError } from '../services/errors'
 import { logInfo, logWarn } from '../services/logger'
-import { getPrivyLinkedAccounts } from '../services/privyClaims'
+import {
+  extractPrivyXUsername,
+  extractPrivyXUsernameFromLinkedAccounts,
+  getPrivyLinkedAccounts,
+} from '../services/privyClaims'
 import { fetchPrivyUserLinkedAccounts } from '../services/privyServer'
 
 type VerificationKey = KeyLike | Uint8Array
@@ -211,6 +215,32 @@ function walletFromClaims(payload: JWTPayload): string | null {
   return walletsFromClaims(payload)[0] ?? null
 }
 
+async function resolvePrivyXUsername(payload: JWTPayload): Promise<string | null> {
+  const fromClaims = extractPrivyXUsername(payload)
+  if (fromClaims) {
+    return fromClaims
+  }
+
+  const privyUserId = extractPrivyUserId(payload)
+  if (!privyUserId) {
+    return null
+  }
+
+  const linkedAccounts = await fetchPrivyUserLinkedAccounts(privyUserId)
+  if (!linkedAccounts) {
+    return null
+  }
+
+  return extractPrivyXUsernameFromLinkedAccounts(linkedAccounts)
+}
+
+async function assertPrivyXSession(payload: JWTPayload): Promise<void> {
+  const xUsername = await resolvePrivyXUsername(payload)
+  if (!xUsername) {
+    throw new ApiError(403, 'x_account_required', 'Sign in with X to use this endpoint')
+  }
+}
+
 async function resolvePrivyAuthContext(payload: JWTPayload): Promise<{
   walletAddress: string | null
   walletAddresses: string[]
@@ -361,6 +391,7 @@ export const optionalWalletContext: MiddlewareHandler<AppEnv> = async (c, next) 
   if (token) {
     try {
       const verified = await verifyPrivyToken(token)
+      await assertPrivyXSession(verified.payload)
       const resolved = await resolvePrivyAuthContext(verified.payload)
       if (resolved.walletAddress) {
         c.set('walletAddress', resolved.walletAddress)
@@ -417,6 +448,7 @@ export const requireWalletAuth: MiddlewareHandler<AppEnv> = async (c, next) => {
     )
   }
 
+  await assertPrivyXSession(verified.payload)
   const resolved = await resolvePrivyAuthContext(verified.payload)
 
   if (!resolved.walletAddress) {
@@ -450,6 +482,7 @@ export const requirePrivyAuth: MiddlewareHandler<AppEnv> = async (c, next) => {
     throw new ApiError(401, 'invalid_token', 'Privy token verification failed')
   }
 
+  await assertPrivyXSession(verified.payload)
   const resolved = await resolvePrivyAuthContext(verified.payload)
 
   if (resolved.walletAddress) {

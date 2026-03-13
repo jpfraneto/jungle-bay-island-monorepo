@@ -1,655 +1,495 @@
-import { Suspense, lazy, useEffect, useState } from "react";
-import {
-  useLocation,
-  useNavigate,
-  useParams,
-  useSearchParams,
-} from "react-router-dom";
-import ChainIcon from "../components/ChainIcon";
-import {
-  useBungalow,
-  type BungalowAsset,
-  type BungalowDeployment,
-  type BungalowDetails,
-} from "../hooks/useBungalow";
-import { useBungalowResolver } from "../hooks/useBungalowResolver";
-import { getChainLabel } from "../utils/chains";
-import { normalizeBodegaCatalogItem } from "../utils/bodega";
-import NotFoundPage from "./NotFoundPage";
-import { formatNumber } from "../utils/formatters";
-import { getTokenImageUrl } from "../utils/tokenImage";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
+import { type Address } from "viem";
+import { usePrivy } from "@privy-io/react-auth";
+import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
 import styles from "../styles/bungalow-page.module.css";
+import {
+  confirmTrackedTx,
+  ensureUsdcAllowance,
+  fetchAuthedJson,
+  fetchJson,
+  formatUnixDate,
+  formatUsdcAmount,
+  islandIdentityAbi,
+  jungleBayIslandAbi,
+  normalizeTxError,
+  ONCHAIN_CONTRACTS,
+  trackSubmittedTx,
+  type OnchainBungalowPage,
+  type OnchainMeResponse,
+} from "../utils/onchain";
 
-const BungalowScene = lazy(() => import("../components/BungalowScene"));
-
-function tokenStandardLabel(chain: string, isNft: boolean): string {
-  if (chain === "base" || chain === "ethereum") {
-    return isNft ? "ERC-721" : "ERC-20";
-  }
-  return isNft ? "SPL NFT" : "SPL";
+function looksLikeAssetRef(value: string): boolean {
+  return value.trim().length > 0;
 }
 
-function chainToneClass(chain: string): string {
-  if (chain === "base") return styles.base;
-  if (chain === "ethereum") return styles.ethereum;
-  return styles.solana;
-}
-
-function formatHeatMetric(
-  value: number | null | undefined,
-  sampleSize: number | undefined,
-): string {
-  if (value === null || value === undefined || Number.isNaN(value)) return "—";
-  if (!sampleSize || sampleSize <= 0) return `${value.toFixed(2)}°`;
-  return `${value.toFixed(2)}° `;
-}
-
-function buildFallbackAsset(bungalow: BungalowDetails): BungalowAsset {
-  const deployment: BungalowDeployment = {
-    chain: bungalow.chain,
-    token_address: bungalow.token_address,
-    route_path: `/bungalow/${bungalow.token_address}`,
-    name: bungalow.name,
-    symbol: bungalow.symbol,
-    decimals: bungalow.decimals ?? null,
-    is_nft: bungalow.is_nft ?? false,
-    exists: bungalow.exists,
-    is_claimed: bungalow.is_claimed,
-    is_verified: bungalow.is_verified,
-    current_owner: bungalow.current_owner,
-    description: bungalow.description,
-    origin_story: null,
-    image_url: bungalow.image_url,
-    holder_count: bungalow.holder_count,
-    total_supply: null,
-    market_data: bungalow.market_data,
-    heat_stats: bungalow.heat_stats,
-    is_primary: true,
-    is_active: true,
-  };
-
-  return {
-    id: `${bungalow.chain}-${bungalow.token_address}`,
-    kind: bungalow.is_nft ? "nft_collection" : "fungible_token",
-    name: bungalow.name ?? "Token",
-    symbol: bungalow.symbol,
-    aggregate_holder_count: bungalow.holder_count,
-    deployment_count: 1,
-    chain_count: 1,
-    is_primary: true,
-    is_active: true,
-    primary_deployment: {
-      chain: bungalow.chain,
-      token_address: bungalow.token_address,
-    },
-    deployments: [deployment],
-  };
-}
-
-function getVerifiedAdminAddress(bungalow: BungalowDetails): string | null {
-  if (!("verified_admin" in bungalow)) {
-    return null;
-  }
-
-  return typeof bungalow.verified_admin === "string"
-    ? bungalow.verified_admin
-    : null;
-}
-
-function BungalowEntryTransition({
-  name,
-  imageUrl,
-}: {
-  name: string;
-  imageUrl?: string;
-}) {
-  const [scale, setScale] = useState(0.3);
-  const [opacity, setOpacity] = useState(0);
-
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      setScale(1.1);
-      setOpacity(1);
-    });
-
-    return () => window.cancelAnimationFrame(frame);
-  }, []);
-
-  return (
-    <div
-      style={{
-        width: "100%",
-        height: 520,
-        background:
-          "radial-gradient(ellipse at center, #1a3a1a 0%, #0a1a0a 70%)",
-        borderRadius: 12,
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 20,
-        overflow: "hidden",
-        position: "relative",
-      }}
-    >
-      <div
-        style={{
-          position: "absolute",
-          width: 200,
-          height: 200,
-          borderRadius: "50%",
-          border: "1px solid rgba(0,255,180,0.15)",
-          animation: "pulse-ring 1.2s ease-out infinite",
-        }}
-      />
-      <div
-        style={{
-          position: "absolute",
-          width: 140,
-          height: 140,
-          borderRadius: "50%",
-          border: "1px solid rgba(0,255,180,0.2)",
-          animation: "pulse-ring 1.2s ease-out 0.3s infinite",
-        }}
-      />
-      <div
-        style={{
-          width: 80,
-          height: 80,
-          borderRadius: "50%",
-          overflow: "hidden",
-          border: "2px solid rgba(0,255,180,0.4)",
-          opacity,
-          transform: `scale(${scale})`,
-          transition: "all 0.5s cubic-bezier(0.34,1.56,0.64,1)",
-          zIndex: 1,
-        }}
-      >
-        {imageUrl ? (
-          <img
-            src={imageUrl}
-            alt={name}
-            style={{ width: "100%", height: "100%", objectFit: "cover" }}
-          />
-        ) : (
-          <div
-            style={{ width: "100%", height: "100%", background: "#1a4a2a" }}
-          />
-        )}
-      </div>
-      <div
-        style={{
-          color: "rgba(0,255,180,0.7)",
-          fontSize: 13,
-          letterSpacing: "0.15em",
-          textTransform: "uppercase",
-          opacity,
-          transition: "opacity 0.5s ease 0.2s",
-          zIndex: 1,
-        }}
-      >
-        entering {name}
-      </div>
-      <style>{`
-        @keyframes pulse-ring {
-          0% { transform: scale(0.8); opacity: 0.6; }
-          100% { transform: scale(1.6); opacity: 0; }
-        }
-      `}</style>
-    </div>
-  );
-}
-
-function compactLoadingLabel(value: string | null | undefined): string {
-  const trimmed = value?.trim() ?? "";
-  if (!trimmed) return "bungalow";
-  if (/^0x[a-f0-9]{40}$/i.test(trimmed)) {
-    return "bungalow";
-  }
-  if (/^[1-9A-HJ-NP-Za-km-z]{28,60}$/.test(trimmed)) {
-    return "bungalow";
-  }
-  if (/^[a-z0-9]{18,}$/i.test(trimmed)) {
-    return "bungalow";
-  }
-  return trimmed.replace(/[-_]+/g, " ");
-}
-
-function BungalowLoadingState({
-  name,
-  imageUrl,
-  progress,
-  status,
-}: {
-  name: string;
-  imageUrl?: string;
-  progress: number;
-  status: string;
-}) {
-  const panel = (
-    <div
-      style={{
-        width: "100%",
-        minHeight: "calc(100vh - 36px)",
-        display: "grid",
-        alignContent: "center",
-        justifyItems: "center",
-        gap: 18,
-      }}
-    >
-      <BungalowEntryTransition name={name} imageUrl={imageUrl} />
-      <div
-        style={{
-          width: "min(360px, calc(100vw - 64px))",
-          display: "grid",
-          gap: 10,
-        }}
-      >
-        <div
-          style={{
-            height: 10,
-            borderRadius: 999,
-            background: "rgba(255,255,255,0.08)",
-            overflow: "hidden",
-            border: "1px solid rgba(255,255,255,0.08)",
-          }}
-        >
-          <div
-            style={{
-              width: `${Math.max(8, Math.min(100, Math.round(progress * 100)))}%`,
-              height: "100%",
-              borderRadius: 999,
-              background:
-                "linear-gradient(90deg, rgba(222,189,117,0.72), rgba(120,255,196,0.9))",
-              boxShadow: "0 0 18px rgba(120,255,196,0.26)",
-              transition: "width 220ms ease",
-            }}
-          />
-        </div>
-        <div
-          style={{
-            textAlign: "center",
-            color: "rgba(244,234,209,0.72)",
-            fontSize: 12,
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
-          }}
-        >
-          {status}
-        </div>
-      </div>
-    </div>
-  );
-
-  return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 30,
-        padding: 18,
-        background:
-          "radial-gradient(circle at 48% 26%, rgba(39, 92, 60, 0.24), rgba(8, 18, 12, 0.96) 60%)",
-        backdropFilter: "blur(8px)",
-      }}
-    >
-      <div className={styles.page}>{panel}</div>
-    </div>
-  );
-}
-
-interface BungalowPageLocationState {
-  pendingBodegaItem?: unknown;
-  preloadedBungalow?: {
-    name?: string | null;
-    symbol?: string | null;
-    imageUrl?: string | null;
-  } | null;
+function compactAddress(value: string): string {
+  if (value.length < 12) return value;
+  return `${value.slice(0, 6)}...${value.slice(-4)}`;
 }
 
 export default function BungalowPage() {
-  const {
-    chain: routeChain,
-    ca: routeCa,
-    identifier: routeIdentifier,
-  } = useParams<{
-    chain?: string;
-    ca?: string;
-    identifier?: string;
-  }>();
+  const { identifier } = useParams<{ identifier: string }>();
   const [searchParams] = useSearchParams();
-  const location = useLocation();
-  const navigate = useNavigate();
-  const locationState =
-    (location.state as BungalowPageLocationState | null) ?? null;
-  const preloadedBungalow = locationState?.preloadedBungalow ?? null;
-  const pendingBodegaItem = normalizeBodegaCatalogItem(
-    locationState?.pendingBodegaItem,
-  );
-  const preferredResolveChain = (searchParams.get("chain") ?? "")
-    .trim()
-    .toLowerCase();
-  const hasDirectRoute = Boolean(routeChain && routeCa);
-  const {
-    target: resolvedTarget,
-    isLoading: resolveLoading,
-    error: resolveError,
-  } = useBungalowResolver(
-    hasDirectRoute ? undefined : routeIdentifier,
-    hasDirectRoute ? undefined : preferredResolveChain || undefined,
-  );
-  const chain = hasDirectRoute
-    ? (routeChain ?? "")
-    : (resolvedTarget?.chain ?? "");
-  const ca = hasDirectRoute
-    ? (routeCa ?? "")
-    : (resolvedTarget?.token_address ?? "");
-  const { bungalow, isLoading, error } = useBungalow(
-    chain || undefined,
-    ca || undefined,
-  );
-  const [sceneModuleReady, setSceneModuleReady] = useState(false);
-  const [sceneReady, setSceneReady] = useState(false);
-  const loadingName = compactLoadingLabel(
-    preloadedBungalow?.symbol ??
-      preloadedBungalow?.name ??
-      routeIdentifier ??
-      bungalow?.canonical_project?.symbol ??
-      bungalow?.symbol ??
-      bungalow?.canonical_project?.name ??
-      bungalow?.name ??
-      "bungalow",
-  );
-  const loadingImageUrl = getTokenImageUrl(
-    preloadedBungalow?.imageUrl ?? bungalow?.image_url ?? null,
-    ca || routeCa || routeIdentifier || loadingName,
-    preloadedBungalow?.symbol ??
-      bungalow?.canonical_project?.symbol ??
-      bungalow?.symbol ??
-      loadingName,
-  );
+  const chain = (searchParams.get("chain") ?? "base").trim().toLowerCase();
+  const assetRef = (identifier ?? "").trim();
+  const { authenticated, getAccessToken } = usePrivy();
+  const { publicClient, requireWallet } = usePrivyBaseWallet();
+  const [page, setPage] = useState<OnchainBungalowPage | null>(null);
+  const [me, setMe] = useState<OnchainMeResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [txBusy, setTxBusy] = useState(false);
+  const [name, setName] = useState("");
+  const [ticker, setTicker] = useState("");
+  const [ipfsHash, setIpfsHash] = useState("");
+  const [linkChain, setLinkChain] = useState("ethereum");
+  const [linkTokenAddress, setLinkTokenAddress] = useState("");
 
-  useEffect(() => {
-    let active = true;
-
-    void import("../components/BungalowScene").then(() => {
-      if (active) {
-        setSceneModuleReady(true);
-      }
-    });
-
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    setSceneReady(false);
-  }, [chain, ca]);
-
-  const loadingProgress = !hasDirectRoute && resolveLoading
-    ? 0.28
-    : !chain || !ca
-      ? 0.38
-      : isLoading
-        ? 0.64
-        : !sceneModuleReady
-          ? 0.82
-          : 0.94;
-  const loadingStatus = !hasDirectRoute && resolveLoading
-    ? "Resolving bungalow route"
-    : !chain || !ca || isLoading
-      ? "Fetching bungalow data"
-      : !sceneModuleReady
-        ? "Preparing the room"
-        : "Finishing bungalow render";
-
-  if (!hasDirectRoute && !routeIdentifier) {
-    return <div className={styles.page}>Invalid bungalow route</div>;
-  }
-
-  if (!hasDirectRoute && resolveLoading) {
-    return (
-      <BungalowLoadingState
-        name={loadingName}
-        imageUrl={loadingImageUrl}
-        progress={loadingProgress}
-        status={loadingStatus}
-      />
-    );
-  }
-
-  if (!hasDirectRoute && resolveError) {
-    if (resolveError.includes("(404)")) {
-      return <NotFoundPage />;
+  const refetch = async () => {
+    if (!looksLikeAssetRef(assetRef)) {
+      setPage(null);
+      return;
     }
 
-    return (
-      <div className={styles.page}>
-        Failed to resolve bungalow: {resolveError}
-      </div>
-    );
-  }
+    setIsLoading(true);
+    setError(null);
+    try {
+      const headers = authenticated
+        ? {
+            Authorization: `Bearer ${(await getAccessToken()) ?? ""}`,
+          }
+        : undefined;
 
-  if (!hasDirectRoute && !resolvedTarget) {
-    return <NotFoundPage />;
-  }
+      const [bungalowPayload, mePayload] = await Promise.all([
+        fetchJson<OnchainBungalowPage>(
+          `/api/onchain/bungalows/${encodeURIComponent(chain)}/${encodeURIComponent(assetRef)}`,
+          { headers },
+        ),
+        authenticated
+          ? fetchAuthedJson<OnchainMeResponse>("/api/onchain/me", getAccessToken)
+          : Promise.resolve(null),
+      ]);
 
-  if (!chain || !ca || isLoading) {
-    return (
-      <BungalowLoadingState
-        name={loadingName}
-        imageUrl={loadingImageUrl}
-        progress={loadingProgress}
-        status={loadingStatus}
-      />
-    );
-  }
-
-  if (error || !bungalow) {
-    return (
-      <div className={styles.page}>
-        Failed to load bungalow: {error ?? "Unknown"}
-      </div>
-    );
-  }
-
-  if (!bungalow.exists) {
-    return <NotFoundPage />;
-  }
-
-  const assets = bungalow.assets?.length
-    ? bungalow.assets
-    : [buildFallbackAsset(bungalow)];
-  const activeAsset =
-    bungalow.active_asset ??
-    assets.find((asset) => asset.is_active) ??
-    assets[0];
-  const deployments = activeAsset.deployments;
-  const activeDeployment =
-    bungalow.active_deployment ??
-    deployments.find((deployment) => deployment.is_active) ??
-    deployments[0];
-  const canonicalProject = bungalow.canonical_project;
-  const displayName =
-    canonicalProject?.name ?? bungalow.name ?? "Unknown Token";
-  const displaySymbol = canonicalProject?.symbol ?? null;
-  const activeChain = activeDeployment.chain || bungalow.chain || chain;
-  const headerImage = getTokenImageUrl(
-    bungalow.image_url,
-    activeDeployment.token_address,
-    activeAsset.symbol ?? bungalow.symbol,
-  );
-  const adminAddress = getVerifiedAdminAddress(bungalow);
-  const visibleChains = [
-    ...new Set(
-      assets.flatMap((asset) =>
-        asset.deployments.map((deployment) => deployment.chain),
-      ),
-    ),
-  ];
-  const currentBodegaTarget = {
-    chain: activeChain,
-    token_address: activeDeployment.token_address,
-    name: displayName,
-    symbol: displaySymbol ?? activeAsset.symbol ?? bungalow.symbol ?? null,
-    image_url: bungalow.image_url ?? null,
+      setPage(bungalowPayload);
+      setMe(mePayload);
+      setName(bungalowPayload.name ?? "");
+      setTicker(bungalowPayload.ticker ?? "");
+      setIpfsHash(bungalowPayload.ipfs_hash ?? "");
+    } catch (fetchError) {
+      setError(fetchError instanceof Error ? fetchError.message : "Failed to load bungalow");
+      setPage(null);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
+  useEffect(() => {
+    void refetch();
+  }, [assetRef, authenticated, chain]);
+
+  const canClaim = Boolean(me?.profile && !page?.exists);
+
+  const runDirectWrite = async (input: {
+    label: string;
+    action: string;
+    functionName:
+      | "mintBungalow"
+      | "syncHeat"
+      | "setBungalowIdentity"
+      | "updateBungalow"
+      | "linkAsset"
+      | "installItem";
+    contractAddress: Address;
+    abi: readonly unknown[];
+    args: readonly unknown[];
+    usdcApproval?: {
+      spender: Address;
+      amount: bigint;
+      description: string;
+    } | null;
+    metadata?: Record<string, unknown>;
+    bungalowId?: number | null;
+    itemId?: number | null;
+  }) => {
+    setTxBusy(true);
+    setError(null);
+    setStatus(input.label);
+
+    try {
+      const { address, walletClient } = await requireWallet();
+
+      if (input.usdcApproval && input.usdcApproval.amount > 0n) {
+        setStatus(
+          `Approval required: allow USDC spending by ${compactAddress(input.usdcApproval.spender)}.`,
+        );
+        const approvalTxHash = await ensureUsdcAllowance({
+          publicClient,
+          walletClient,
+          owner: address as Address,
+          spender: input.usdcApproval.spender,
+          amount: input.usdcApproval.amount,
+        });
+
+        if (approvalTxHash) {
+          await publicClient.waitForTransactionReceipt({ hash: approvalTxHash });
+        }
+      }
+
+      setStatus("Sending wallet transaction...");
+      const txHash = await walletClient.writeContract({
+        account: address as Address,
+        address: input.contractAddress,
+        abi: input.abi,
+        functionName: input.functionName,
+        args: input.args as never,
+      });
+
+      await trackSubmittedTx({
+        getAccessToken,
+        txHash,
+        action: input.action,
+        functionName: input.functionName,
+        contractAddress: input.contractAddress,
+        wallet: address,
+        bungalowId: input.bungalowId ?? null,
+        itemId: input.itemId ?? null,
+        tokenAddress: assetRef,
+        metadata: input.metadata,
+      });
+
+      setStatus("Waiting for confirmation...");
+      await publicClient.waitForTransactionReceipt({ hash: txHash });
+      await confirmTrackedTx(getAccessToken, txHash);
+      await refetch();
+      setStatus("Onchain state updated.");
+    } catch (txError) {
+      setError(normalizeTxError(txError, "Transaction failed"));
+      setStatus(null);
+    } finally {
+      setTxBusy(false);
+    }
+  };
+
+  const handleClaimBungalow = async () => {
+    const { address } = await requireWallet();
+    const quote = await fetchAuthedJson<Record<string, string | number | boolean>>(
+      "/api/onchain/bungalows/mint-quote",
+      getAccessToken,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          wallet: address,
+          chain,
+          token_address: assetRef,
+        }),
+      },
+    );
+
+    if (quote.exists) {
+      await refetch();
+      return;
+    }
+
+    const priceRaw = BigInt(String(quote.price_usdc_raw ?? "0"));
+    await runDirectWrite({
+      label: "Requesting bungalow mint quote...",
+      action: "bungalow_mint",
+      functionName: "mintBungalow",
+      contractAddress: ONCHAIN_CONTRACTS.jungleBayIsland,
+      abi: jungleBayIslandAbi,
+      args: [
+        String(quote.chain ?? chain),
+        String(quote.token_address ?? assetRef),
+        priceRaw,
+        String(quote.salt ?? "") as `0x${string}`,
+        BigInt(String(quote.deadline ?? "0")),
+        String(quote.sig ?? "") as `0x${string}`,
+      ],
+      usdcApproval: {
+        spender: ONCHAIN_CONTRACTS.jungleBayIsland,
+        amount: priceRaw,
+        description: "Bungalow mint price approval",
+      },
+      metadata: {
+        price_usdc_raw: priceRaw.toString(),
+      },
+    });
+  };
+
+  const handleSyncHeat = async () => {
+    if (!page?.bungalow_id) return;
+    const { address } = await requireWallet();
+    const signature = await fetchAuthedJson<Record<string, string | number>>(
+      `/api/onchain/bungalows/${page.bungalow_id}/sync-heat/sign`,
+      getAccessToken,
+      {
+        method: "POST",
+        body: JSON.stringify({ wallet: address }),
+      },
+    );
+
+    await runDirectWrite({
+      label: "Preparing heat sync...",
+      action: "identity_sync_heat",
+      functionName: "syncHeat",
+      contractAddress: ONCHAIN_CONTRACTS.islandIdentity,
+      abi: islandIdentityAbi,
+      args: [
+        BigInt(String(signature.profile_id ?? "0")),
+        BigInt(String(signature.bungalow_id ?? "0")),
+        BigInt(String(signature.heat_score ?? "0")),
+        String(signature.salt ?? "") as `0x${string}`,
+        BigInt(String(signature.deadline ?? "0")),
+        String(signature.sig ?? "") as `0x${string}`,
+      ],
+      bungalowId: page.bungalow_id,
+      metadata: {
+        heat_score: signature.heat_score,
+      },
+    });
+  };
+
+  const handleUpdateIdentity = async () => {
+    if (!page?.bungalow_id) return;
+    await runDirectWrite({
+      label: "Updating bungalow identity...",
+      action: "bungalow_set_identity",
+      functionName: "setBungalowIdentity",
+      contractAddress: ONCHAIN_CONTRACTS.jungleBayIsland,
+      abi: jungleBayIslandAbi,
+      args: [BigInt(page.bungalow_id), name.trim(), ticker.trim()],
+      bungalowId: page.bungalow_id,
+    });
+  };
+
+  const handleUpdateMetadata = async () => {
+    if (!page?.bungalow_id) return;
+    await runDirectWrite({
+      label: "Updating bungalow metadata...",
+      action: "bungalow_update",
+      functionName: "updateBungalow",
+      contractAddress: ONCHAIN_CONTRACTS.jungleBayIsland,
+      abi: jungleBayIslandAbi,
+      args: [BigInt(page.bungalow_id), ipfsHash.trim()],
+      bungalowId: page.bungalow_id,
+    });
+  };
+
+  const handleLinkAsset = async () => {
+    if (!page?.bungalow_id) return;
+    await runDirectWrite({
+      label: "Linking asset...",
+      action: "bungalow_link_asset",
+      functionName: "linkAsset",
+      contractAddress: ONCHAIN_CONTRACTS.jungleBayIsland,
+      abi: jungleBayIslandAbi,
+      args: [BigInt(page.bungalow_id), linkChain.trim().toLowerCase(), linkTokenAddress.trim()],
+      bungalowId: page.bungalow_id,
+      metadata: {
+        linked_chain: linkChain,
+        linked_token_address: linkTokenAddress,
+      },
+    });
+  };
+
+  const firstPaidItem = useMemo(
+    () => page?.installs.find((item) => BigInt(item.price_usdc) > 0n) ?? null,
+    [page?.installs],
+  );
+
+  if (!looksLikeAssetRef(assetRef)) {
+    return <section className={styles.page}>Missing bungalow asset reference.</section>;
+  }
+
   return (
-    <div className={styles.page}>
-      <div className={styles.content}>
-        <section className={styles.mainColumn}>
-          <div className={styles.wallRegion}>
-            <Suspense
-              fallback={
-                null
-              }
-            >
-              <BungalowScene
-                chain={chain}
-                ca={ca}
-                ownerAddress={bungalow.current_owner}
-                adminAddress={adminAddress}
-                title={displayName}
-                symbol={
-                  displaySymbol ?? activeAsset.symbol ?? bungalow.symbol ?? null
-                }
-                imageUrl={headerImage}
-                description={bungalow.description}
-                viewerContext={bungalow.viewer_context ?? null}
-                visibleChains={visibleChains}
-                initialBodegaItem={pendingBodegaItem}
-                onInitialBodegaItemConsumed={() => {
-                  navigate(`${location.pathname}${location.search}`, {
-                    replace: true,
-                    state: null,
-                  });
-                }}
-                onSceneReadyChange={setSceneReady}
-                onOpenBodega={() =>
-                  navigate("/bodega", {
-                    state: {
-                      preselectedBungalow: currentBodegaTarget,
-                    },
-                  })
-                }
-              />
-            </Suspense>
-            {!sceneReady ? (
-              <BungalowLoadingState
-                name={displayName}
-                imageUrl={headerImage}
-                progress={0.96}
-                status="Loading bungalow scene"
-              />
-            ) : null}
-          </div>
-        </section>
+    <section className={styles.page}>
+      <div className={styles.hero}>
+        <div>
+          <p className={styles.kicker}>Bungalow registry</p>
+          <h1>{page?.exists ? page.name || page.ticker || assetRef : "This asset does not have a bungalow yet."}</h1>
+          <p className={styles.summary}>
+            Every asset key maps to at most one bungalow. Seed assets and linked
+            assets resolve to the same page, and the durable truth lives in the
+            registry NFT onchain.
+          </p>
+        </div>
 
-        <div className={styles.sideColumn}>
-          <div className={styles.deploymentList}>
-            {assets.map((asset) => (
-              <section
-                key={asset.id}
-                className={`${styles.assetCard} ${
-                  asset.is_active ? styles.assetCardActive : ""
-                }`}
-              >
-                <div className={styles.assetHeader}>
-                  <div>
-                    <p className={styles.assetEyebrow}>
-                      {asset.kind === "nft_collection"
-                        ? "NFT Collection"
-                        : "Token"}
-                    </p>
-                    <h2 className={styles.assetTitle}>
-                      {asset.symbol ? (
-                        <span className={styles.assetTicker}>
-                          ${asset.symbol}
-                        </span>
-                      ) : null}
-                    </h2>
-                  </div>
-                </div>
-
-                <div className={styles.deploymentSublist}>
-                  {asset.deployments.map((deployment) => {
-                    const deploymentSymbol = deployment.symbol ?? asset.symbol;
-                    const deploymentIsNft = Boolean(
-                      deployment.is_nft ?? deployment.decimals === 0,
-                    );
-
-                    return (
-                      <div
-                        key={`${deployment.chain}:${deployment.token_address}`}
-                        className={styles.deploymentStack}
-                      >
-                        <section
-                          className={`${styles.deploymentCard} ${
-                            deployment.is_active
-                              ? styles.deploymentCardActive
-                              : ""
-                          }`}
-                        >
-                          <div className={styles.deploymentHeader}>
-                            <div className={styles.deploymentTitle}>
-                              <ChainIcon
-                                chain={deployment.chain}
-                                className={styles.deploymentChainIcon}
-                                size={14}
-                              />
-                              <strong>{getChainLabel(deployment.chain)}</strong>
-                              <span className={styles.deploymentTicker}>
-                                {deploymentSymbol
-                                  ? `$${deploymentSymbol}`
-                                  : "?"}
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className={styles.deploymentMeta}>
-                            <span
-                              className={`${styles.chainBadge} ${chainToneClass(deployment.chain)}`}
-                            >
-                              {tokenStandardLabel(
-                                deployment.chain,
-                                deploymentIsNft,
-                              )}
-                            </span>
-                          </div>
-
-                          <p className={styles.deploymentAddress}>
-                            {deployment.token_address}
-                          </p>
-
-                          <div className={styles.deploymentStats}>
-                            <div>
-                              <span>Holders</span>
-                              <strong>
-                                {formatNumber(deployment.holder_count)}
-                              </strong>
-                            </div>
-                            <div>
-                              <span>Avg Heat</span>
-                              <strong>
-                                {formatHeatMetric(
-                                  deployment.heat_stats?.top_50_average ?? null,
-                                  deployment.heat_stats?.sample_size,
-                                )}
-                              </strong>
-                            </div>
-                          </div>
-                        </section>
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
-            ))}
-          </div>
+        <div className={styles.lookupPill}>
+          <span>{chain}</span>
+          <strong>{assetRef}</strong>
         </div>
       </div>
-    </div>
+
+      {error ? <p className={styles.error}>{error}</p> : null}
+      {status ? <p className={styles.status}>{status}</p> : null}
+      {isLoading ? <p className={styles.loading}>Loading bungalow...</p> : null}
+
+      {!page?.exists ? (
+        <article className={styles.claimCard}>
+          <strong>No bungalow claimed for this asset.</strong>
+          <p>
+            Claiming requires an existing profile and a backend-signed USDC mint quote.
+            The spender for approval is {compactAddress(ONCHAIN_CONTRACTS.jungleBayIsland)}.
+          </p>
+          <button
+            type="button"
+            className={styles.primaryButton}
+            onClick={() => void handleClaimBungalow()}
+            disabled={txBusy || !canClaim}
+          >
+            Claim bungalow
+          </button>
+          {!me?.profile ? (
+            <p className={styles.inlineHint}>
+              Create your profile first on the <Link to="/profile">profile page</Link>.
+            </p>
+          ) : null}
+        </article>
+      ) : (
+        <>
+          <div className={styles.grid}>
+            <article className={styles.card}>
+              <span className={styles.cardLabel}>Registry</span>
+              <strong>Bungalow #{page.bungalow_id}</strong>
+              <p>Owner {page.owner_wallet ? compactAddress(page.owner_wallet) : "unknown"}.</p>
+              <p>Minted {formatUnixDate(page.minted_at_unix)}.</p>
+              <p>Seed asset {page.seed_asset ? `${page.seed_asset.chain}:${page.seed_asset.token_address}` : "—"}.</p>
+            </article>
+
+            <article className={styles.card}>
+              <span className={styles.cardLabel}>Heat</span>
+              <strong>{Math.round(page.viewer.onchain_heat)} onchain heat</strong>
+              <p>Backend sees {Math.round(page.viewer.backend_heat)} heat for this bungalow.</p>
+              <p>{page.viewer.bond_activated ? "Permanent bond already active." : "First install here will activate the permanent bond."}</p>
+              <button
+                type="button"
+                className={styles.secondaryButton}
+                onClick={() => void handleSyncHeat()}
+                disabled={txBusy || !page.viewer.profile_id || !page.viewer.can_sync_heat}
+              >
+                Sync heat
+              </button>
+            </article>
+
+            <article className={styles.card}>
+              <span className={styles.cardLabel}>Assets</span>
+              <strong>{page.assets.length} linked asset(s)</strong>
+              <ul className={styles.assetList}>
+                {page.assets.map((asset) => (
+                  <li key={`${asset.chain}:${asset.token_address}`}>
+                    <span>{asset.is_seed ? "Seed" : "Linked"}</span>
+                    <strong>{asset.symbol ?? asset.label ?? asset.token_address}</strong>
+                    <small>{asset.chain}</small>
+                  </li>
+                ))}
+              </ul>
+            </article>
+          </div>
+
+          {page.viewer.owns_bungalow ? (
+            <div className={styles.ownerPanel}>
+              <div className={styles.ownerCard}>
+                <span className={styles.cardLabel}>Update bungalow</span>
+                <label>
+                  Name
+                  <input value={name} onChange={(event) => setName(event.target.value)} />
+                </label>
+                <label>
+                  Ticker
+                  <input value={ticker} onChange={(event) => setTicker(event.target.value)} />
+                </label>
+                <button type="button" className={styles.primaryButton} onClick={() => void handleUpdateIdentity()} disabled={txBusy}>
+                  Update identity
+                </button>
+              </div>
+
+              <div className={styles.ownerCard}>
+                <span className={styles.cardLabel}>IPFS metadata</span>
+                <label>
+                  IPFS hash / URI
+                  <input value={ipfsHash} onChange={(event) => setIpfsHash(event.target.value)} />
+                </label>
+                <button type="button" className={styles.secondaryButton} onClick={() => void handleUpdateMetadata()} disabled={txBusy}>
+                  Update bungalow
+                </button>
+              </div>
+
+              <div className={styles.ownerCard}>
+                <span className={styles.cardLabel}>Link another asset</span>
+                <label>
+                  Chain
+                  <select value={linkChain} onChange={(event) => setLinkChain(event.target.value)}>
+                    <option value="base">base</option>
+                    <option value="ethereum">ethereum</option>
+                    <option value="solana">solana</option>
+                  </select>
+                </label>
+                <label>
+                  Asset id
+                  <input value={linkTokenAddress} onChange={(event) => setLinkTokenAddress(event.target.value)} />
+                </label>
+                <button type="button" className={styles.secondaryButton} onClick={() => void handleLinkAsset()} disabled={txBusy || !linkTokenAddress.trim()}>
+                  Link asset
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          <div className={styles.twoColumn}>
+            <section className={styles.section}>
+              <div className={styles.sectionHeader}>
+                <strong>Installed items</strong>
+                <Link to="/bodega">Open Bodega</Link>
+              </div>
+              {page.installs.length === 0 ? (
+                <p className={styles.inlineCopy}>Nothing installed yet. The first install activates the permanent bond.</p>
+              ) : (
+                <ul className={styles.installList}>
+                  {page.installs.map((item) => (
+                    <li key={`${item.item_id}-${item.installed_at_unix}`}>
+                      <strong>{item.ipfs_uri}</strong>
+                      <span>{item.creator_handle ? `@${item.creator_handle}` : `Profile ${item.creator_profile_id}`}</span>
+                      <small>
+                        {BigInt(item.price_usdc) > 0n
+                          ? `${formatUsdcAmount(item.price_usdc)} USDC`
+                          : "Free"}
+                      </small>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {firstPaidItem ? (
+                <p className={styles.inlineHint}>
+                  Paid installs approve USDC to {compactAddress(ONCHAIN_CONTRACTS.bodega)} only when needed.
+                </p>
+              ) : null}
+            </section>
+
+            <section className={styles.section}>
+              <div className={styles.sectionHeader}>
+                <strong>Commissions</strong>
+                <Link to="/commissions">Open commission board</Link>
+              </div>
+              {page.commissions.length === 0 ? (
+                <p className={styles.inlineCopy}>No commissions published for this bungalow yet.</p>
+              ) : (
+                <ul className={styles.installList}>
+                  {page.commissions.map((commission) => (
+                    <li key={commission.commission_id}>
+                      <strong>Commission #{commission.commission_id}</strong>
+                      <span>{commission.status}</span>
+                      <small>{formatUsdcAmount(commission.budget_usdc)} USDC budget</small>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </div>
+        </>
+      )}
+    </section>
   );
 }

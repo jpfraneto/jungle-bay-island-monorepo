@@ -1,348 +1,126 @@
 .page {
-  min-height: 100%;
-  padding: 18px;
   display: grid;
+  gap: 1.5rem;
+  padding: 1.5rem;
+}
+
+.hero,
+.grid,
+.linksGrid {
+  display: grid;
+  gap: 1rem;
+}
+
+.hero {
+  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
   align-items: start;
 }
 
-.card {
-  max-width: 760px;
-  width: 100%;
-  border: 1px solid var(--border-subtle);
-  border-radius: 18px;
-  padding: 18px;
-  background:
-    radial-gradient(
-      1000px 320px at 15% -30%,
-      rgba(46, 161, 103, 0.26),
-      transparent 62%
-    ),
-    linear-gradient(170deg, rgba(20, 43, 26, 0.9), rgba(12, 29, 20, 0.96));
+.kicker,
+.cardLabel,
+.panelLabel {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(243, 230, 204, 0.62);
 }
 
-.card h1 {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 40px;
-  font-style: italic;
-}
-
+.summary,
+.inlineCopy,
+.inlineHint,
+.loading,
+.status,
+.error,
+.warning,
+.readyState span,
+.linkCard span,
 .card p {
-  margin: 10px 0 0;
-  color: var(--text-secondary);
+  color: rgba(243, 230, 204, 0.82);
 }
 
-.identity {
-  margin-top: 14px;
-  display: grid;
-  gap: 4px;
+.walletPanel,
+.card,
+.linkCard {
+  border: 1px solid rgba(243, 230, 204, 0.12);
+  border-radius: 1rem;
+  background: rgba(11, 19, 14, 0.74);
+  padding: 1rem;
 }
 
-.identity strong {
-  font-size: 20px;
+.walletSelect {
+  width: 100%;
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 0.8rem;
+  border: 1px solid rgba(243, 230, 204, 0.16);
+  background: rgba(5, 12, 8, 0.9);
+  color: #f3e6cc;
 }
 
-.identity span {
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-  font-size: 12px;
+.grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.stats {
-  margin-top: 14px;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 10px;
-}
-
-.stats div {
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  padding: 10px;
-  background: rgba(10, 23, 16, 0.62);
-}
-
-.stats span {
-  display: block;
-  color: var(--text-muted);
-  font-size: 11px;
-}
-
-.stats strong {
-  display: block;
-  margin-top: 3px;
-  font-size: 16px;
-}
-
-.metricLoading {
-  filter: blur(2.4px);
-  opacity: 0.75;
-  animation: metricPulse 1.2s ease-in-out infinite;
-  user-select: none;
-}
-
-@keyframes metricPulse {
-  0%,
-  100% {
-    opacity: 0.5;
-  }
-  50% {
-    opacity: 0.9;
-  }
-}
-
-.actions {
-  margin-top: 16px;
+.actionsRow {
   display: flex;
-  gap: 10px;
-}
-
-.linkedWallets {
-  margin-top: 18px;
-  display: grid;
-  gap: 14px;
-  border-top: 1px solid rgba(121, 181, 138, 0.12);
-  padding-top: 18px;
-}
-
-.sectionHeader {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.sectionHeader h2 {
-  margin: 0;
-  font-size: 22px;
-}
-
-.sectionHeader p {
-  margin: 6px 0 0;
-  color: var(--text-secondary);
-  line-height: 1.5;
-}
-
-.sectionButton,
-.actionButton,
-.secondaryButton,
-.logoutButton {
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  padding: 9px 12px;
-  cursor: pointer;
-}
-
-.actionButton {
-  margin-top: 12px;
-  background: #2a8f58;
-}
-
-.sectionButton {
-  background: rgba(14, 31, 21, 0.8);
-}
-
-.secondaryButton {
-  background: rgba(14, 31, 21, 0.8);
-}
-
-.logoutButton {
-  background: #c65353;
-  color: #fff2f2;
-}
-
-.actionButton:hover,
-.sectionButton:hover,
-.secondaryButton:hover,
-.logoutButton:hover {
-  filter: brightness(1.07);
-}
-
-.linkComposer {
-  display: grid;
-  gap: 12px;
-  border: 1px solid rgba(121, 181, 138, 0.14);
-  border-radius: 14px;
-  background: rgba(10, 23, 16, 0.54);
-  padding: 14px;
-}
-
-.modeRow {
-  display: flex;
-  gap: 8px;
   flex-wrap: wrap;
+  gap: 1rem;
 }
 
-.modeButton {
-  border: 1px solid rgba(121, 181, 138, 0.16);
-  border-radius: 999px;
-  padding: 8px 12px;
-  background: rgba(7, 17, 12, 0.74);
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-
-.modeButtonActive {
-  background: rgba(46, 161, 103, 0.18);
-  color: #d9f7df;
-  border-color: rgba(109, 202, 137, 0.34);
-}
-
-.composerGrid {
+.readyState {
   display: grid;
-  gap: 12px;
+  gap: 0.35rem;
+  padding: 1rem;
+  border-radius: 1rem;
+  background: rgba(32, 88, 57, 0.28);
+  border: 1px solid rgba(113, 201, 142, 0.28);
+}
+
+.linksGrid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.field {
+.linkCard {
   display: grid;
-  gap: 8px;
-  font-size: 13px;
-}
-
-.field input,
-.field select,
-.field textarea {
-  width: 100%;
-  box-sizing: border-box;
-  border-radius: 10px;
-  border: 1px solid var(--border-subtle);
-  background: rgba(7, 17, 12, 0.78);
-  color: var(--text-primary);
-  padding: 10px 12px;
-  font: inherit;
-}
-
-.field textarea {
-  resize: vertical;
-}
-
-.field small {
-  color: var(--text-muted);
-  line-height: 1.45;
-}
-
-.helperCopy {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--text-secondary);
-}
-
-.inlineActions {
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
+  gap: 0.4rem;
+  text-decoration: none;
+  color: inherit;
 }
 
 .primaryButton,
-.unlinkButton {
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  padding: 9px 12px;
+.secondaryButton {
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  padding: 0.85rem 1.2rem;
+  font-weight: 700;
   cursor: pointer;
 }
 
 .primaryButton {
-  background: #2a8f58;
-  color: #f5fff7;
+  background: linear-gradient(135deg, #d8b36a, #f5dc9b);
+  color: #111;
 }
 
-.unlinkButton {
-  background: rgba(7, 17, 12, 0.78);
+.secondaryButton {
+  background: rgba(243, 230, 204, 0.08);
+  color: #f3e6cc;
+  border: 1px solid rgba(243, 230, 204, 0.16);
 }
 
-.walletLists {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+.error {
+  color: #ff9d9d;
 }
 
-.walletList {
-  display: grid;
-  gap: 10px;
-  border: 1px solid rgba(121, 181, 138, 0.14);
-  border-radius: 14px;
-  background: rgba(10, 23, 16, 0.54);
-  padding: 14px;
+.warning {
+  color: #ffcf8f;
 }
 
-.walletList h3 {
-  margin: 0;
-  font-size: 16px;
-}
-
-.walletRow {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  border: 1px solid rgba(121, 181, 138, 0.1);
-  border-radius: 12px;
-  padding: 10px;
-  background: rgba(6, 15, 10, 0.56);
-}
-
-.walletRow {
-  display: flex;
-  flex-direction: row;
-}
-
-.walletRow strong {
-  display: block;
-
-  font-size: 14px;
-}
-
-.walletRow span {
-  display: block;
-  margin-top: 4px;
-  color: var(--text-muted);
-  font-size: 11px;
-}
-
-.placeholder,
-.inlineError,
-.inlineStatus {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.placeholder {
-  color: var(--text-secondary);
-}
-
-.inlineError {
-  color: #ffb9b9;
-}
-
-.inlineStatus {
-  color: #bde9c8;
-}
-
-@media (max-width: 640px) {
-  .sectionHeader,
-  .walletRow,
-  .actions {
-    flex-direction: column;
-  }
-
-  .composerGrid,
-  .walletLists {
+@media (max-width: 900px) {
+  .hero,
+  .grid,
+  .linksGrid {
     grid-template-columns: 1fr;
-  }
-
-  .inlineActions {
-    align-items: stretch;
-  }
-
-  .sectionButton,
-  .secondaryButton,
-  .logoutButton,
-  .primaryButton,
-  .unlinkButton {
-    width: 100%;
   }
 }

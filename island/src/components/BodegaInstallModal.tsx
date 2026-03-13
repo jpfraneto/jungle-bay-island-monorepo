@@ -157,7 +157,7 @@ export default function BodegaInstallModal({
               type="button"
               className={styles.linkButton}
               onClick={() => {
-                navigate("/");
+                navigate("/island");
                 onClose();
               }}
             >

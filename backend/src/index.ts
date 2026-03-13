@@ -30,9 +30,12 @@ import walletLinkRoute from "./routes/wallet-link";
 import memeticsRoute from "./routes/memetics";
 import commissionsRoute from "./routes/commissions";
 import opsRoute from "./routes/ops";
+import appRoute, { detectClientVariant } from "./routes/app";
+import onchainRoute from "./routes/onchain";
 import { startDailyHeatRefreshScheduler } from "./services/dailyHeatRefresh";
 import { isApiError } from "./services/errors";
 import { logError, logWarn } from "./services/logger";
+import { getSessionFromRequest } from "./services/session";
 import {
   getRequestSiteUrl,
   renderSocialMeta,
@@ -121,7 +124,26 @@ function getIslandAssetTags(): string {
   return cachedIslandAssetTags;
 }
 
-function renderSpaShell(pathname = "/", siteUrl?: string): string {
+function serializeBootstrap(input: Record<string, unknown>): string {
+  return JSON.stringify(input)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
+}
+
+function renderSpaShell(input?: {
+  pathname?: string
+  siteUrl?: string
+  bootstrap?: Record<string, unknown>
+}): string {
+  const pathname = input?.pathname ?? "/"
+  const siteUrl = input?.siteUrl
+  const bootstrapJson = input?.bootstrap
+    ? `<script>window.__JBI_BOOTSTRAP__=${serializeBootstrap(input.bootstrap)}</script>`
+    : ""
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -135,6 +157,7 @@ function renderSpaShell(pathname = "/", siteUrl?: string): string {
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <style>body{margin:0;background:#070f0a;}</style>
+  ${bootstrapJson}
   ${getIslandAssetTags()}
 </head>
 <body>
@@ -295,6 +318,8 @@ app.route("/api/bodega", bodegaRoute);
 app.route("/api", walletLinkRoute);
 app.route("/api", memeticsRoute);
 app.route("/api", commissionsRoute);
+app.route("/api", appRoute);
+app.route("/api", onchainRoute);
 app.route("/api/ops", opsRoute);
 
 // Solana RPC proxy (browser can't hit public RPC directly due to CORS/403)
@@ -390,7 +415,7 @@ app.use("*", async (c, next) => {
   return c.body(await file.arrayBuffer());
 });
 
-app.notFound((c) => {
+app.notFound(async (c) => {
   if (c.req.path.startsWith("/api/")) {
     return c.json(
       {
@@ -403,7 +428,24 @@ app.notFound((c) => {
   }
 
   const requestOrigin = getRequestSiteUrl(c.req.raw);
-  return c.html(renderSpaShell(c.req.path, requestOrigin));
+  const session = await getSessionFromRequest(c.req.header("cookie"));
+  return c.html(
+    renderSpaShell({
+      pathname: c.req.path,
+      siteUrl: requestOrigin,
+      bootstrap: {
+        client_variant: detectClientVariant(c.req.header("user-agent")),
+        authenticated: Boolean(session),
+        session: session
+          ? {
+              x_username: session.x_username,
+              x_name: session.x_name,
+              x_pfp: session.x_pfp,
+            }
+          : null,
+      },
+    }),
+  );
 });
 
 app.onError((error, c) => {

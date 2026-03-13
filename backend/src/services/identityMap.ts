@@ -1,7 +1,7 @@
 import type { JWTPayload } from 'jose'
 import { normalizeAddress } from '../config'
 import { getUserWallets, upsertUser } from '../db/queries'
-import { getPrivyLinkedAccounts } from './privyClaims'
+import { extractPrivyXUsername } from './privyClaims'
 
 export type WalletKind = 'evm' | 'solana'
 
@@ -98,46 +98,12 @@ function normalizeXUsername(value: string): string {
   return clean ? `@${clean}` : ''
 }
 
-function extractEmailAndUsername(
+function extractUsername(
   claims?: Record<string, unknown> | JWTPayload,
-): { email: string | null; xUsername: string | null } {
-  if (!claims) {
-    return { email: null, xUsername: null }
-  }
-
-  let email: string | null = null
-  let xUsername: string | null = null
-
-  const linkedAccounts = getPrivyLinkedAccounts(claims)
-  for (const account of linkedAccounts) {
-    const candidate = account as Record<string, unknown>
-    const type = typeof candidate.type === 'string' ? candidate.type : ''
-
-    if (!email && type === 'email') {
-      const address = typeof candidate.address === 'string' ? candidate.address.trim().toLowerCase() : ''
-      if (address) {
-        email = address
-      }
-    }
-
-    if (!xUsername && (type === 'twitter_oauth' || type === 'twitter')) {
-      const rawUsername =
-        typeof candidate.username === 'string'
-          ? candidate.username
-          : typeof candidate.screen_name === 'string'
-            ? candidate.screen_name
-            : ''
-      const normalized = normalizeXUsername(rawUsername)
-      if (normalized) {
-        xUsername = normalized
-      }
-    }
-  }
-
-  return {
-    email,
-    xUsername,
-  }
+): string | null {
+  if (!claims) return null
+  const xUsername = extractPrivyXUsername(claims)
+  return xUsername ? normalizeXUsername(xUsername) : null
 }
 
 export async function resolveUserWalletMap(input: ResolveUserWalletMapInput): Promise<UserWalletMapResult> {
@@ -152,13 +118,11 @@ export async function resolveUserWalletMap(input: ResolveUserWalletMapInput): Pr
 
   let xUsername: string | null = null
   if (privyUserId) {
-    const extracted = extractEmailAndUsername(input.claims)
-    xUsername = extracted.xUsername
+    xUsername = extractUsername(input.claims)
 
     if (input.persist !== false) {
       await upsertUser(privyUserId, {
-        email: extracted.email ?? undefined,
-        x_username: extracted.xUsername ?? undefined,
+        x_username: xUsername ?? undefined,
       })
     }
 

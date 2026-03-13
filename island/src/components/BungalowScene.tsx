@@ -1154,7 +1154,7 @@ function WallActivityOverlay({
               Need 10+ {bungalowHeatLabel} heat to write or add wall items.
               {authenticated
                 ? ` Current ${bungalowHeatLabel} heat: ${viewerHeatLabel}.`
-                : " Connect a wallet to check your heat here."}
+                : " Sign in with X and link a wallet to check your heat here."}
             </span>
             <div
               style={{
@@ -1227,7 +1227,7 @@ function WallActivityOverlay({
                     fontWeight: 700,
                   }}
                 >
-                  Connect wallet to write
+                  Sign in with X to write
                 </button>
               )}
             </div>
@@ -1981,7 +1981,7 @@ export default function BungalowScene({
                 navigate(-1);
                 return;
               }
-              navigate("/");
+              navigate("/island");
             }}
             style={{
               background: "rgba(0,0,0,0.6)",

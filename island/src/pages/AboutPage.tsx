@@ -165,9 +165,9 @@ export default function AboutPage() {
             <button
               type="button"
               className={styles.inlineLink}
-              onClick={() => navigate("/heat-score")}
+              onClick={() => navigate("/profile")}
             >
-              Heat Score
+              Profile
             </button>
             .
           </li>
@@ -343,9 +343,9 @@ export default function AboutPage() {
         <button
           type="button"
           className={styles.linkButton}
-          onClick={() => navigate("/heat-score")}
+          onClick={() => navigate("/profile")}
         >
-          Read the full Heat Score breakdown &rarr;
+          Open your live island profile &rarr;
         </button>
       </article>
 

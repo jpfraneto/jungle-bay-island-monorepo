@@ -1,20 +1,26 @@
-import { useNavigate } from "react-router-dom";
-import RewardsInboxButton from "./RewardsInboxButton";
+import { Link, useNavigate } from "react-router-dom";
 import WalletButton from "./WalletButton";
+import type { AppMeState } from "../utils/onchain";
 import styles from "../styles/top-nav.module.css";
 
 interface TopNavProps {
   isIslandActive: boolean;
+  meState: AppMeState | null;
   showSidebarToggle: boolean;
   onToggleSidebar: () => void;
 }
 
 export default function TopNav({
   isIslandActive,
+  meState,
   showSidebarToggle,
   onToggleSidebar,
 }: TopNavProps) {
   const navigate = useNavigate();
+  const profileId = meState?.me?.profile?.profile_id ?? null;
+  const claimable = meState?.claim?.can_claim
+    ? meState.claim.amount_jbm
+    : null;
 
   return (
     <header className={styles.topNav}>
@@ -62,7 +68,20 @@ export default function TopNav({
       </div>
 
       <div className={styles.right}>
-        <RewardsInboxButton />
+        <div className={styles.togglePill}>
+          <Link to="/profile" className={styles.toggleItem}>
+            {profileId ? `Profile #${profileId}` : "Profile"}
+          </Link>
+          {claimable ? (
+            <button
+              type="button"
+              className={`${styles.toggleItem} ${styles.active}`}
+              onClick={() => navigate("/profile")}
+            >
+              Claim {claimable} JBM
+            </button>
+          ) : null}
+        </div>
         <WalletButton />
       </div>
     </header>

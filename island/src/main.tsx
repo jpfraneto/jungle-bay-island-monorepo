@@ -36,7 +36,7 @@ ReactDOM.createRoot(document.getElementById("island-root")!).render(
         loginMethods: ["twitter"],
         embeddedWallets: {
           ethereum: {
-            createOnLogin: "off",
+            createOnLogin: "users-without-wallets",
           },
           solana: {
             createOnLogin: "off",

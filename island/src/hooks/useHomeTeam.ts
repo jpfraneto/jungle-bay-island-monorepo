@@ -213,41 +213,6 @@ export const SEEDED_HOME_TEAM: HomeTeamBungalow[] = [
   },
 ];
 
-interface BungalowsListResponse {
-  items?: Array<{
-    chain?: string;
-    token_address?: string;
-    canonical_slug?: string | null;
-    name?: string | null;
-    symbol?: string | null;
-    holder_count?: number;
-    image_url?: string | null;
-  }>;
-}
-
-function normalizeBungalowsList(
-  items: BungalowsListResponse["items"],
-): HomeTeamBungalow[] {
-  if (!Array.isArray(items)) return [];
-
-  return items
-    .filter((item) => typeof item?.token_address === "string" && typeof item?.chain === "string")
-    .map((item) => ({
-      token_address: item.token_address as string,
-      chain: item.chain as string,
-      canonical_slug: item.canonical_slug ?? null,
-      name: item.name ?? item.symbol ?? null,
-      symbol: item.symbol ?? null,
-      holder_count: Number.isFinite(item.holder_count) ? Number(item.holder_count) : 0,
-      image_url: item.image_url ?? null,
-      is_claimed: null,
-      current_owner: null,
-      description: null,
-      market_cap: null,
-      price_usd: null,
-    }));
-}
-
 function isPlaceholderLabel(value: string | null | undefined): boolean {
   if (!value) return true;
   const normalized = value.trim().toLowerCase();
@@ -288,7 +253,7 @@ export function useHomeTeam() {
     setError(null);
 
     try {
-      const response = await fetch("/api/home-team", {
+      const response = await fetch("/api/state/island", {
         cache: "no-store",
       });
       if (!response.ok) {
@@ -300,25 +265,6 @@ export function useHomeTeam() {
 
       if (homeTeam.length > 0) {
         setBungalows(mergeWithSeededFallback(homeTeam));
-        return;
-      }
-
-      const fallbackResponse = await fetch("/api/bungalows?limit=60", {
-        cache: "no-store",
-      });
-
-      if (!fallbackResponse.ok) {
-        setBungalows(SEEDED_HOME_TEAM);
-        setError(null);
-        return;
-      }
-
-      const fallbackData = (await fallbackResponse.json()) as BungalowsListResponse;
-      const normalized = normalizeBungalowsList(fallbackData.items);
-
-      if (normalized.length > 0) {
-        setBungalows(mergeWithSeededFallback(normalized));
-        setError(null);
         return;
       }
 

@@ -6,32 +6,11 @@ import { CONFIG, db, publicClients } from "./config";
 import { requestLogMiddleware } from "./middleware/requestLog";
 import { requestIdMiddleware } from "./middleware/requestId";
 import { createRateLimit } from "./middleware/rateLimit";
-import bungalowRoute from "./routes/bungalow";
-import bungalowAdminRoute from "./routes/bungalow-admin";
 import healthRoute from "./routes/health";
-import tokenRoute from "./routes/token";
-import bungalowsRoute from "./routes/bungalows";
-import userRoute from "./routes/user";
-import claimRoute from "./routes/claim";
-import claimPriceRoute from "./routes/claim-price";
-import scanRoute from "./routes/scan";
-import leaderboardRoute from "./routes/leaderboard";
-import personaRoute from "./routes/persona";
-import ogRoute from "./routes/og";
-import agentRoute from "./routes/agent";
-import widgetRoute from "./routes/widget";
-import v1BungalowRoute from "./routes/v1-bungalow";
-import { homeTeamRoute } from "./routes/home-team";
-import itemsRoute from "./routes/items";
-import sceneRoute from "./routes/scene";
-import claimsRoute from "./routes/claims";
-import bodegaRoute from "./routes/bodega";
-import walletLinkRoute from "./routes/wallet-link";
-import memeticsRoute from "./routes/memetics";
-import commissionsRoute from "./routes/commissions";
-import opsRoute from "./routes/ops";
 import appRoute, { detectClientVariant } from "./routes/app";
+import bungalowResolveRoute from "./routes/bungalow-resolve";
 import onchainRoute from "./routes/onchain";
+import stateRoute from "./routes/state";
 import { startDailyHeatRefreshScheduler } from "./services/dailyHeatRefresh";
 import { isApiError } from "./services/errors";
 import { logError, logWarn } from "./services/logger";
@@ -171,13 +150,6 @@ const allowedOrigins = CONFIG.CORS_ORIGIN.split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);
 const allowAnyOrigin = allowedOrigins.includes("*");
-const ogCache = new Map<string, { data: OGData; ts: number }>();
-
-type OGData = {
-  title?: string;
-  image?: string;
-  description?: string;
-};
 
 app.use("*", requestIdMiddleware);
 app.use("*", requestLogMiddleware);
@@ -228,131 +200,10 @@ app.use(
 
 // --- API routes ---
 app.route("/api", healthRoute);
-app.route("/api", bungalowRoute);
-app.route("/api", bungalowAdminRoute);
-app.route("/api", tokenRoute);
-app.route("/api", bungalowsRoute);
-app.route("/api", userRoute);
-app.route("/api", claimRoute);
-app.route("/api", claimPriceRoute);
-app.route("/api", scanRoute);
-app.route("/api", leaderboardRoute);
-app.route("/api", personaRoute);
-app.get("/api/og", async (c) => {
-  const url = c.req.query("url");
-  if (!url || !url.startsWith("http")) return c.json({});
-
-  const cached = ogCache.get(url);
-  if (cached && Date.now() - cached.ts < 3_600_000) {
-    return c.json(cached.data);
-  }
-
-  try {
-    const res = await fetch(url, {
-      signal: AbortSignal.timeout(3000),
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; JBIBot/1.0)" },
-    });
-    const html = await res.text();
-    const getProperty = (prop: string) => {
-      const match =
-        html.match(
-          new RegExp(
-            `<meta[^>]*property=["']${prop}["'][^>]*content=["']([^"']+)["']`,
-            "i",
-          ),
-        ) ??
-        html.match(
-          new RegExp(
-            `<meta[^>]*content=["']([^"']+)["'][^>]*property=["']${prop}["']`,
-            "i",
-          ),
-        );
-      return match?.[1];
-    };
-    const getName = (name: string) => {
-      const match =
-        html.match(
-          new RegExp(
-            `<meta[^>]*name=["']${name}["'][^>]*content=["']([^"']+)["']`,
-            "i",
-          ),
-        ) ??
-        html.match(
-          new RegExp(
-            `<meta[^>]*content=["']([^"']+)["'][^>]*name=["']${name}["']`,
-            "i",
-          ),
-        );
-      return match?.[1];
-    };
-    const getTitleTag = () => {
-      const match = html.match(/<title[^>]*>([^<]+)<\/title>/i);
-      return match?.[1]?.trim();
-    };
-    const data: OGData = {
-      title:
-        getProperty("og:title") ??
-        getProperty("twitter:title") ??
-        getTitleTag(),
-      image: getProperty("og:image") ?? getProperty("twitter:image"),
-      description:
-        getProperty("og:description") ??
-        getProperty("twitter:description") ??
-        getName("description"),
-    };
-    ogCache.set(url, { data, ts: Date.now() });
-    return c.json(data);
-  } catch {
-    return c.json({});
-  }
-});
-app.route("/api", ogRoute);
-app.route("/api", agentRoute);
-app.route("/api", widgetRoute);
-app.route("/api", v1BungalowRoute);
-app.route("/api", homeTeamRoute);
-app.route("/api", itemsRoute);
-app.route("/api", sceneRoute);
-app.route("/api", claimsRoute);
-app.route("/api/bodega", bodegaRoute);
-app.route("/api", walletLinkRoute);
-app.route("/api", memeticsRoute);
-app.route("/api", commissionsRoute);
 app.route("/api", appRoute);
+app.route("/api", bungalowResolveRoute);
 app.route("/api", onchainRoute);
-app.route("/api/ops", opsRoute);
-
-// Solana RPC proxy (browser can't hit public RPC directly due to CORS/403)
-app.post("/api/solana-rpc", async (c) => {
-  try {
-    const body = await c.req.json();
-    const allowedMethods = new Set([
-      "getLatestBlockhash",
-      "getTokenAccountBalance",
-      "getAccountInfo",
-    ]);
-
-    if (!allowedMethods.has(body.method)) {
-      return c.json({ error: "Method not allowed" }, 403 as any);
-    }
-
-    const rpcUrl = CONFIG.HELIUS_API_KEY
-      ? `https://mainnet.helius-rpc.com/?api-key=${CONFIG.HELIUS_API_KEY}`
-      : "https://api.mainnet-beta.solana.com";
-
-    const res = await fetch(rpcUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(15_000),
-    });
-
-    const data = await res.json();
-    return c.json(data);
-  } catch {
-    return c.json({ error: "RPC proxy failed" }, 502 as any);
-  }
-});
+app.route("/api", stateRoute);
 
 // --- Static files from backend/public/ ---
 const MIME_TYPES: Record<string, string> = {

@@ -19,6 +19,44 @@ export default function ChangelogPage() {
       <article className={styles.entry}>
         <div className={styles.entryHeader}>
           <span className={styles.date}>March 13, 2026</span>
+          <h2 className={styles.heading}>The Four-Contract Suite Was Redeployed As V2 And The App Was Rebound To The New ABI Surface</h2>
+        </div>
+        <p>
+          The current Base deployment was replaced with a V2 contract set that
+          removes a few unsafe or misleading behaviors from the first pass and
+          forces the app to speak the cleaner interface directly.
+        </p>
+        <ul className={styles.list}>
+          <li>
+            <code>IslandIdentity.register</code> is now identity-only instead
+            of pretending to persist an initial heat value that the contract
+            never used.
+          </li>
+          <li>
+            Bungalow mint quotes are now bound to the caller wallet, which
+            closes the earlier quote-reuse hole where another wallet could take
+            the same signed mint first.
+          </li>
+          <li>
+            Daily JBM claims now require at least one active bond onchain, so
+            the backend signer is no longer the only eligibility guard.
+          </li>
+          <li>
+            Treasury recipients are now configurable in the bungalow registry,
+            Bodega, and commission manager instead of being frozen as hardcoded
+            addresses.
+          </li>
+          <li>
+            The frontend and backend were updated to the new addresses,
+            signatures, and commission tuple layout so the read model tracks
+            the redeployed contracts correctly.
+          </li>
+        </ul>
+      </article>
+
+      <article className={styles.entry}>
+        <div className={styles.entryHeader}>
+          <span className={styles.date}>March 13, 2026</span>
           <h2 className={styles.heading}>The App Now Runs On The Four-Contract IslandIdentity, JungleBayIsland, Bodega, And CommissionManager System</h2>
         </div>
         <p>

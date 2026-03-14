@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
+import { useOutletContext } from "react-router-dom";
 import { type Address, parseUnits } from "viem";
+import type { LayoutOutletContext } from "../components/Layout";
 import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
 import styles from "../styles/bodega-page.module.css";
 import {
+  type AppBodegaState,
   bodegaAbi,
   confirmTrackedTx,
   ensureUsdcAllowance,
@@ -11,22 +14,19 @@ import {
   fetchJson,
   formatUnixDate,
   formatUsdcAmount,
+  islandIdentityAbi,
   normalizeTxError,
   ONCHAIN_CONTRACTS,
   trackSubmittedTx,
   type OnchainBodegaItem,
-  type OnchainMeResponse,
 } from "../utils/onchain";
 
-interface BodegaResponse {
-  items: OnchainBodegaItem[];
-}
-
 export default function BodegaPage() {
-  const { authenticated, getAccessToken } = usePrivy();
+  const { getAccessToken } = usePrivy();
+  const { meState, refreshMeState } = useOutletContext<LayoutOutletContext>();
   const { publicClient, requireWallet } = usePrivyBaseWallet();
   const [items, setItems] = useState<OnchainBodegaItem[]>([]);
-  const [me, setMe] = useState<OnchainMeResponse | null>(null);
+  const [highlightedArtists, setHighlightedArtists] = useState<AppBodegaState["highlighted_artists"]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -42,14 +42,9 @@ export default function BodegaPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const [catalog, mePayload] = await Promise.all([
-        fetchJson<BodegaResponse>("/api/onchain/bodega/items"),
-        authenticated
-          ? fetchAuthedJson<OnchainMeResponse>("/api/onchain/me", getAccessToken)
-          : Promise.resolve(null),
-      ]);
-      setItems(catalog.items);
-      setMe(mePayload);
+      const payload = await fetchJson<AppBodegaState>("/api/state/bodega");
+      setItems(payload.items);
+      setHighlightedArtists(payload.highlighted_artists);
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : "Failed to load Bodega");
     } finally {
@@ -59,7 +54,85 @@ export default function BodegaPage() {
 
   useEffect(() => {
     void refetch();
-  }, [authenticated]);
+  }, []);
+
+  const syncHeatForInstallIfNeeded = async (input: {
+    address: Address;
+    walletClient: any;
+    bungalowId: number;
+  }) => {
+    const profileId = await publicClient.readContract({
+      address: ONCHAIN_CONTRACTS.islandIdentity,
+      abi: islandIdentityAbi,
+      functionName: "walletProfileId",
+      args: [input.address],
+    }) as bigint;
+
+    if (profileId === 0n) {
+      throw new Error("Link this wallet onchain before installing items.");
+    }
+
+    const onchainHeat = await publicClient.readContract({
+      address: ONCHAIN_CONTRACTS.islandIdentity,
+      abi: islandIdentityAbi,
+      functionName: "getHeat",
+      args: [profileId, BigInt(input.bungalowId)],
+    }) as bigint;
+
+    if (onchainHeat >= 10n) {
+      return;
+    }
+
+    setStatus("Preparing bungalow heat sync...");
+    const signature = await fetchAuthedJson<Record<string, string | number>>(
+      `/api/onchain/bungalows/${input.bungalowId}/sync-heat/sign`,
+      getAccessToken,
+      {
+        method: "POST",
+        body: JSON.stringify({ wallet: input.address }),
+      },
+    );
+
+    const syncedHeat = BigInt(String(signature.heat_score ?? "0"));
+    if (syncedHeat < 10n) {
+      throw new Error(
+        `Heat ${syncedHeat.toString()} is below the install floor for bungalow #${input.bungalowId}.`,
+      );
+    }
+
+    setStatus("Syncing bungalow heat...");
+    const syncTxHash = await input.walletClient.writeContract({
+      account: input.address,
+      address: ONCHAIN_CONTRACTS.islandIdentity,
+      abi: islandIdentityAbi,
+      functionName: "syncHeat",
+      args: [
+        BigInt(String(signature.profile_id ?? "0")),
+        BigInt(String(signature.bungalow_id ?? "0")),
+        syncedHeat,
+        String(signature.salt ?? "") as `0x${string}`,
+        BigInt(String(signature.deadline ?? "0")),
+        String(signature.sig ?? "") as `0x${string}`,
+      ],
+    });
+
+    await trackSubmittedTx({
+      getAccessToken,
+      txHash: syncTxHash,
+      action: "identity_sync_heat",
+      functionName: "syncHeat",
+      contractAddress: ONCHAIN_CONTRACTS.islandIdentity,
+      wallet: input.address,
+      bungalowId: input.bungalowId,
+      profileId: Number(signature.profile_id ?? 0),
+      metadata: {
+        heat_score: syncedHeat.toString(),
+      },
+    });
+
+    await publicClient.waitForTransactionReceipt({ hash: syncTxHash });
+    await confirmTrackedTx(getAccessToken, syncTxHash);
+  };
 
   const runWrite = async (input: {
     label: string;
@@ -76,6 +149,14 @@ export default function BodegaPage() {
 
     try {
       const { address, walletClient } = await requireWallet();
+      if (input.functionName === "installItem" && input.bungalowId) {
+        await syncHeatForInstallIfNeeded({
+          address: address as Address,
+          walletClient,
+          bungalowId: input.bungalowId,
+        });
+      }
+
       if ((input.usdcAmount ?? 0n) > 0n) {
         setStatus(
           `Approval required: allow USDC spending by ${ONCHAIN_CONTRACTS.bodega}.`,
@@ -116,7 +197,7 @@ export default function BodegaPage() {
       setStatus("Waiting for confirmation...");
       await publicClient.waitForTransactionReceipt({ hash: txHash });
       await confirmTrackedTx(getAccessToken, txHash);
-      await refetch();
+      await Promise.all([refetch(), refreshMeState()]);
       setStatus("Bodega state updated.");
     } catch (txError) {
       setError(normalizeTxError(txError, "Transaction failed"));
@@ -218,11 +299,11 @@ export default function BodegaPage() {
             type="button"
             className={styles.primaryButton}
             onClick={() => void handleListItem()}
-            disabled={txBusy || !me?.profile || !listForm.ipfsUri.trim()}
+            disabled={txBusy || !meState?.me?.profile || !listForm.ipfsUri.trim()}
           >
             List item
           </button>
-          {!me?.profile ? (
+          {!meState?.me?.profile ? (
             <p className={styles.inlineHint}>
               Create your profile first before listing anything in the Bodega.
             </p>
@@ -233,8 +314,8 @@ export default function BodegaPage() {
           <span className={styles.cardLabel}>Install rules</span>
           <strong>Heat gate: 10+</strong>
           <p>
-            If install reverts for insufficient heat, sync your bungalow heat on
-            the bungalow page first.
+            If your onchain heat is stale, install automatically syncs it before
+            calling Bodega.
           </p>
           <strong>Bond activation</strong>
           <p>
@@ -243,6 +324,30 @@ export default function BodegaPage() {
           </p>
         </article>
       </div>
+
+      {highlightedArtists.length > 0 ? (
+        <div className={styles.catalog}>
+          {highlightedArtists.map((artist) => (
+            <article key={artist.artist_profile_id} className={styles.itemCard}>
+              <div className={styles.itemHeader}>
+                <strong>
+                  {artist.artist_handle ? `@${artist.artist_handle}` : `Profile ${artist.artist_profile_id}`}
+                </strong>
+                <span>Bayla highlight</span>
+              </div>
+              <p className={styles.uri}>{artist.rationale}</p>
+              <div className={styles.metaRow}>
+                <span>Score {artist.score.toFixed(2)}</span>
+                <span>{artist.metrics.total_installs} installs</span>
+                <span>{artist.metrics.distinct_bungalows} bungalows</span>
+              </div>
+              <small>
+                Featured piece #{artist.feature_item.item_id} · {artist.feature_item.ipfs_uri}
+              </small>
+            </article>
+          ))}
+        </div>
+      ) : null}
 
       <div className={styles.catalog}>
         {items.map((item) => (
@@ -272,7 +377,7 @@ export default function BodegaPage() {
                 type="button"
                 className={styles.secondaryButton}
                 onClick={() => void handleInstallItem(item)}
-                disabled={txBusy || !me?.profile}
+                disabled={txBusy || !meState?.me?.profile}
               >
                 Install item
               </button>

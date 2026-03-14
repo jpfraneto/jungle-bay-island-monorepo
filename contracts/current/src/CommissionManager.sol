@@ -56,6 +56,7 @@ interface IIslandIdentity {
     function walletProfileId(address wallet) external view returns (uint256);
     function isWalletLinkedToProfile(uint256 profileId, address wallet) external view returns (bool);
     function getMainWallet(uint256 profileId) external view returns (address);
+    function getProfileWarning(uint256 profileId) external view returns (bool);
     function profileExists(uint256 profileId) external view returns (bool);
 }
 
@@ -64,8 +65,7 @@ interface IJungleBayIsland {
 }
 
 interface IBodega {
-    function listCommissionedItem(uint256 artistProfileId, string calldata ipfsURI)
-        external returns (uint256 itemId);
+    function listCommissionedItem(uint256 artistProfileId, string calldata ipfsURI) external returns (uint256 itemId);
 }
 
 contract CommissionManager is Ownable2Step, Pausable, ReentrancyGuard {
@@ -75,10 +75,8 @@ contract CommissionManager is Ownable2Step, Pausable, ReentrancyGuard {
     // Constants
     // ─────────────────────────────────────────────────────────────
 
-    address public constant PLATFORM_RECIPIENT = 0xed21735DC192dC4eeAFd71b4Dc023bC53fE4DF15;
-
     uint256 internal constant PLATFORM_BPS = 800;
-    uint256 internal constant BPS_DENOM    = 10_000;
+    uint256 internal constant BPS_DENOM = 10_000;
 
     /// @notice Requester has this long to select an artist after publishing.
     uint256 internal constant SELECTION_WINDOW = 24 hours;
@@ -94,14 +92,15 @@ contract CommissionManager is Ownable2Step, Pausable, ReentrancyGuard {
     // ─────────────────────────────────────────────────────────────
 
     enum CommissionStatus {
-        OPEN,        // accepting applications
-        SELECTED,    // artist chosen, USDC locked, work in progress
-        SUBMITTED,   // artist submitted deliverable, awaiting approval
-        APPROVED,    // requester approved, USDC settled, item listed
-        REJECTED,    // requester rejected, USDC returned
-        EXPIRED,     // selection window passed with no selection, cancelled
-        TIMED_OUT,   // artist claimed after review window elapsed
+        OPEN, // accepting applications
+        SELECTED, // artist chosen, USDC locked, work in progress
+        SUBMITTED, // artist submitted deliverable, awaiting approval
+        APPROVED, // requester approved, USDC settled, item listed
+        REJECTED, // requester rejected, USDC returned
+        EXPIRED, // selection window passed with no selection, cancelled
+        TIMED_OUT, // artist claimed after review window elapsed
         DEADLINE_MISSED // requester reclaimed locked USDC after artist missed submission deadline
+
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -112,15 +111,15 @@ contract CommissionManager is Ownable2Step, Pausable, ReentrancyGuard {
         uint256 id;
         uint256 requesterProfileId;
         uint256 bungalowId;
-        string  promptURI;           // IPFS hash of the prompt + references
-        uint256 budget;              // max USDC the requester is willing to pay
-        uint64  deadline;            // artist must submit before this
-        uint64  publishedAt;         // when the commission was posted
-        uint64  selectedAt;          // when an artist was selected
-        uint64  submittedAt;         // when the deliverable was submitted
+        string promptURI; // IPFS hash of the prompt + references
+        uint256 budget; // max USDC the requester is willing to pay
+        uint64 deadline; // artist must submit before this
+        uint64 publishedAt; // when the commission was posted
+        uint64 selectedAt; // when an artist was selected
+        uint64 submittedAt; // when the deliverable was submitted
         uint256 selectedArtistProfileId;
-        uint256 agreedPrice;         // the price the selected artist proposed
-        string  deliverableURI;      // IPFS hash of the final piece
+        uint256 agreedPrice; // the price the selected artist proposed
+        string deliverableURI; // IPFS hash of the final piece
         CommissionStatus status;
     }
 
@@ -128,10 +127,9 @@ contract CommissionManager is Ownable2Step, Pausable, ReentrancyGuard {
         uint256 id;
         uint256 commissionId;
         uint256 artistProfileId;
-        string  pitchURI;            // IPFS hash of the artist's pitch
-        uint256 proposedPrice;       // artist's ask, must be <= budget
-        uint64  appliedAt;
-        bool    active;
+        string pitchURI; // IPFS hash of the artist's pitch
+        uint256 proposedPrice; // artist's ask, must be <= budget
+        uint64 appliedAt;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -161,15 +159,16 @@ contract CommissionManager is Ownable2Step, Pausable, ReentrancyGuard {
     // State
     // ─────────────────────────────────────────────────────────────
 
-    IERC20           public immutable usdc;
-    IIslandIdentity  public immutable identity;
+    IERC20 public immutable usdc;
+    IIslandIdentity public immutable identity;
     IJungleBayIsland public immutable island;
-    IBodega          public immutable bodega;
+    IBodega public immutable bodega;
+    address public feeRecipient;
 
     uint256 public commissionCount;
     uint256 public applicationCount;
 
-    mapping(uint256 => Commission)  public commissions;
+    mapping(uint256 => Commission) public commissions;
     mapping(uint256 => Application) public applications;
 
     // commissionId => applicationId[]
@@ -188,10 +187,6 @@ contract CommissionManager is Ownable2Step, Pausable, ReentrancyGuard {
     ///         Artists read this before applying. The island does not forget.
     mapping(uint256 => uint256) public requesterRejections;
 
-    /// @notice Admin-set warning. Not a freeze — a visible signal of bad faith.
-    ///         Can be set and cleared by the owner.
-    mapping(uint256 => bool) public hardcoreWarning;
-
     // ─────────────────────────────────────────────────────────────
     // Events
     // ─────────────────────────────────────────────────────────────
@@ -201,8 +196,8 @@ contract CommissionManager is Ownable2Step, Pausable, ReentrancyGuard {
         uint256 indexed requesterProfileId,
         uint256 indexed bungalowId,
         uint256 budget,
-        uint64  deadline,
-        string  promptURI
+        uint64 deadline,
+        string promptURI
     );
     event ApplicationSubmitted(
         uint256 indexed applicationId,
@@ -216,31 +211,20 @@ contract CommissionManager is Ownable2Step, Pausable, ReentrancyGuard {
         uint256 indexed artistProfileId,
         uint256 agreedPrice
     );
-    event DeliverableSubmitted(
-        uint256 indexed commissionId,
-        uint256 indexed artistProfileId,
-        string  deliverableURI
-    );
+    event DeliverableSubmitted(uint256 indexed commissionId, uint256 indexed artistProfileId, string deliverableURI);
     event CommissionApproved(
-        uint256 indexed commissionId,
-        uint256 indexed artistProfileId,
-        uint256 artistPayout,
-        uint256 itemId
+        uint256 indexed commissionId, uint256 indexed artistProfileId, uint256 artistPayout, uint256 itemId
     );
     event CommissionRejected(
-        uint256 indexed commissionId,
-        uint256 indexed requesterProfileId,
-        uint256 requesterRejectionCount
+        uint256 indexed commissionId, uint256 indexed requesterProfileId, uint256 requesterRejectionCount
     );
     event CommissionDeadlineMissed(
-        uint256 indexed commissionId,
-        uint256 indexed requesterProfileId,
-        uint256 refundAmount
+        uint256 indexed commissionId, uint256 indexed requesterProfileId, uint256 refundAmount
     );
     event CommissionExpired(uint256 indexed commissionId);
     event CommissionTimedOut(uint256 indexed commissionId, uint256 indexed artistProfileId);
     event ReputationEarned(uint256 indexed artistProfileId, uint256 totalReputation);
-    event HardcoreWarningSet(uint256 indexed profileId, bool value);
+    event FeeRecipientUpdated(address indexed recipient);
 
     // ─────────────────────────────────────────────────────────────
     // Constructor
@@ -251,34 +235,39 @@ contract CommissionManager is Ownable2Step, Pausable, ReentrancyGuard {
         address usdc_,
         address identity_,
         address island_,
-        address bodega_
+        address bodega_,
+        address feeRecipient_
     ) Ownable(initialOwner) {
-        if (initialOwner == address(0) || usdc_ == address(0) || identity_ == address(0) ||
-            island_ == address(0)       || bodega_ == address(0))
+        if (
+            initialOwner == address(0) || usdc_ == address(0) || identity_ == address(0) || island_ == address(0)
+                || bodega_ == address(0) || feeRecipient_ == address(0)
+        ) {
             revert InvalidAddress();
+        }
 
-        usdc     = IERC20(usdc_);
+        usdc = IERC20(usdc_);
         identity = IIslandIdentity(identity_);
-        island   = IJungleBayIsland(island_);
-        bodega   = IBodega(bodega_);
+        island = IJungleBayIsland(island_);
+        bodega = IBodega(bodega_);
+        feeRecipient = feeRecipient_;
     }
 
     // ─────────────────────────────────────────────────────────────
     // Admin
     // ─────────────────────────────────────────────────────────────
 
-    function pause()   external onlyOwner { _pause(); }
-    function unpause() external onlyOwner { _unpause(); }
+    function pause() external onlyOwner {
+        _pause();
+    }
 
-    /**
-     * @notice Set or clear the hardcore warning on any profile.
-     *         This is the admin's tool for signaling bad faith actors.
-     *         The profile keeps working. Everyone can see the flag.
-     */
-    function setHardcoreWarning(uint256 profileId, bool value) external onlyOwner {
-        if (!identity.profileExists(profileId)) revert ProfileRequired();
-        hardcoreWarning[profileId] = value;
-        emit HardcoreWarningSet(profileId, value);
+    function unpause() external onlyOwner {
+        _unpause();
+    }
+
+    function setFeeRecipient(address recipient) external onlyOwner {
+        if (recipient == address(0)) revert InvalidAddress();
+        feeRecipient = recipient;
+        emit FeeRecipientUpdated(recipient);
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -298,12 +287,11 @@ contract CommissionManager is Ownable2Step, Pausable, ReentrancyGuard {
      * @param budget      Max USDC you'll pay
      * @param deadline    When the artist must submit by (must be > 24h from now)
      */
-    function publishCommission(
-        uint256         bungalowId,
-        string calldata promptURI,
-        uint256         budget,
-        uint64          deadline
-    ) external whenNotPaused returns (uint256 commissionId) {
+    function publishCommission(uint256 bungalowId, string calldata promptURI, uint256 budget, uint64 deadline)
+        external
+        whenNotPaused
+        returns (uint256 commissionId)
+    {
         uint256 profileId = _callerProfileId();
         _requireBoundedString(promptURI, 1, MAX_URI_LENGTH);
 
@@ -315,19 +303,19 @@ contract CommissionManager is Ownable2Step, Pausable, ReentrancyGuard {
 
         commissionId = ++commissionCount;
         commissions[commissionId] = Commission({
-            id:                       commissionId,
-            requesterProfileId:       profileId,
-            bungalowId:               bungalowId,
-            promptURI:                promptURI,
-            budget:                   budget,
-            deadline:                 deadline,
-            publishedAt:              uint64(block.timestamp),
-            selectedAt:               0,
-            submittedAt:              0,
-            selectedArtistProfileId:  0,
-            agreedPrice:              0,
-            deliverableURI:           "",
-            status:                   CommissionStatus.OPEN
+            id: commissionId,
+            requesterProfileId: profileId,
+            bungalowId: bungalowId,
+            promptURI: promptURI,
+            budget: budget,
+            deadline: deadline,
+            publishedAt: uint64(block.timestamp),
+            selectedAt: 0,
+            submittedAt: 0,
+            selectedArtistProfileId: 0,
+            agreedPrice: 0,
+            deliverableURI: "",
+            status: CommissionStatus.OPEN
         });
 
         emit CommissionPublished(commissionId, profileId, bungalowId, budget, deadline, promptURI);
@@ -340,11 +328,11 @@ contract CommissionManager is Ownable2Step, Pausable, ReentrancyGuard {
      *
      *         Bayla can apply here. The contract does not know she is an AI.
      */
-    function applyToCommission(
-        uint256         commissionId,
-        string calldata pitchURI,
-        uint256         proposedPrice
-    ) external whenNotPaused returns (uint256 applicationId) {
+    function applyToCommission(uint256 commissionId, string calldata pitchURI, uint256 proposedPrice)
+        external
+        whenNotPaused
+        returns (uint256 applicationId)
+    {
         Commission storage c = _requireCommission(commissionId);
         if (c.status != CommissionStatus.OPEN) revert InvalidState();
         if (block.timestamp > c.publishedAt + SELECTION_WINDOW) revert SelectionWindowClosed();
@@ -359,13 +347,12 @@ contract CommissionManager is Ownable2Step, Pausable, ReentrancyGuard {
 
         applicationId = ++applicationCount;
         applications[applicationId] = Application({
-            id:              applicationId,
-            commissionId:    commissionId,
+            id: applicationId,
+            commissionId: commissionId,
             artistProfileId: profileId,
-            pitchURI:        pitchURI,
-            proposedPrice:   proposedPrice,
-            appliedAt:       uint64(block.timestamp),
-            active:          true
+            pitchURI: pitchURI,
+            proposedPrice: proposedPrice,
+            appliedAt: uint64(block.timestamp)
         });
 
         _commissionApplications[commissionId].push(applicationId);
@@ -379,9 +366,7 @@ contract CommissionManager is Ownable2Step, Pausable, ReentrancyGuard {
      *         Must be called within 24 hours of publishing.
      *         After selection, the artist has until the deadline to submit.
      */
-    function selectArtist(uint256 commissionId, uint256 applicationId)
-        external whenNotPaused nonReentrant
-    {
+    function selectArtist(uint256 commissionId, uint256 applicationId) external whenNotPaused nonReentrant {
         Commission storage c = _requireCommission(commissionId);
         if (c.status != CommissionStatus.OPEN) revert InvalidState();
         if (!identity.isWalletLinkedToProfile(c.requesterProfileId, msg.sender)) revert Unauthorized();
@@ -391,15 +376,14 @@ contract CommissionManager is Ownable2Step, Pausable, ReentrancyGuard {
 
         Application storage a = _requireApplication(applicationId);
         if (a.commissionId != commissionId) revert ApplicationNotFound();
-        if (!a.active) revert InvalidState();
 
         // Lock the agreed USDC from the requester
         usdc.safeTransferFrom(msg.sender, address(this), a.proposedPrice);
 
-        c.status                    = CommissionStatus.SELECTED;
-        c.selectedArtistProfileId   = a.artistProfileId;
-        c.agreedPrice               = a.proposedPrice;
-        c.selectedAt                = uint64(block.timestamp);
+        c.status = CommissionStatus.SELECTED;
+        c.selectedArtistProfileId = a.artistProfileId;
+        c.agreedPrice = a.proposedPrice;
+        c.selectedAt = uint64(block.timestamp);
 
         emit ArtistSelected(commissionId, applicationId, a.artistProfileId, a.proposedPrice);
     }
@@ -409,9 +393,7 @@ contract CommissionManager is Ownable2Step, Pausable, ReentrancyGuard {
      *         Must be submitted before the deadline.
      *         The requester now has REVIEW_WINDOW to approve or reject.
      */
-    function submitDeliverable(uint256 commissionId, string calldata deliverableURI)
-        external whenNotPaused
-    {
+    function submitDeliverable(uint256 commissionId, string calldata deliverableURI) external whenNotPaused {
         Commission storage c = _requireCommission(commissionId);
         if (c.status != CommissionStatus.SELECTED) revert InvalidState();
         if (block.timestamp > c.deadline) revert InvalidTimeline();
@@ -420,8 +402,8 @@ contract CommissionManager is Ownable2Step, Pausable, ReentrancyGuard {
         _requireBoundedString(deliverableURI, 1, MAX_URI_LENGTH);
 
         c.deliverableURI = deliverableURI;
-        c.submittedAt    = uint64(block.timestamp);
-        c.status         = CommissionStatus.SUBMITTED;
+        c.submittedAt = uint64(block.timestamp);
+        c.status = CommissionStatus.SUBMITTED;
 
         emit DeliverableSubmitted(commissionId, c.selectedArtistProfileId, deliverableURI);
     }
@@ -435,9 +417,7 @@ contract CommissionManager is Ownable2Step, Pausable, ReentrancyGuard {
      *         3. Artist earns +1 reputation
      *         4. The piece belongs to the island forever
      */
-    function approveCommission(uint256 commissionId)
-        external whenNotPaused nonReentrant
-    {
+    function approveCommission(uint256 commissionId) external whenNotPaused nonReentrant {
         Commission storage c = _requireCommission(commissionId);
         if (c.status != CommissionStatus.SUBMITTED) revert InvalidState();
         if (!identity.isWalletLinkedToProfile(c.requesterProfileId, msg.sender)) revert Unauthorized();
@@ -452,9 +432,7 @@ contract CommissionManager is Ownable2Step, Pausable, ReentrancyGuard {
      *         The rejection is recorded permanently on the requester's profile.
      *         Future artists will see this count before they apply.
      */
-    function rejectCommission(uint256 commissionId)
-        external whenNotPaused nonReentrant
-    {
+    function rejectCommission(uint256 commissionId) external whenNotPaused nonReentrant {
         Commission storage c = _requireCommission(commissionId);
         if (c.status != CommissionStatus.SUBMITTED) revert InvalidState();
         if (!identity.isWalletLinkedToProfile(c.requesterProfileId, msg.sender)) revert Unauthorized();
@@ -479,9 +457,7 @@ contract CommissionManager is Ownable2Step, Pausable, ReentrancyGuard {
      *         - Artist may still submit while block.timestamp <= deadline
      *         - Requester may reclaim only once block.timestamp > deadline
      */
-    function claimMissedDeadlineRefund(uint256 commissionId)
-        external whenNotPaused nonReentrant
-    {
+    function claimMissedDeadlineRefund(uint256 commissionId) external whenNotPaused nonReentrant {
         Commission storage c = _requireCommission(commissionId);
         if (c.status != CommissionStatus.SELECTED) revert InvalidState();
         if (block.timestamp <= c.deadline) revert SubmissionWindowOpen();
@@ -497,9 +473,7 @@ contract CommissionManager is Ownable2Step, Pausable, ReentrancyGuard {
      * @notice If the requester doesn't act within REVIEW_WINDOW after submission,
      *         the artist can claim their payout. Trust the work. Move on.
      */
-    function claimTimedOutPayout(uint256 commissionId)
-        external whenNotPaused nonReentrant
-    {
+    function claimTimedOutPayout(uint256 commissionId) external whenNotPaused nonReentrant {
         Commission storage c = _requireCommission(commissionId);
         if (c.status != CommissionStatus.SUBMITTED) revert InvalidState();
         if (block.timestamp < uint256(c.submittedAt) + REVIEW_WINDOW) revert ReviewWindowActive();
@@ -530,9 +504,7 @@ contract CommissionManager is Ownable2Step, Pausable, ReentrancyGuard {
     // Views
     // ─────────────────────────────────────────────────────────────
 
-    function getCommissionApplications(uint256 commissionId)
-        external view returns (uint256[] memory)
-    {
+    function getCommissionApplications(uint256 commissionId) external view returns (uint256[] memory) {
         if (commissions[commissionId].id == 0) revert CommissionNotFound();
         return _commissionApplications[commissionId];
     }
@@ -541,22 +513,16 @@ contract CommissionManager is Ownable2Step, Pausable, ReentrancyGuard {
      * @notice Full profile of an artist before you accept their application.
      *         Reputation + hardcore warning in one call.
      */
-    function getArtistProfile(uint256 artistProfileId)
-        external view
-        returns (uint256 reputation, bool warning)
-    {
-        return (artistReputation[artistProfileId], hardcoreWarning[artistProfileId]);
+    function getArtistProfile(uint256 artistProfileId) external view returns (uint256 reputation, bool warning) {
+        return (artistReputation[artistProfileId], identity.getProfileWarning(artistProfileId));
     }
 
     /**
      * @notice Full trust profile of a requester before you apply.
      *         Rejection count + hardcore warning in one call.
      */
-    function getRequesterProfile(uint256 requesterProfileId)
-        external view
-        returns (uint256 rejections, bool warning)
-    {
-        return (requesterRejections[requesterProfileId], hardcoreWarning[requesterProfileId]);
+    function getRequesterProfile(uint256 requesterProfileId) external view returns (uint256 rejections, bool warning) {
+        return (requesterRejections[requesterProfileId], identity.getProfileWarning(requesterProfileId));
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -568,15 +534,15 @@ contract CommissionManager is Ownable2Step, Pausable, ReentrancyGuard {
      *      award reputation. Called on approval and timeout.
      */
     function _settle(uint256 commissionId, Commission storage c) internal {
-        uint256 price    = c.agreedPrice;
+        uint256 price = c.agreedPrice;
         uint256 platform = (price * PLATFORM_BPS) / BPS_DENOM;
-        uint256 artist   = price - platform;
+        uint256 artist = price - platform;
 
         address artistWallet = identity.getMainWallet(c.selectedArtistProfileId);
         if (artistWallet == address(0)) revert InvalidAddress();
 
-        if (platform > 0) usdc.safeTransfer(PLATFORM_RECIPIENT, platform);
-        if (artist   > 0) usdc.safeTransfer(artistWallet,       artist);
+        if (platform > 0) usdc.safeTransfer(feeRecipient, platform);
+        if (artist > 0) usdc.safeTransfer(artistWallet, artist);
 
         // The deliverable becomes a free, infinite Bodega item
         uint256 itemId = bodega.listCommissionedItem(c.selectedArtistProfileId, c.deliverableURI);

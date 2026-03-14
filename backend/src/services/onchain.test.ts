@@ -186,6 +186,6 @@ describe("onchain helpers", () => {
   });
 
   test("uses the deployment block as the initial backfill floor", () => {
-    expect(getInitialBackfillStartBlock()).toBe(43_303_971n);
+    expect(getInitialBackfillStartBlock()).toBe(43_326_546n);
   });
 });

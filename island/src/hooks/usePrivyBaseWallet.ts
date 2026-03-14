@@ -51,13 +51,6 @@ function isHexAddress(value: string): value is `0x${string}` {
   return /^0x[0-9a-fA-F]{40}$/.test(value);
 }
 
-function isEmbeddedPrivyWallet(wallet: ConnectedWallet): boolean {
-  const walletClientType = (wallet.walletClientType ?? "").toLowerCase();
-  const connectorType = (wallet.connectorType ?? "").toLowerCase();
-
-  return walletClientType.startsWith("privy") || connectorType === "embedded";
-}
-
 function pickFallbackWallet(
   wallets: ConnectedWallet[],
 ): ConnectedWallet | null {
@@ -80,8 +73,7 @@ export function usePrivyBaseWallet() {
   const ethereumWallets = useMemo(
     () =>
       wallets.filter(
-        (wallet): wallet is ConnectedWallet =>
-          wallet.type === "ethereum" && !isEmbeddedPrivyWallet(wallet),
+        (wallet): wallet is ConnectedWallet => wallet.type === "ethereum",
       ),
     [wallets],
   );
@@ -155,7 +147,7 @@ export function usePrivyBaseWallet() {
         walletChainType: getPrivyWalletChainType(),
         walletList: getPrivyWalletList(),
       });
-      throw new Error("Connect an external Ethereum wallet after signing in with X");
+      throw new Error("Connect a Base wallet after signing in with X");
     }
 
     if (!isHexAddress(activeWallet.address)) {

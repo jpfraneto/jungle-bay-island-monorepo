@@ -74,10 +74,8 @@ contract Bodega is ERC1155, Ownable2Step, Pausable, ReentrancyGuard {
     // Constants
     // ─────────────────────────────────────────────────────────────
 
-    address public constant PLATFORM_RECIPIENT = 0xed21735DC192dC4eeAFd71b4Dc023bC53fE4DF15;
-
     uint256 internal constant PLATFORM_BPS = 800;
-    uint256 internal constant BPS_DENOM    = 10_000;
+    uint256 internal constant BPS_DENOM = 10_000;
 
     /// @notice Minimum heat score required to install into a bungalow.
     uint256 public constant MIN_HEAT_TO_INSTALL = 10;
@@ -91,12 +89,12 @@ contract Bodega is ERC1155, Ownable2Step, Pausable, ReentrancyGuard {
     struct Item {
         uint256 id;
         uint256 creatorProfileId;
-        string  ipfsURI;
-        uint256 supply;          // 0 = infinite
-        uint256 priceUSDC;       // 0 = free
+        string ipfsURI;
+        uint256 supply; // 0 = infinite
+        uint256 priceUSDC; // 0 = free
         uint256 totalMinted;
-        bool    active;
-        uint64  listedAt;
+        bool active;
+        uint64 listedAt;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -118,10 +116,11 @@ contract Bodega is ERC1155, Ownable2Step, Pausable, ReentrancyGuard {
     // State
     // ─────────────────────────────────────────────────────────────
 
-    IERC20           public immutable usdc;
-    IIslandIdentity  public immutable identity;
+    IERC20 public immutable usdc;
+    IIslandIdentity public immutable identity;
     IJungleBayIsland public immutable island;
-    address          public commissionManager; // set post-deploy
+    address public commissionManager; // set post-deploy
+    address public feeRecipient;
 
     uint256 public itemCount;
 
@@ -137,55 +136,59 @@ contract Bodega is ERC1155, Ownable2Step, Pausable, ReentrancyGuard {
     // ─────────────────────────────────────────────────────────────
 
     event ItemListed(
-        uint256 indexed itemId,
-        uint256 indexed creatorProfileId,
-        string  ipfsURI,
-        uint256 supply,
-        uint256 priceUSDC
+        uint256 indexed itemId, uint256 indexed creatorProfileId, string ipfsURI, uint256 supply, uint256 priceUSDC
     );
     event ItemInstalled(
-        uint256 indexed itemId,
-        uint256 indexed bungalowId,
-        uint256 indexed installerProfileId,
-        uint256 priceUSDC
+        uint256 indexed itemId, uint256 indexed bungalowId, uint256 indexed installerProfileId, uint256 priceUSDC
     );
     event ItemActiveStatusUpdated(uint256 indexed itemId, bool active);
     event CommissionManagerSet(address indexed manager);
+    event FeeRecipientUpdated(address indexed recipient);
 
     // ─────────────────────────────────────────────────────────────
     // Constructor
     // ─────────────────────────────────────────────────────────────
 
-    constructor(
-        address initialOwner,
-        address usdc_,
-        address identity_,
-        address island_
-    )
+    constructor(address initialOwner, address usdc_, address identity_, address island_, address feeRecipient_)
         ERC1155("")
         Ownable(initialOwner)
     {
-        if (initialOwner == address(0) || usdc_ == address(0) ||
-            identity_ == address(0)    || island_ == address(0))
+        if (
+            initialOwner == address(0) || usdc_ == address(0) || identity_ == address(0) || island_ == address(0)
+                || feeRecipient_ == address(0)
+        ) {
             revert InvalidAddress();
+        }
 
-        usdc     = IERC20(usdc_);
+        usdc = IERC20(usdc_);
         identity = IIslandIdentity(identity_);
-        island   = IJungleBayIsland(island_);
+        island = IJungleBayIsland(island_);
+        feeRecipient = feeRecipient_;
     }
 
     // ─────────────────────────────────────────────────────────────
     // Admin
     // ─────────────────────────────────────────────────────────────
 
-    function pause()   external onlyOwner { _pause(); }
-    function unpause() external onlyOwner { _unpause(); }
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    function unpause() external onlyOwner {
+        _unpause();
+    }
 
     /// @notice Set after CommissionManager is deployed.
     function setCommissionManager(address manager) external onlyOwner {
         if (manager == address(0)) revert InvalidAddress();
         commissionManager = manager;
         emit CommissionManagerSet(manager);
+    }
+
+    function setFeeRecipient(address recipient) external onlyOwner {
+        if (recipient == address(0)) revert InvalidAddress();
+        feeRecipient = recipient;
+        emit FeeRecipientUpdated(recipient);
     }
 
     /// @notice Admin can deactivate an item (e.g. DMCA, content violation).
@@ -208,11 +211,11 @@ contract Bodega is ERC1155, Ownable2Step, Pausable, ReentrancyGuard {
      * @param supply    Max mintable copies. 0 = infinite.
      * @param priceUSDC Price per install. 0 = free.
      */
-    function listItem(
-        string calldata ipfsURI,
-        uint256         supply,
-        uint256         priceUSDC
-    ) external whenNotPaused returns (uint256 itemId) {
+    function listItem(string calldata ipfsURI, uint256 supply, uint256 priceUSDC)
+        external
+        whenNotPaused
+        returns (uint256 itemId)
+    {
         uint256 profileId = identity.walletProfileId(msg.sender);
         if (profileId == 0) revert ProfileRequired();
         _requireBoundedString(ipfsURI, 1, MAX_URI_LENGTH);
@@ -225,10 +228,11 @@ contract Bodega is ERC1155, Ownable2Step, Pausable, ReentrancyGuard {
      *         Commissioned items are always free and infinite — the commission
      *         itself was the payment. The art now belongs to the island.
      */
-    function listCommissionedItem(
-        uint256         artistProfileId,
-        string calldata ipfsURI
-    ) external returns (uint256 itemId) {
+    function listCommissionedItem(uint256 artistProfileId, string calldata ipfsURI)
+        external
+        whenNotPaused
+        returns (uint256 itemId)
+    {
         if (msg.sender != commissionManager) revert Unauthorized();
         _requireBoundedString(ipfsURI, 1, MAX_URI_LENGTH);
         itemId = _createItem(artistProfileId, ipfsURI, 0, 0);
@@ -255,10 +259,7 @@ contract Bodega is ERC1155, Ownable2Step, Pausable, ReentrancyGuard {
      *         If this is your first install in this bungalow, the JBM bond
      *         activates. That door opens forever.
      */
-    function installItem(
-        uint256 itemId,
-        uint256 bungalowId
-    ) external whenNotPaused nonReentrant {
+    function installItem(uint256 itemId, uint256 bungalowId) external whenNotPaused nonReentrant {
         // Verify caller has a profile
         uint256 profileId = identity.walletProfileId(msg.sender);
         if (profileId == 0) revert ProfileRequired();
@@ -268,8 +269,8 @@ contract Bodega is ERC1155, Ownable2Step, Pausable, ReentrancyGuard {
 
         // Verify item
         Item storage item = items[itemId];
-        if (item.id == 0)   revert ItemNotFound();
-        if (!item.active)   revert ItemInactive();
+        if (item.id == 0) revert ItemNotFound();
+        if (!item.active) revert ItemInactive();
         if (item.supply > 0 && item.totalMinted >= item.supply) revert SupplyExhausted();
 
         // Verify heat gate
@@ -285,10 +286,10 @@ contract Bodega is ERC1155, Ownable2Step, Pausable, ReentrancyGuard {
             if (creatorWallet == address(0)) revert InvalidAddress();
 
             uint256 platformCut = (item.priceUSDC * PLATFORM_BPS) / BPS_DENOM;
-            uint256 creatorCut  = item.priceUSDC - platformCut;
+            uint256 creatorCut = item.priceUSDC - platformCut;
 
-            usdc.safeTransferFrom(msg.sender, PLATFORM_RECIPIENT, platformCut);
-            usdc.safeTransferFrom(msg.sender, creatorWallet,      creatorCut);
+            usdc.safeTransferFrom(msg.sender, feeRecipient, platformCut);
+            usdc.safeTransferFrom(msg.sender, creatorWallet, creatorCut);
         }
 
         // Mint the ERC1155 token to the installer
@@ -315,9 +316,7 @@ contract Bodega is ERC1155, Ownable2Step, Pausable, ReentrancyGuard {
      * @notice Get all items installed in a bungalow.
      *         Used by the frontend to render the bungalow's contents.
      */
-    function getBungalowItems(uint256 bungalowId)
-        external view returns (uint256[] memory)
-    {
+    function getBungalowItems(uint256 bungalowId) external view returns (uint256[] memory) {
         return _bungalowItems[bungalowId];
     }
 
@@ -338,22 +337,20 @@ contract Bodega is ERC1155, Ownable2Step, Pausable, ReentrancyGuard {
     // Internal
     // ─────────────────────────────────────────────────────────────
 
-    function _createItem(
-        uint256 profileId,
-        string memory ipfsURI,
-        uint256 supply,
-        uint256 priceUSDC
-    ) internal returns (uint256 itemId) {
+    function _createItem(uint256 profileId, string memory ipfsURI, uint256 supply, uint256 priceUSDC)
+        internal
+        returns (uint256 itemId)
+    {
         itemId = ++itemCount;
         items[itemId] = Item({
-            id:              itemId,
+            id: itemId,
             creatorProfileId: profileId,
-            ipfsURI:         ipfsURI,
-            supply:          supply,
-            priceUSDC:       priceUSDC,
-            totalMinted:     0,
-            active:          true,
-            listedAt:        uint64(block.timestamp)
+            ipfsURI: ipfsURI,
+            supply: supply,
+            priceUSDC: priceUSDC,
+            totalMinted: 0,
+            active: true,
+            listedAt: uint64(block.timestamp)
         });
         emit ItemListed(itemId, profileId, ipfsURI, supply, priceUSDC);
     }

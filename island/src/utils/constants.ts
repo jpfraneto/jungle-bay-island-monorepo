@@ -1,19 +1,3 @@
-export type WallItemType = "link" | "image" | "frame" | "portal";
-
-export const ITEM_PRICES: Record<WallItemType, number> = {
-  frame: 50_000,
-  link: 69_000,
-  image: 250_000,
-  portal: 1_000_000,
-};
-
-export const ITEM_LABELS: Record<WallItemType, string> = {
-  frame: "Post",
-  link: "Link",
-  image: "Image",
-  portal: "Portal",
-};
-
 export const GLOW_COLORS = [
   "#f1c40f",
   "#2ecc71",
@@ -28,11 +12,3 @@ export const GLOW_COLORS = [
   "#16a085",
   "#e67e22",
 ] as const;
-
-export const JBM_ADDRESS = import.meta.env.VITE_JBM_ADDRESS;
-
-export const TREASURY_ADDRESS = import.meta.env.VITE_TREASURY_ADDRESS;
-export const CLAIM_CONTRACT_ADDRESS = import.meta.env
-  .VITE_CLAIM_CONTRACT_ADDRESS;
-export const MEMETICS_CONTRACT_ADDRESS =
-  import.meta.env.VITE_MEMETICS_CONTRACT_ADDRESS;

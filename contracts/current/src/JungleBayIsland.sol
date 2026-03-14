@@ -46,8 +46,6 @@ contract JungleBayIsland is ERC721, ERC2981, EIP712, Ownable2Step, Pausable, Ree
     using ECDSA for bytes32;
     using SafeERC20 for IERC20;
 
-    address public constant PLATFORM_RECIPIENT = 0xed21735DC192dC4eeAFd71b4Dc023bC53fE4DF15;
-
     uint256 internal constant PLATFORM_BPS = 800;
     uint256 internal constant BPS_DENOM = 10_000;
     uint96 internal constant ROYALTY_BPS = 80;
@@ -57,9 +55,8 @@ contract JungleBayIsland is ERC721, ERC2981, EIP712, Ownable2Step, Pausable, Ree
     uint256 internal constant MAX_NAME_LENGTH = 64;
     uint256 internal constant MAX_TICKER_LENGTH = 16;
 
-    bytes32 internal constant MINT_PRICE_TYPEHASH = keccak256(
-        "MintPrice(bytes32 assetKey,uint256 priceUSDC,bytes32 salt,uint256 deadline)"
-    );
+    bytes32 internal constant MINT_PRICE_TYPEHASH =
+        keccak256("MintPrice(bytes32 assetKey,address wallet,uint256 priceUSDC,bytes32 salt,uint256 deadline)");
 
     struct Asset {
         string chain;
@@ -89,6 +86,7 @@ contract JungleBayIsland is ERC721, ERC2981, EIP712, Ownable2Step, Pausable, Ree
     IERC20 public immutable usdc;
     IIslandIdentity public immutable identity;
     address public backendSigner;
+    address public feeRecipient;
 
     uint256 public bungalowCount;
 
@@ -99,35 +97,28 @@ contract JungleBayIsland is ERC721, ERC2981, EIP712, Ownable2Step, Pausable, Ree
     mapping(bytes32 => bool) public usedDigests;
 
     event BungalowMinted(
-        uint256 indexed tokenId,
-        address indexed owner,
-        string seedChain,
-        string seedTokenAddress,
-        uint256 priceUSDC
+        uint256 indexed tokenId, address indexed owner, string seedChain, string seedTokenAddress, uint256 priceUSDC
     );
     event BungalowUpdated(uint256 indexed tokenId, string ipfsHash);
     event BungalowIdentityUpdated(uint256 indexed tokenId, string name, string ticker);
     event AssetLinked(uint256 indexed tokenId, string chain, string tokenAddress);
     event BackendSignerUpdated(address indexed newSigner);
+    event FeeRecipientUpdated(address indexed newRecipient);
 
-    constructor(
-        address initialOwner,
-        address usdc_,
-        address identity_,
-        address backendSigner_
-    )
+    constructor(address initialOwner, address usdc_, address identity_, address backendSigner_, address feeRecipient_)
         ERC721("Jungle Bay Island Bungalow", "BNGW")
         EIP712("JungleBayIsland", "1")
         Ownable(initialOwner)
     {
         if (
-            initialOwner == address(0) || usdc_ == address(0) || identity_ == address(0)
-                || backendSigner_ == address(0)
+            initialOwner == address(0) || usdc_ == address(0) || identity_ == address(0) || backendSigner_ == address(0)
+                || feeRecipient_ == address(0)
         ) revert InvalidAddress();
 
         usdc = IERC20(usdc_);
         identity = IIslandIdentity(identity_);
         backendSigner = backendSigner_;
+        feeRecipient = feeRecipient_;
 
         _setDefaultRoyalty(initialOwner, ROYALTY_BPS);
     }
@@ -144,6 +135,12 @@ contract JungleBayIsland is ERC721, ERC2981, EIP712, Ownable2Step, Pausable, Ree
         if (s == address(0)) revert InvalidAddress();
         backendSigner = s;
         emit BackendSignerUpdated(s);
+    }
+
+    function setFeeRecipient(address recipient) external onlyOwner {
+        if (recipient == address(0)) revert InvalidAddress();
+        feeRecipient = recipient;
+        emit FeeRecipientUpdated(recipient);
     }
 
     function updateRoyaltyReceiver(address receiver) external onlyOwner {
@@ -166,14 +163,14 @@ contract JungleBayIsland is ERC721, ERC2981, EIP712, Ownable2Step, Pausable, Ree
         if (bungalowIdByAssetKey[assetKey] != 0) revert AssetAlreadyLinked();
 
         _consumeAttestation(
-            keccak256(abi.encode(MINT_PRICE_TYPEHASH, assetKey, priceUSDC, salt, deadline)), sig, deadline
+            keccak256(abi.encode(MINT_PRICE_TYPEHASH, assetKey, msg.sender, priceUSDC, salt, deadline)), sig, deadline
         );
 
         if (priceUSDC > 0) {
             uint256 platformCut = (priceUSDC * PLATFORM_BPS) / BPS_DENOM;
             uint256 ownerCut = priceUSDC - platformCut;
 
-            usdc.safeTransferFrom(msg.sender, PLATFORM_RECIPIENT, platformCut);
+            usdc.safeTransferFrom(msg.sender, feeRecipient, platformCut);
             usdc.safeTransferFrom(msg.sender, owner(), ownerCut);
         }
 
@@ -294,9 +291,7 @@ contract JungleBayIsland is ERC721, ERC2981, EIP712, Ownable2Step, Pausable, Ree
         return super.supportsInterface(interfaceId);
     }
 
-    function _linkAsset(uint256 tokenId, bytes32 assetKey, string memory chain, string memory tokenAddress)
-        internal
-    {
+    function _linkAsset(uint256 tokenId, bytes32 assetKey, string memory chain, string memory tokenAddress) internal {
         bungalowIdByAssetKey[assetKey] = tokenId;
         _assetsByKey[assetKey] = Asset({chain: chain, tokenAddress: tokenAddress, addedAt: uint64(block.timestamp)});
         _bungalowAssetKeys[tokenId].push(assetKey);
@@ -340,14 +335,12 @@ contract JungleBayIsland is ERC721, ERC2981, EIP712, Ownable2Step, Pausable, Ree
         bytes32 chainHash = keccak256(bytes(normalizedChain));
 
         return chainHash == keccak256("ethereum") || chainHash == keccak256("base")
-            || chainHash == keccak256("optimism") || chainHash == keccak256("arbitrum")
-            || chainHash == keccak256("polygon") || chainHash == keccak256("bsc")
-            || chainHash == keccak256("avalanche") || chainHash == keccak256("fantom")
-            || chainHash == keccak256("zora") || chainHash == keccak256("linea")
-            || chainHash == keccak256("blast") || chainHash == keccak256("scroll")
-            || chainHash == keccak256("mode") || chainHash == keccak256("ink")
-            || chainHash == keccak256("mantle") || chainHash == keccak256("sei")
-            || chainHash == keccak256("worldchain") || chainHash == keccak256("berachain");
+            || chainHash == keccak256("optimism") || chainHash == keccak256("arbitrum") || chainHash == keccak256("polygon")
+            || chainHash == keccak256("bsc") || chainHash == keccak256("avalanche") || chainHash == keccak256("fantom")
+            || chainHash == keccak256("zora") || chainHash == keccak256("linea") || chainHash == keccak256("blast")
+            || chainHash == keccak256("scroll") || chainHash == keccak256("mode") || chainHash == keccak256("ink")
+            || chainHash == keccak256("mantle") || chainHash == keccak256("sei") || chainHash == keccak256("worldchain")
+            || chainHash == keccak256("berachain");
     }
 
     function _normalizeLower(string memory s) internal pure returns (string memory) {

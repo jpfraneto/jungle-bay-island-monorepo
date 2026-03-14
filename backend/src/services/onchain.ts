@@ -28,7 +28,6 @@ import {
   upsertUser,
   upsertUserWalletLinks,
 } from "../db/queries";
-import { fetchDexScreenerData } from "./dexscreener";
 import { ApiError } from "./errors";
 import { updateOnchainInteraction } from "./interactionLedger";
 import { extractPrivyXUsername, getPrivyLinkedAccounts } from "./privyClaims";
@@ -387,7 +386,7 @@ function getXUserIdFromClaims(claims: Record<string, unknown> | undefined): bigi
   return null;
 }
 
-async function ensureOnchainSchema(): Promise<void> {
+export async function ensureOnchainSchema(): Promise<void> {
   if (!onchainSchemaPromise) {
     onchainSchemaPromise = (async () => {
       await db.unsafe(`
@@ -925,9 +924,9 @@ async function syncCommissionApplicationById(applicationId: number): Promise<voi
     abi: commissionManagerAbi,
     functionName: "applications",
     args: [BigInt(applicationId)],
-  }) as readonly [bigint, bigint, bigint, string, bigint, bigint, boolean];
+  }) as readonly [bigint, bigint, bigint, string, bigint, bigint];
 
-  const [, commissionId, artistProfileId, pitchUri, proposedPrice, appliedAt, active] = application;
+  const [, commissionId, artistProfileId, pitchUri, proposedPrice, appliedAt] = application;
   await db.unsafe(
     `
       INSERT INTO "${CONFIG.SCHEMA}".${APPLICATION_TABLE} (
@@ -958,7 +957,7 @@ async function syncCommissionApplicationById(applicationId: number): Promise<voi
       pitchUri,
       proposedPrice.toString(),
       bigintToNumber(appliedAt),
-      active,
+      true,
     ],
   );
 }
@@ -981,6 +980,7 @@ async function syncCommissionById(commissionId: number, itemId?: number | null):
     bigint,
     bigint,
     bigint,
+    bigint,
     string,
     number,
   ];
@@ -996,6 +996,7 @@ async function syncCommissionById(commissionId: number, itemId?: number | null):
     selectedAt,
     submittedAt,
     selectedArtistProfileId,
+    agreedPrice,
     deliverableUri,
     statusCode,
   ] = commission;
@@ -1073,7 +1074,7 @@ async function syncCommissionById(commissionId: number, itemId?: number | null):
       selectedAt > 0n ? bigintToNumber(selectedAt) : null,
       submittedAt > 0n ? bigintToNumber(submittedAt) : null,
       selectedArtistProfileId > 0n ? bigintToNumber(selectedArtistProfileId) : null,
-      null,
+      agreedPrice > 0n ? agreedPrice.toString() : null,
       deliverableUri || null,
       COMMISSION_STATUS_BY_CODE[statusCode] ?? "OPEN",
       itemId ?? null,
@@ -1249,7 +1250,28 @@ export async function buildRegisterSignature(input: {
   const wallet = requireSessionWallet(input.wallet, input.session);
   const deadline = signatureDeadline();
   const salt = randomSalt();
-  const heatScore = BigInt(Math.max(0, Math.round(input.session.aggregatedHeat)));
+  const [existingProfileIdByX, existingProfileIdByWallet] = await Promise.all([
+    publicClient.readContract({
+      address: ONCHAIN_CONTRACTS.islandIdentity,
+      abi: islandIdentityAbi,
+      functionName: "profileIdByXUserId",
+      args: [input.session.xUserId],
+    }) as Promise<bigint>,
+    publicClient.readContract({
+      address: ONCHAIN_CONTRACTS.islandIdentity,
+      abi: islandIdentityAbi,
+      functionName: "walletProfileId",
+      args: [wallet as Address],
+    }) as Promise<bigint>,
+  ]);
+
+  if (existingProfileIdByX > 0n) {
+    throw new ApiError(409, "profile_exists", "This X account already has an onchain profile");
+  }
+
+  if (existingProfileIdByWallet > 0n) {
+    throw new ApiError(409, "wallet_linked", "This wallet is already linked to an onchain profile");
+  }
 
   const signature = await backendSignerAccount.signTypedData({
     domain: {
@@ -1264,7 +1286,6 @@ export async function buildRegisterSignature(input: {
         { name: "xUserId", type: "uint64" },
         { name: "xHandle", type: "string" },
         { name: "wallet", type: "address" },
-        { name: "heatScore", type: "uint256" },
         { name: "salt", type: "bytes32" },
         { name: "deadline", type: "uint256" },
       ],
@@ -1273,7 +1294,6 @@ export async function buildRegisterSignature(input: {
       xUserId: input.session.xUserId,
       xHandle: input.session.xHandle.replace(/^@+/, ""),
       wallet: wallet as Address,
-      heatScore,
       salt,
       deadline,
     },
@@ -1284,7 +1304,6 @@ export async function buildRegisterSignature(input: {
     wallet,
     x_user_id: input.session.xUserId.toString(),
     x_handle: input.session.xHandle.replace(/^@+/, ""),
-    heat_score: heatScore.toString(),
     salt,
     deadline: deadline.toString(),
     sig: signature,
@@ -1300,6 +1319,17 @@ export async function buildLinkWalletSignature(input: {
   }
 
   const wallet = requireSessionWallet(input.wallet, input.session);
+  const existingProfileIdByWallet = await publicClient.readContract({
+    address: ONCHAIN_CONTRACTS.islandIdentity,
+    abi: islandIdentityAbi,
+    functionName: "walletProfileId",
+    args: [wallet as Address],
+  }) as bigint;
+
+  if (existingProfileIdByWallet > 0n) {
+    throw new ApiError(409, "wallet_linked", "This wallet is already linked to an onchain profile");
+  }
+
   const deadline = signatureDeadline();
   const salt = randomSalt();
 
@@ -1469,18 +1499,40 @@ async function getOnchainActiveBondHeat(profileId: number): Promise<number> {
   return rows.reduce((sum, row) => sum + safeNumber(row.heat_score), 0);
 }
 
-export async function buildDailyClaimSignature(input: {
+export async function getDailyClaimState(input: {
   wallet: string;
   session: SessionIdentity;
 }) {
   if (!input.session.profileId) {
-    throw new ApiError(409, "profile_required", "Create a profile before claiming daily JBM");
+    return {
+      wallet: null,
+      profile_id: null,
+      period_id: currentDailyPeriodId().toString(),
+      amount: null,
+      amount_jbm: null,
+      active_bond_heat: 0,
+      already_claimed: false,
+      can_claim: false,
+      reason: "profile_required",
+      next_claim_at_unix: Number((currentDailyPeriodId() + 1n) * 86_400n),
+    };
   }
 
   const wallet = requireSessionWallet(input.wallet, input.session);
   const linkedWallets = input.session.profile?.wallets ?? [];
   if (!linkedWallets.some((entry) => entry.toLowerCase() === wallet.toLowerCase())) {
-    throw new ApiError(409, "wallet_not_linked", "Link this wallet onchain before claiming daily JBM");
+    return {
+      wallet,
+      profile_id: input.session.profileId,
+      period_id: currentDailyPeriodId().toString(),
+      amount: null,
+      amount_jbm: null,
+      active_bond_heat: 0,
+      already_claimed: false,
+      can_claim: false,
+      reason: "wallet_not_linked",
+      next_claim_at_unix: Number((currentDailyPeriodId() + 1n) * 86_400n),
+    };
   }
 
   const periodId = currentDailyPeriodId();
@@ -1491,17 +1543,46 @@ export async function buildDailyClaimSignature(input: {
     args: [wallet as Address, periodId],
   }) as boolean;
 
-  if (alreadyClaimed) {
+  const totalHeat = await getOnchainActiveBondHeat(input.session.profileId);
+  const amountJbm = totalHeat > 0
+    ? Math.max(1, Math.round(Math.min(totalHeat * 10, CONFIG.DAILY_CLAIM_CAP_JBM)))
+    : 0;
+
+  return {
+    wallet,
+    profile_id: input.session.profileId,
+    period_id: periodId.toString(),
+    amount: amountJbm > 0 ? parseUnits(String(amountJbm), 18).toString() : null,
+    amount_jbm: amountJbm > 0 ? String(amountJbm) : null,
+    active_bond_heat: totalHeat,
+    already_claimed,
+    can_claim: !alreadyClaimed && totalHeat > 0,
+    reason: alreadyClaimed
+      ? "already_claimed"
+      : totalHeat > 0
+        ? null
+        : "no_active_bonds",
+    next_claim_at_unix: Number((periodId + 1n) * 86_400n),
+  };
+}
+
+export async function buildDailyClaimSignature(input: {
+  wallet: string;
+  session: SessionIdentity;
+}) {
+  const claimState = await getDailyClaimState(input);
+  if (!input.session.profileId) {
+    throw new ApiError(409, "profile_required", "Create a profile before claiming daily JBM");
+  }
+  if (claimState.reason === "wallet_not_linked") {
+    throw new ApiError(409, "wallet_not_linked", "Link this wallet onchain before claiming daily JBM");
+  }
+  if (claimState.already_claimed) {
     throw new ApiError(409, "already_claimed", "This wallet already claimed daily JBM for the current period");
   }
-
-  const totalHeat = await getOnchainActiveBondHeat(input.session.profileId);
-  if (totalHeat <= 0) {
+  if (!claimState.can_claim || !claimState.amount || !claimState.amount_jbm || !claimState.wallet) {
     throw new ApiError(409, "no_active_bonds", "Install into a bungalow first to activate a permanent bond");
   }
-
-  const amountJbm = Math.max(1, Math.round(Math.min(totalHeat * 10, CONFIG.DAILY_CLAIM_CAP_JBM)));
-  const amount = parseUnits(String(amountJbm), 18);
   const deadline = signatureDeadline();
   const salt = randomSalt();
 
@@ -1523,9 +1604,9 @@ export async function buildDailyClaimSignature(input: {
       ],
     },
     message: {
-      wallet: wallet as Address,
-      periodId,
-      amount,
+      wallet: claimState.wallet as Address,
+      periodId: BigInt(claimState.period_id),
+      amount: BigInt(claimState.amount),
       salt,
       deadline,
     },
@@ -1533,11 +1614,11 @@ export async function buildDailyClaimSignature(input: {
 
   return {
     contract_address: ONCHAIN_CONTRACTS.islandIdentity,
-    wallet,
+    wallet: claimState.wallet,
     profile_id: input.session.profileId,
-    period_id: periodId.toString(),
-    amount,
-    amount_jbm: String(amountJbm),
+    period_id: claimState.period_id,
+    amount: claimState.amount,
+    amount_jbm: claimState.amount_jbm,
     salt,
     deadline: deadline.toString(),
     sig: signature,
@@ -1548,18 +1629,8 @@ async function getMintQuoteUsdcRaw(input: {
   chain: string;
   tokenAddress: string;
 }): Promise<bigint> {
-  const normalizedChain = normalizeAssetChain(input.chain);
-  if (normalizedChain !== "base" && normalizedChain !== "ethereum") {
-    return 0n;
-  }
-
-  const market = await fetchDexScreenerData(
-    input.tokenAddress,
-    normalizedChain as "base" | "ethereum",
-  ).catch(() => null);
-  const marketCap = safeNumber(market?.marketCap ?? 0);
-  const priceUsdc = marketCap > 0 ? Math.max(1, marketCap * 0.001) : 1;
-  return parseUnits(priceUsdc.toFixed(2), 6);
+  void input;
+  return 10_000_000n;
 }
 
 export async function buildMintQuoteSignature(input: {
@@ -1608,6 +1679,7 @@ export async function buildMintQuoteSignature(input: {
     types: {
       MintPrice: [
         { name: "assetKey", type: "bytes32" },
+        { name: "wallet", type: "address" },
         { name: "priceUSDC", type: "uint256" },
         { name: "salt", type: "bytes32" },
         { name: "deadline", type: "uint256" },
@@ -1615,6 +1687,7 @@ export async function buildMintQuoteSignature(input: {
     },
     message: {
       assetKey,
+      wallet: wallet as Address,
       priceUSDC: priceRaw,
       salt,
       deadline,
@@ -2024,6 +2097,8 @@ export async function getCommissionList(input: {
         bungalow.name AS bungalow_name,
         bungalow.seed_chain,
         bungalow.seed_token_address,
+        c.requester_rejections::text AS requester_rejections,
+        c.requester_warning,
         (
           SELECT COUNT(*)::int
           FROM "${CONFIG.SCHEMA}".${APPLICATION_TABLE} a
@@ -2055,6 +2130,8 @@ export async function getCommissionList(input: {
     bungalow_name: string | null;
     seed_chain: string | null;
     seed_token_address: string | null;
+    requester_rejections: string;
+    requester_warning: boolean;
     application_count: number;
   }>;
 

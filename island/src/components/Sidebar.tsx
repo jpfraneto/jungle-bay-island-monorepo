@@ -49,12 +49,12 @@ export default function Sidebar({
             type="button"
             className={styles.itemButton}
             onClick={() => {
-              navigate("/heat-score");
+              navigate("/profile");
               onClose();
             }}
           >
             <span>🔥</span>
-            <span>Heat Score</span>
+            <span>Profile</span>
           </button>
           <button
             type="button"
@@ -67,17 +67,6 @@ export default function Sidebar({
             <span>📝</span>
             <span>Changelog</span>
           </button>
-          {/* <button
-            type="button"
-            className={styles.itemButton}
-            onClick={() => {
-              navigate("/mining-zones");
-              onClose();
-            }}
-          >
-            <span>⛏️</span>
-            <span>Mining Zones</span>
-          </button> */}
         </section>
 
         <section className={styles.section}>

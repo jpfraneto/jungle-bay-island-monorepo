@@ -18,9 +18,7 @@ interface HomeTeamBungalowRow {
   price_usd: string | null;
 }
 
-const homeTeamRoute = new Hono<AppEnv>();
-
-homeTeamRoute.get("/home-team", async (c) => {
+export async function loadHomeTeamBungalows() {
   const rows = await db<HomeTeamBungalowRow[]>`
     SELECT
       b.token_address,
@@ -125,7 +123,13 @@ homeTeamRoute.get("/home-team", async (c) => {
       return (a.name ?? "").localeCompare(b.name ?? "");
     });
 
-  return c.json({ bungalows: sortedBungalows });
+  return sortedBungalows;
+}
+
+const homeTeamRoute = new Hono<AppEnv>();
+
+homeTeamRoute.get("/home-team", async (c) => {
+  return c.json({ bungalows: await loadHomeTeamBungalows() });
 });
 
 export { homeTeamRoute };

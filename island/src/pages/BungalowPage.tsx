@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useOutletContext, useParams, useSearchParams } from "react-router-dom";
 import { type Address } from "viem";
 import { usePrivy } from "@privy-io/react-auth";
+import type { LayoutOutletContext } from "../components/Layout";
 import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
 import styles from "../styles/bungalow-page.module.css";
 import {
+  type AppBungalowState,
   confirmTrackedTx,
   ensureUsdcAllowance,
   fetchAuthedJson,
@@ -16,8 +18,6 @@ import {
   normalizeTxError,
   ONCHAIN_CONTRACTS,
   trackSubmittedTx,
-  type OnchainBungalowPage,
-  type OnchainMeResponse,
 } from "../utils/onchain";
 
 function looksLikeAssetRef(value: string): boolean {
@@ -35,9 +35,9 @@ export default function BungalowPage() {
   const chain = (searchParams.get("chain") ?? "base").trim().toLowerCase();
   const assetRef = (identifier ?? "").trim();
   const { authenticated, getAccessToken } = usePrivy();
+  const { refreshMeState } = useOutletContext<LayoutOutletContext>();
   const { publicClient, requireWallet } = usePrivyBaseWallet();
-  const [page, setPage] = useState<OnchainBungalowPage | null>(null);
-  const [me, setMe] = useState<OnchainMeResponse | null>(null);
+  const [state, setState] = useState<AppBungalowState | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -57,30 +57,22 @@ export default function BungalowPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const headers = authenticated
-        ? {
-            Authorization: `Bearer ${(await getAccessToken()) ?? ""}`,
-          }
-        : undefined;
+      const payload = authenticated
+        ? await fetchAuthedJson<AppBungalowState>(
+            `/api/state/bungalow/${encodeURIComponent(chain)}/${encodeURIComponent(assetRef)}`,
+            getAccessToken,
+          )
+        : await fetchJson<AppBungalowState>(
+            `/api/state/bungalow/${encodeURIComponent(chain)}/${encodeURIComponent(assetRef)}`,
+          );
 
-      const [bungalowPayload, mePayload] = await Promise.all([
-        fetchJson<OnchainBungalowPage>(
-          `/api/onchain/bungalows/${encodeURIComponent(chain)}/${encodeURIComponent(assetRef)}`,
-          { headers },
-        ),
-        authenticated
-          ? fetchAuthedJson<OnchainMeResponse>("/api/onchain/me", getAccessToken)
-          : Promise.resolve(null),
-      ]);
-
-      setPage(bungalowPayload);
-      setMe(mePayload);
-      setName(bungalowPayload.name ?? "");
-      setTicker(bungalowPayload.ticker ?? "");
-      setIpfsHash(bungalowPayload.ipfs_hash ?? "");
+      setState(payload);
+      setName(payload.page.name ?? "");
+      setTicker(payload.page.ticker ?? "");
+      setIpfsHash(payload.page.ipfs_hash ?? "");
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : "Failed to load bungalow");
-      setPage(null);
+      setState(null);
     } finally {
       setIsLoading(false);
     }
@@ -90,6 +82,8 @@ export default function BungalowPage() {
     void refetch();
   }, [assetRef, authenticated, chain]);
 
+  const page = state?.page ?? null;
+  const me = state?.me ?? null;
   const canClaim = Boolean(me?.profile && !page?.exists);
 
   const runDirectWrite = async (input: {
@@ -163,7 +157,7 @@ export default function BungalowPage() {
       setStatus("Waiting for confirmation...");
       await publicClient.waitForTransactionReceipt({ hash: txHash });
       await confirmTrackedTx(getAccessToken, txHash);
-      await refetch();
+      await Promise.all([refetch(), refreshMeState()]);
       setStatus("Onchain state updated.");
     } catch (txError) {
       setError(normalizeTxError(txError, "Transaction failed"));
@@ -488,6 +482,66 @@ export default function BungalowPage() {
               )}
             </section>
           </div>
+
+          <div className={styles.twoColumn}>
+            <section className={styles.section}>
+              <div className={styles.sectionHeader}>
+                <strong>Heat leaderboard</strong>
+                <span>Offchain ranking</span>
+              </div>
+              {state?.heat_leaderboard.length ? (
+                <ul className={styles.installList}>
+                  {state.heat_leaderboard.map((entry) => (
+                    <li key={entry.wallet}>
+                      <strong>{entry.handle ? `@${entry.handle}` : compactAddress(entry.wallet)}</strong>
+                      <span>{entry.heat_score} heat</span>
+                      <small>{entry.island_heat ? `${entry.island_heat} island heat` : "holder"}</small>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className={styles.inlineCopy}>Heat data will appear here once the token scan completes.</p>
+              )}
+            </section>
+
+            <section className={styles.section}>
+              <div className={styles.sectionHeader}>
+                <strong>Bond holders</strong>
+                <span>Profiles with permanent bond</span>
+              </div>
+              {state?.bond_holders.length ? (
+                <ul className={styles.installList}>
+                  {state.bond_holders.map((holder) => (
+                    <li key={holder.profile_id}>
+                      <strong>{holder.handle ? `@${holder.handle}` : `Profile ${holder.profile_id}`}</strong>
+                      <span>{holder.heat_score} synced heat</span>
+                      <small>{holder.main_wallet ? compactAddress(holder.main_wallet) : "wallet pending"}</small>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className={styles.inlineCopy}>No permanent bonds have activated for this bungalow yet.</p>
+              )}
+            </section>
+          </div>
+
+          {state?.recent_txs.length ? (
+            <section className={styles.section}>
+              <div className={styles.sectionHeader}>
+                <strong>Recent onchain actions</strong>
+                <span>Indexed from Base tx hashes</span>
+              </div>
+              <ul className={styles.installList}>
+                {state.recent_txs.map((tx) => (
+                  <li key={tx.tx_hash}>
+                    <strong>{tx.action}</strong>
+                    <span>{tx.status}</span>
+                    <small>{tx.tx_hash.slice(0, 10)}...</small>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
         </>
       )}
     </section>

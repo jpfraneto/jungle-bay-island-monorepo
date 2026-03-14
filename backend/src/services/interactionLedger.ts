@@ -38,6 +38,25 @@ export interface InteractionLedgerUpdate {
   metadata?: Record<string, unknown> | null
 }
 
+export interface InteractionLedgerRow {
+  tx_hash: string
+  action: string
+  function_name: string | null
+  status: string
+  wallet: string | null
+  profile_id: number | null
+  bungalow_id: number | null
+  item_id: number | null
+  commission_id: number | null
+  application_id: number | null
+  block_number: number | null
+  error_message: string | null
+  metadata: Record<string, unknown> | null
+  created_at: string
+  updated_at: string
+  confirmed_at: string | null
+}
+
 async function ensureInteractionLedger(): Promise<void> {
   if (!interactionLedgerPromise) {
     interactionLedgerPromise = (async () => {
@@ -190,4 +209,67 @@ export async function updateOnchainInteraction(
       updated_at = NOW()
     WHERE tx_hash = ${txHash.toLowerCase()}
   `
+}
+
+export async function listOnchainInteractions(input?: {
+  wallet?: string | null
+  profileId?: number | null
+  bungalowId?: number | null
+  commissionId?: number | null
+  limit?: number
+}): Promise<InteractionLedgerRow[]> {
+  await ensureInteractionLedger()
+
+  const limit = Math.max(1, Math.min(100, input?.limit ?? 12))
+  const params: Array<string | number> = []
+  const where: string[] = []
+
+  if (input?.wallet) {
+    params.push(input.wallet.toLowerCase())
+    where.push(`LOWER(wallet) = $${params.length}`)
+  }
+
+  if (typeof input?.profileId === 'number' && Number.isFinite(input.profileId)) {
+    params.push(input.profileId)
+    where.push(`profile_id = $${params.length}`)
+  }
+
+  if (typeof input?.bungalowId === 'number' && Number.isFinite(input.bungalowId)) {
+    params.push(input.bungalowId)
+    where.push(`bungalow_id = $${params.length}`)
+  }
+
+  if (typeof input?.commissionId === 'number' && Number.isFinite(input.commissionId)) {
+    params.push(input.commissionId)
+    where.push(`commission_id = $${params.length}`)
+  }
+
+  params.push(limit)
+
+  return await db.unsafe<InteractionLedgerRow[]>(
+    `
+      SELECT
+        tx_hash,
+        action,
+        function_name,
+        status,
+        wallet,
+        profile_id::int AS profile_id,
+        bungalow_id::int AS bungalow_id,
+        item_id::int AS item_id,
+        commission_id::int AS commission_id,
+        application_id::int AS application_id,
+        block_number::int AS block_number,
+        error_message,
+        COALESCE(metadata, '{}'::jsonb) AS metadata,
+        created_at::text AS created_at,
+        updated_at::text AS updated_at,
+        confirmed_at::text AS confirmed_at
+      FROM "${CONFIG.SCHEMA}".onchain_interactions
+      ${where.length > 0 ? `WHERE ${where.join(' AND ')}` : ''}
+      ORDER BY COALESCE(confirmed_at, created_at) DESC, created_at DESC
+      LIMIT $${params.length}
+    `,
+    params,
+  )
 }

@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useOutletContext } from "react-router-dom";
 import { usePrivy } from "@privy-io/react-auth";
 import { type Address, parseUnits } from "viem";
+import type { LayoutOutletContext } from "../components/Layout";
 import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
 import styles from "../styles/commissions-page.module.css";
 import {
+  type AppCommissionsState,
   commissionManagerAbi,
   confirmTrackedTx,
   fetchAuthedJson,
@@ -14,24 +16,17 @@ import {
   normalizeTxError,
   ONCHAIN_CONTRACTS,
   trackSubmittedTx,
-  type OnchainCommissionListItem,
-  type OnchainMeResponse,
 } from "../utils/onchain";
-
-interface CommissionListResponse {
-  items: OnchainCommissionListItem[];
-  scope: string;
-  viewer_profile_id: number | null;
-}
 
 const SCOPES = ["open", "requesting", "working", "resolved"] as const;
 
 export default function CommissionsPage() {
+  const selectionWindowSeconds = 24 * 60 * 60;
   const { authenticated, getAccessToken } = usePrivy();
+  const { refreshMeState } = useOutletContext<LayoutOutletContext>();
   const { publicClient, requireWallet } = usePrivyBaseWallet();
   const [scope, setScope] = useState<(typeof SCOPES)[number]>("open");
-  const [data, setData] = useState<CommissionListResponse | null>(null);
-  const [me, setMe] = useState<OnchainMeResponse | null>(null);
+  const [data, setData] = useState<AppCommissionsState | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -47,14 +42,13 @@ export default function CommissionsPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const [listPayload, mePayload] = await Promise.all([
-        fetchJson<CommissionListResponse>(`/api/onchain/commissions?scope=${scope}`),
-        authenticated
-          ? fetchAuthedJson<OnchainMeResponse>("/api/onchain/me", getAccessToken)
-          : Promise.resolve(null),
-      ]);
-      setData(listPayload);
-      setMe(mePayload);
+      const payload = authenticated
+        ? await fetchAuthedJson<AppCommissionsState>(
+            `/api/state/commissions?scope=${scope}`,
+            getAccessToken,
+          )
+        : await fetchJson<AppCommissionsState>(`/api/state/commissions?scope=${scope}`);
+      setData(payload);
     } catch (fetchError) {
       setError(
         fetchError instanceof Error ? fetchError.message : "Failed to load commissions",
@@ -79,6 +73,10 @@ export default function CommissionsPage() {
       const budget = parseUnits(form.budgetUsdc.trim(), 6);
       const deadline = Math.floor(new Date(form.deadline).getTime() / 1000);
 
+      if (!Number.isFinite(deadline) || deadline <= Math.floor(Date.now() / 1000) + selectionWindowSeconds) {
+        throw new Error("Deadline must be at least 24 hours in the future.");
+      }
+
       const txHash = await walletClient.writeContract({
         account: address as Address,
         address: ONCHAIN_CONTRACTS.commissionManager,
@@ -100,7 +98,7 @@ export default function CommissionsPage() {
       setStatus("Waiting for confirmation...");
       await publicClient.waitForTransactionReceipt({ hash: txHash });
       await confirmTrackedTx(getAccessToken, txHash);
-      await refetch();
+      await Promise.all([refetch(), refreshMeState()]);
       setStatus("Commission published.");
     } catch (txError) {
       setError(normalizeTxError(txError, "Publish failed"));
@@ -170,11 +168,11 @@ export default function CommissionsPage() {
           type="button"
           className={styles.primaryButton}
           onClick={() => void handlePublish()}
-          disabled={txBusy || !me?.profile || !form.bungalowId || !form.promptUri || !form.budgetUsdc || !form.deadline}
+          disabled={txBusy || !data?.me?.profile || !form.bungalowId || !form.promptUri || !form.budgetUsdc || !form.deadline}
         >
           Publish commission
         </button>
-        {!me?.profile ? (
+        {!data?.me?.profile ? (
           <p className={styles.inlineHint}>Create your profile first before publishing or applying.</p>
         ) : null}
       </div>
@@ -210,6 +208,13 @@ export default function CommissionsPage() {
               <span>{item.application_count} application(s)</span>
               <span>{formatUnixDate(item.deadline_unix)}</span>
             </div>
+            {item.requester_rejections !== "0" || item.requester_warning ? (
+              <p className={styles.inlineHint}>
+                {item.requester_warning
+                  ? `Requester warning flag onchain. Rejections: ${item.requester_rejections}.`
+                  : `Requester rejections on record: ${item.requester_rejections}.`}
+              </p>
+            ) : null}
           </Link>
         ))}
       </div>

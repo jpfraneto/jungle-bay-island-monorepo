@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useOutletContext, useParams } from "react-router-dom";
 import { usePrivy } from "@privy-io/react-auth";
 import { type Address, parseUnits } from "viem";
+import type { LayoutOutletContext } from "../components/Layout";
 import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
 import styles from "../styles/commission-detail-page.module.css";
 import {
+  type AppCommissionDetailState,
   commissionManagerAbi,
   confirmTrackedTx,
   ensureUsdcAllowance,
@@ -17,12 +19,6 @@ import {
   parseUsdcRaw,
   trackSubmittedTx,
 } from "../utils/onchain";
-
-interface CommissionDetailResponse {
-  commission: Record<string, unknown>;
-  applications: Array<Record<string, unknown>>;
-  viewer: Record<string, unknown>;
-}
 
 function asNumber(value: unknown): number {
   const numeric = Number(value ?? 0);
@@ -40,8 +36,9 @@ function asBoolean(value: unknown): boolean {
 export default function CommissionDetailPage() {
   const { commission_id } = useParams<{ commission_id: string }>();
   const { authenticated, getAccessToken } = usePrivy();
+  const { refreshMeState } = useOutletContext<LayoutOutletContext>();
   const { publicClient, requireWallet } = usePrivyBaseWallet();
-  const [data, setData] = useState<CommissionDetailResponse | null>(null);
+  const [data, setData] = useState<AppCommissionDetailState | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -62,11 +59,11 @@ export default function CommissionDetailPage() {
     setError(null);
     try {
       const payload = authenticated
-        ? await fetchAuthedJson<CommissionDetailResponse>(
-            `/api/onchain/commissions/${commissionId}`,
+        ? await fetchAuthedJson<AppCommissionDetailState>(
+            `/api/state/commissions/${commissionId}`,
             getAccessToken,
           )
-        : await fetchJson<CommissionDetailResponse>(`/api/onchain/commissions/${commissionId}`);
+        : await fetchJson<AppCommissionDetailState>(`/api/state/commissions/${commissionId}`);
       setData(payload);
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : "Failed to load commission");
@@ -144,7 +141,7 @@ export default function CommissionDetailPage() {
       setStatus("Waiting for confirmation...");
       await publicClient.waitForTransactionReceipt({ hash: txHash });
       await confirmTrackedTx(getAccessToken, txHash);
-      await refetch();
+      await Promise.all([refetch(), refreshMeState()]);
       setStatus("Commission state updated.");
     } catch (txError) {
       setError(normalizeTxError(txError, "Transaction failed"));
@@ -201,6 +198,7 @@ export default function CommissionDetailPage() {
           <strong>{asString(commission.requester_handle) || `Profile ${asNumber(commission.requester_profile_id)}`}</strong>
           <p>{asString(commission.seed_chain)}:{asString(commission.seed_token_address)}</p>
           <p>Rejections {asString(commission.requester_rejections)}</p>
+          <p>{asBoolean(commission.requester_warning) ? "Requester warning flag onchain." : "No warning flag."}</p>
         </article>
 
         <article className={styles.card}>

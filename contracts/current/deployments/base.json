@@ -1,22 +1,22 @@
 {
   "chain": "base",
   "chainId": 8453,
-  "deploymentBlock": 43303971,
+  "deploymentBlock": 43326546,
   "contracts": {
     "IslandIdentity": {
-      "address": "0x2e892E781a79E432Ca332cDa8C438AbEc30859bc",
+      "address": "0x0BF6AE6bc96E406C8c07f7B45b46133856696778",
       "abi": "contracts/current/abi/IslandIdentity.json"
     },
     "JungleBayIsland": {
-      "address": "0xcF05B46fD0D2aA1a23241CE6f8F376e2f6e7D8Ed",
+      "address": "0x911Cb0A12889DF799f46399A4116cDba4fa05e78",
       "abi": "contracts/current/abi/JungleBayIsland.json"
     },
     "Bodega": {
-      "address": "0xadf3873700A20381c7cd6dcf8EF00ce42606d0f7",
+      "address": "0x9ec67E404BaAcf1b70727A992707c4DFe18DE0BA",
       "abi": "contracts/current/abi/Bodega.json"
     },
     "CommissionManager": {
-      "address": "0x8D5dC82d314749c954f185f11c67729E885955BE",
+      "address": "0xE22a53F5Eb3DE5c21F9A522c5B4bD2e48d364da4",
       "abi": "contracts/current/abi/CommissionManager.json"
     }
   },
@@ -25,7 +25,7 @@
     "JBM": "0x3313338Fe4bB2A166B81483bfCb2d4A6A1ebBa8D"
   },
   "roles": {
-    "backendSigner": "0xCbED71C4495d0C2a13e0672AdCf60e7647b00a6e",
+    "backendSigner": "0xe91B8920Ef5DBf6e1289991F1CE4eeF3671A610E",
     "owner": "0xe91B8920Ef5DBf6e1289991F1CE4eeF3671A610E",
     "treasury": "0xe91B8920Ef5DBf6e1289991F1CE4eeF3671A610E"
   }

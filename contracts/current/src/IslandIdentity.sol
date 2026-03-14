@@ -59,27 +59,21 @@ contract IslandIdentity is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
     // ─────────────────────────────────────────────────────────────
 
     uint256 internal constant MAX_HANDLE_LENGTH = 50;
-    uint256 internal constant MIN_HEAT_TO_INSTALL = 10;
-
     // ─────────────────────────────────────────────────────────────
     // EIP-712 type hashes
     // ─────────────────────────────────────────────────────────────
 
-    bytes32 internal constant REGISTER_TYPEHASH = keccak256(
-        "Register(uint64 xUserId,string xHandle,address wallet,uint256 heatScore,bytes32 salt,uint256 deadline)"
-    );
+    bytes32 internal constant REGISTER_TYPEHASH =
+        keccak256("Register(uint64 xUserId,string xHandle,address wallet,bytes32 salt,uint256 deadline)");
 
-    bytes32 internal constant LINK_WALLET_TYPEHASH = keccak256(
-        "LinkWallet(uint256 profileId,address wallet,bytes32 salt,uint256 deadline)"
-    );
+    bytes32 internal constant LINK_WALLET_TYPEHASH =
+        keccak256("LinkWallet(uint256 profileId,address wallet,bytes32 salt,uint256 deadline)");
 
-    bytes32 internal constant SYNC_HEAT_TYPEHASH = keccak256(
-        "SyncHeat(uint256 profileId,uint256 bungalowId,uint256 heatScore,bytes32 salt,uint256 deadline)"
-    );
+    bytes32 internal constant SYNC_HEAT_TYPEHASH =
+        keccak256("SyncHeat(uint256 profileId,uint256 bungalowId,uint256 heatScore,bytes32 salt,uint256 deadline)");
 
-    bytes32 internal constant CLAIM_JBM_TYPEHASH = keccak256(
-        "ClaimDailyJBM(address wallet,uint256 periodId,uint256 amount,bytes32 salt,uint256 deadline)"
-    );
+    bytes32 internal constant CLAIM_JBM_TYPEHASH =
+        keccak256("ClaimDailyJBM(address wallet,uint256 periodId,uint256 amount,bytes32 salt,uint256 deadline)");
 
     // ─────────────────────────────────────────────────────────────
     // Structs
@@ -87,12 +81,12 @@ contract IslandIdentity is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
 
     struct Profile {
         uint256 id;
-        uint64  xUserId;         // immutable — the true identity
-        string  xHandle;         // cosmetic — can change, never breaks identity
+        uint64 xUserId; // immutable — the true identity
+        string xHandle; // cosmetic — can change, never breaks identity
         address mainWallet;
-        uint64  createdAt;
-        uint64  updatedAt;
-        bool    hardcoreWarning; // admin-set flag. a scarlet letter. visible to all.
+        uint64 createdAt;
+        uint64 updatedAt;
+        bool hardcoreWarning; // admin-set flag. a scarlet letter. visible to all.
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -113,24 +107,25 @@ contract IslandIdentity is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
     error AlreadyClaimedPeriod();
     error InsufficientHeat();
     error BondAlreadyActivated();
+    error NoActiveBond();
     error InvalidEscrow();
 
     // ─────────────────────────────────────────────────────────────
     // State
     // ─────────────────────────────────────────────────────────────
 
-    IERC20  public immutable jbmToken;
+    IERC20 public immutable jbmToken;
     address public backendSigner;
-    address public jbmEscrow;      // wallet that holds JBM for daily distribution
-    address public bodega;         // only Bodega can activate bonds
+    address public jbmEscrow; // wallet that holds JBM for daily distribution
+    address public bodega; // only Bodega can activate bonds
 
     uint256 public profileCount;
 
-    mapping(bytes32 => bool)    public usedDigests;
+    mapping(bytes32 => bool) public usedDigests;
 
-    mapping(uint256 => Profile)   private _profiles;
-    mapping(uint64  => uint256)   public profileIdByXUserId;
-    mapping(address => uint256)   public walletProfileId;
+    mapping(uint256 => Profile) private _profiles;
+    mapping(uint64 => uint256) public profileIdByXUserId;
+    mapping(address => uint256) public walletProfileId;
     mapping(uint256 => address[]) private _profileWallets;
     mapping(uint256 => mapping(address => uint256)) private _walletIndex;
 
@@ -141,6 +136,7 @@ contract IslandIdentity is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
     // bond: profileId => bungalowId => activated
     // once true, this wallet group is forever eligible for JBM from this bungalow
     mapping(uint256 => mapping(uint256 => bool)) public bondActivated;
+    mapping(uint256 => uint256) public activeBondCount;
 
     // JBM claim: wallet => periodId => claimed
     // any linked wallet can claim once per day independently
@@ -170,9 +166,10 @@ contract IslandIdentity is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
         EIP712("IslandIdentity", "1")
         Ownable(initialOwner)
     {
-        if (initialOwner == address(0) || jbmToken_ == address(0) || backendSigner_ == address(0))
+        if (initialOwner == address(0) || jbmToken_ == address(0) || backendSigner_ == address(0)) {
             revert InvalidAddress();
-        jbmToken      = IERC20(jbmToken_);
+        }
+        jbmToken = IERC20(jbmToken_);
         backendSigner = backendSigner_;
     }
 
@@ -180,8 +177,13 @@ contract IslandIdentity is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
     // Admin
     // ─────────────────────────────────────────────────────────────
 
-    function pause()   external onlyOwner { _pause(); }
-    function unpause() external onlyOwner { _unpause(); }
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    function unpause() external onlyOwner {
+        _unpause();
+    }
 
     function setBackendSigner(address s) external onlyOwner {
         if (s == address(0)) revert InvalidAddress();
@@ -220,31 +222,29 @@ contract IslandIdentity is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
      *         The X user ID is the soul. The handle is the face.
      *         The backend will only sign this if the X OAuth flow completed.
      */
-    function register(
-        uint64         xUserId,
-        string calldata xHandle,
-        uint256        heatScore_,
-        bytes32        salt,
-        uint256        deadline,
-        bytes calldata sig
-    ) external whenNotPaused returns (uint256 profileId) {
+    function register(uint64 xUserId, string calldata xHandle, bytes32 salt, uint256 deadline, bytes calldata sig)
+        external
+        whenNotPaused
+        returns (uint256 profileId)
+    {
         if (walletProfileId[msg.sender] != 0) revert WalletAlreadyLinked();
         if (profileIdByXUserId[xUserId] != 0) revert XUserIdAlreadyRegistered();
         _requireBoundedString(xHandle, 1, MAX_HANDLE_LENGTH);
 
         _consumeAttestation(
-            keccak256(abi.encode(REGISTER_TYPEHASH, xUserId, keccak256(bytes(xHandle)), msg.sender, heatScore_, salt, deadline)),
-            sig, deadline
+            keccak256(abi.encode(REGISTER_TYPEHASH, xUserId, keccak256(bytes(xHandle)), msg.sender, salt, deadline)),
+            sig,
+            deadline
         );
 
         profileId = ++profileCount;
         _profiles[profileId] = Profile({
-            id:             profileId,
-            xUserId:        xUserId,
-            xHandle:        xHandle,
-            mainWallet:     msg.sender,
-            createdAt:      uint64(block.timestamp),
-            updatedAt:      uint64(block.timestamp),
+            id: profileId,
+            xUserId: xUserId,
+            xHandle: xHandle,
+            mainWallet: msg.sender,
+            createdAt: uint64(block.timestamp),
+            updatedAt: uint64(block.timestamp),
             hardcoreWarning: false
         });
 
@@ -258,18 +258,12 @@ contract IslandIdentity is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
      * @notice Link an additional wallet to an existing profile.
      *         The backend signs this after verifying the X session.
      */
-    function linkWallet(
-        uint256        profileId,
-        bytes32        salt,
-        uint256        deadline,
-        bytes calldata sig
-    ) external whenNotPaused {
+    function linkWallet(uint256 profileId, bytes32 salt, uint256 deadline, bytes calldata sig) external whenNotPaused {
         if (walletProfileId[msg.sender] != 0) revert WalletAlreadyLinked();
         _requireProfileExists(profileId);
 
         _consumeAttestation(
-            keccak256(abi.encode(LINK_WALLET_TYPEHASH, profileId, msg.sender, salt, deadline)),
-            sig, deadline
+            keccak256(abi.encode(LINK_WALLET_TYPEHASH, profileId, msg.sender, salt, deadline)), sig, deadline
         );
 
         _linkWallet(profileId, msg.sender);
@@ -285,8 +279,11 @@ contract IslandIdentity is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
         if (walletProfileId[wallet] != profileId) revert WalletNotLinked();
         if (_profileWallets[profileId].length <= 1) revert LastWalletRemovalForbidden();
 
+        address mainWallet = _profiles[profileId].mainWallet;
+        if (wallet != msg.sender && msg.sender != mainWallet) revert Unauthorized();
+
         // If removing main wallet, promote the first remaining one
-        if (_profiles[profileId].mainWallet == wallet) {
+        if (mainWallet == wallet) {
             address[] storage wallets = _profileWallets[profileId];
             address next = wallets[0] == wallet ? wallets[1] : wallets[0];
             _profiles[profileId].mainWallet = next;
@@ -304,7 +301,7 @@ contract IslandIdentity is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
     function updateHandle(string calldata newHandle) external whenNotPaused {
         uint256 profileId = _callerProfileId();
         _requireBoundedString(newHandle, 1, MAX_HANDLE_LENGTH);
-        _profiles[profileId].xHandle  = newHandle;
+        _profiles[profileId].xHandle = newHandle;
         _profiles[profileId].updatedAt = uint64(block.timestamp);
         emit HandleUpdated(profileId, newHandle);
     }
@@ -319,19 +316,18 @@ contract IslandIdentity is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
      *         or directly if you just want the record updated.
      */
     function syncHeat(
-        uint256        profileId,
-        uint256        bungalowId,
-        uint256        score,
-        bytes32        salt,
-        uint256        deadline,
+        uint256 profileId,
+        uint256 bungalowId,
+        uint256 score,
+        bytes32 salt,
+        uint256 deadline,
         bytes calldata sig
     ) external whenNotPaused {
         if (walletProfileId[msg.sender] != profileId) revert Unauthorized();
         _requireProfileExists(profileId);
 
         _consumeAttestation(
-            keccak256(abi.encode(SYNC_HEAT_TYPEHASH, profileId, bungalowId, score, salt, deadline)),
-            sig, deadline
+            keccak256(abi.encode(SYNC_HEAT_TYPEHASH, profileId, bungalowId, score, salt, deadline)), sig, deadline
         );
 
         _updateHeat(profileId, bungalowId, score);
@@ -350,6 +346,7 @@ contract IslandIdentity is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
         if (msg.sender != bodega) revert Unauthorized();
         if (bondActivated[profileId][bungalowId]) revert BondAlreadyActivated();
         bondActivated[profileId][bungalowId] = true;
+        activeBondCount[profileId] += 1;
         emit BondActivated(profileId, bungalowId);
     }
 
@@ -363,22 +360,20 @@ contract IslandIdentity is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
      *
      *         periodId is a daily integer decided by the backend (e.g. unix day).
      */
-    function claimDailyJBM(
-        uint256        periodId,
-        uint256        amount,
-        bytes32        salt,
-        uint256        deadline,
-        bytes calldata sig
-    ) external whenNotPaused nonReentrant {
+    function claimDailyJBM(uint256 periodId, uint256 amount, bytes32 salt, uint256 deadline, bytes calldata sig)
+        external
+        whenNotPaused
+        nonReentrant
+    {
         if (jbmEscrow == address(0)) revert InvalidEscrow();
 
         uint256 profileId = walletProfileId[msg.sender];
         if (profileId == 0) revert Unauthorized();
+        if (activeBondCount[profileId] == 0) revert NoActiveBond();
         if (walletClaimedPeriod[msg.sender][periodId]) revert AlreadyClaimedPeriod();
 
         _consumeAttestation(
-            keccak256(abi.encode(CLAIM_JBM_TYPEHASH, msg.sender, periodId, amount, salt, deadline)),
-            sig, deadline
+            keccak256(abi.encode(CLAIM_JBM_TYPEHASH, msg.sender, periodId, amount, salt, deadline)), sig, deadline
         );
 
         walletClaimedPeriod[msg.sender][periodId] = true;
@@ -392,14 +387,15 @@ contract IslandIdentity is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
     // ─────────────────────────────────────────────────────────────
 
     function getProfile(uint256 profileId)
-        external view
+        external
+        view
         returns (
-            uint64  xUserId,
+            uint64 xUserId,
             string memory xHandle,
             address mainWallet,
             address[] memory wallets,
-            uint64  createdAt,
-            bool    hardcoreWarning
+            uint64 createdAt,
+            bool hardcoreWarning
         )
     {
         _requireProfileExists(profileId);
@@ -418,6 +414,11 @@ contract IslandIdentity is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
 
     function getHeat(uint256 profileId, uint256 bungalowId) external view returns (uint256) {
         return heatScore[profileId][bungalowId];
+    }
+
+    function getProfileWarning(uint256 profileId) external view returns (bool) {
+        _requireProfileExists(profileId);
+        return _profiles[profileId].hardcoreWarning;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -468,7 +469,7 @@ contract IslandIdentity is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
 
     function _updateHeat(uint256 profileId, uint256 bungalowId, uint256 score) internal {
         heatScore[profileId][bungalowId] = score;
-        _profiles[profileId].updatedAt   = uint64(block.timestamp);
+        _profiles[profileId].updatedAt = uint64(block.timestamp);
         emit HeatSynced(profileId, bungalowId, score);
     }
 

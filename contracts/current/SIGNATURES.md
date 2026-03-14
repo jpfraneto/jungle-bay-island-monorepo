@@ -23,18 +23,17 @@ Replay model:
 
 ### Register
 
-- Function: `register(uint64 xUserId, string xHandle, uint256 heatScore_, bytes32 salt, uint256 deadline, bytes sig)`
+- Function: `register(uint64 xUserId, string xHandle, bytes32 salt, uint256 deadline, bytes sig)`
 - Signer: backend signer stored in `IslandIdentity.backendSigner`
 - Caller: registering wallet (`msg.sender`)
 - Typed data:
   - `xUserId: uint64`
   - `xHandle: string`
   - `wallet: address`
-  - `heatScore: uint256`
   - `salt: bytes32`
   - `deadline: uint256`
 - Typehash string:
-  - `Register(uint64 xUserId,string xHandle,address wallet,uint256 heatScore,bytes32 salt,uint256 deadline)`
+  - `Register(uint64 xUserId,string xHandle,address wallet,bytes32 salt,uint256 deadline)`
 - Onchain struct encoding details:
   - the contract encodes `keccak256(bytes(xHandle))`, not the raw string bytes
 - Offchain attestation:
@@ -42,7 +41,6 @@ Replay model:
   - `xUserId` belongs to the logged-in user
   - `xHandle` is the current cosmetic handle for that user
   - backend is willing to initialize the profile for `msg.sender`
-  - initial `heatScore_` value
 
 ### LinkWallet
 
@@ -117,11 +115,12 @@ Replay model:
 - Caller: wallet minting the bungalow (`msg.sender`)
 - Typed data:
   - `assetKey: bytes32`
+  - `wallet: address`
   - `priceUSDC: uint256`
   - `salt: bytes32`
   - `deadline: uint256`
 - Typehash string:
-  - `MintPrice(bytes32 assetKey,uint256 priceUSDC,bytes32 salt,uint256 deadline)`
+  - `MintPrice(bytes32 assetKey,address wallet,uint256 priceUSDC,bytes32 salt,uint256 deadline)`
 - Onchain struct encoding details:
   - the signed value is `assetKey`, not the raw `chain` and `tokenAddress`
   - `assetKey = keccak256(abi.encode(normalizedChain, keccak256(bytes(normalizedTokenAddress))))`
@@ -129,7 +128,7 @@ Replay model:
   - token address/reference is normalized only for case-insensitive chains
 - Offchain attestation:
   - backend-approved mint price in USDC for that asset
-  - backend approved that quote for the specific normalized asset key
+  - backend approved that quote for the specific normalized asset key and caller wallet
 
 ## Bodega
 

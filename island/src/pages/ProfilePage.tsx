@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
-import { Link } from "react-router-dom";
+import { Link, useOutletContext } from "react-router-dom";
 import { type Address } from "viem";
+import type { LayoutOutletContext } from "../components/Layout";
 import { usePrivyBaseWallet } from "../hooks/usePrivyBaseWallet";
 import styles from "../styles/profile-page.module.css";
 import {
@@ -11,7 +12,6 @@ import {
   normalizeTxError,
   ONCHAIN_CONTRACTS,
   trackSubmittedTx,
-  type OnchainMeResponse,
 } from "../utils/onchain";
 
 type ProfileAction = "register" | "linkWallet" | "claimDailyJBM";
@@ -31,39 +31,16 @@ export default function ProfilePage() {
     requireWallet,
     setActiveWallet,
   } = usePrivyBaseWallet();
-  const [data, setData] = useState<OnchainMeResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const { meState, meLoading, meError, refreshMeState } =
+    useOutletContext<LayoutOutletContext>();
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [txBusy, setTxBusy] = useState(false);
+  const data = meState?.me ?? null;
+  const claim = meState?.claim ?? null;
 
   const hasXSession =
     typeof user?.twitter?.username === "string" && user.twitter.username.trim().length > 0;
-
-  const refetch = async () => {
-    if (!authenticated || !hasXSession) {
-      setData(null);
-      setIsLoading(false);
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-    try {
-      const payload = await fetchAuthedJson<OnchainMeResponse>("/api/onchain/me", getAccessToken);
-      setData(payload);
-    } catch (fetchError) {
-      setError(
-        fetchError instanceof Error ? fetchError.message : "Failed to load profile state",
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void refetch();
-  }, [authenticated, hasXSession]);
 
   const selectedWallet = activeWallet?.address ?? walletAddress ?? "";
   const walletLinkedOnchain = useMemo(() => {
@@ -97,7 +74,6 @@ export default function ProfilePage() {
           ? [
               BigInt(String(signaturePayload.x_user_id)),
               String(signaturePayload.x_handle ?? ""),
-              BigInt(String(signaturePayload.heat_score ?? "0")),
               String(signaturePayload.salt ?? "") as `0x${string}`,
               BigInt(String(signaturePayload.deadline ?? "0")),
               String(signaturePayload.sig ?? "") as `0x${string}`,
@@ -142,7 +118,7 @@ export default function ProfilePage() {
       setStatus("Waiting for confirmation...");
       await publicClient.waitForTransactionReceipt({ hash: txHash });
       await confirmTrackedTx(getAccessToken, txHash);
-      await refetch();
+      await refreshMeState();
       setStatus("Onchain state updated.");
     } catch (txError) {
       setError(normalizeTxError(txError, "Transaction failed"));
@@ -237,9 +213,9 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {error ? <p className={styles.error}>{error}</p> : null}
+      {error ?? meError ? <p className={styles.error}>{error ?? meError}</p> : null}
       {status ? <p className={styles.status}>{status}</p> : null}
-      {isLoading ? <p className={styles.loading}>Loading onchain profile...</p> : null}
+      {meLoading ? <p className={styles.loading}>Loading onchain profile...</p> : null}
 
       <div className={styles.grid}>
         <article className={styles.card}>
@@ -274,17 +250,24 @@ export default function ProfilePage() {
 
         <article className={styles.card}>
           <span className={styles.cardLabel}>Daily JBM</span>
-          <strong>{Math.round(data?.heat.active_bond_heat ?? 0)} active bond heat</strong>
+          <strong>{Math.round(claim?.active_bond_heat ?? data?.heat.active_bond_heat ?? 0)} active bond heat</strong>
           <p>
             No user approval is needed here. The contract pulls from escrow after the backend signs the claim.
           </p>
+          {claim?.can_claim && claim.amount_jbm ? (
+            <p>Claimable now: {claim.amount_jbm} JBM.</p>
+          ) : claim?.reason === "already_claimed" ? (
+            <p>Today already claimed from this wallet.</p>
+          ) : claim?.reason === "no_active_bonds" ? (
+            <p>Install into at least one bungalow to activate a permanent bond first.</p>
+          ) : null}
           <button
             type="button"
             className={styles.secondaryButton}
             onClick={handleClaimDaily}
-            disabled={txBusy || !data?.profile || !walletLinkedOnchain}
+            disabled={txBusy || !data?.profile || !walletLinkedOnchain || !claim?.can_claim}
           >
-            Claim daily JBM
+            {claim?.can_claim && claim.amount_jbm ? `Claim ${claim.amount_jbm} JBM` : "Claim daily JBM"}
           </button>
         </article>
       </div>
@@ -326,6 +309,19 @@ export default function ProfilePage() {
           <span>Publish work, apply, select artists, and settle onchain.</span>
         </Link>
       </div>
+
+      {meState?.recent_txs?.length ? (
+        <article className={styles.card}>
+          <span className={styles.cardLabel}>Recent onchain actions</span>
+          <ul>
+            {meState.recent_txs.slice(0, 6).map((tx) => (
+              <li key={tx.tx_hash}>
+                <strong>{tx.action}</strong> · {tx.status} · {tx.tx_hash.slice(0, 10)}...
+              </li>
+            ))}
+          </ul>
+        </article>
+      ) : null}
     </section>
   );
 }

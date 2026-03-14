@@ -167,10 +167,145 @@ export interface OnchainCommissionListItem {
   bungalow_name: string | null;
   seed_chain: string | null;
   seed_token_address: string | null;
+  requester_rejections: string;
+  requester_warning: boolean;
   application_count: number;
 }
 
 export interface OnchainCommissionDetail {
+  commission: Record<string, unknown>;
+  applications: Array<Record<string, unknown>>;
+  viewer: Record<string, unknown>;
+}
+
+export interface AppStateRecentTx {
+  tx_hash: string;
+  action: string;
+  function_name: string | null;
+  status: string;
+  wallet: string | null;
+  profile_id: number | null;
+  bungalow_id: number | null;
+  item_id: number | null;
+  commission_id: number | null;
+  application_id: number | null;
+  block_number: number | null;
+  error_message: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+  confirmed_at: string | null;
+}
+
+export interface AppClaimState {
+  wallet: string | null;
+  profile_id: number | null;
+  period_id: string;
+  amount: string | null;
+  amount_jbm: string | null;
+  active_bond_heat: number;
+  already_claimed: boolean;
+  can_claim: boolean;
+  reason: string | null;
+  next_claim_at_unix: number;
+}
+
+export interface AppMeState {
+  authenticated: boolean;
+  me: OnchainMeResponse | null;
+  claim: AppClaimState | null;
+  recent_txs: AppStateRecentTx[];
+}
+
+export interface StateHomeTeamBungalow {
+  token_address: string;
+  chain: string;
+  canonical_slug?: string | null;
+  name: string | null;
+  symbol: string | null;
+  holder_count: number;
+  image_url: string | null;
+  is_claimed: boolean | null;
+  current_owner: string | null;
+  description: string | null;
+  market_cap: string | null;
+  price_usd: string | null;
+}
+
+export interface AppIslandState {
+  me: OnchainMeResponse | null;
+  bungalows: StateHomeTeamBungalow[];
+  stats: {
+    bungalow_count: number;
+    claimed_count: number;
+  };
+  updated_at_unix: number;
+}
+
+export interface AppBodegaArtistHighlight {
+  artist_profile_id: number;
+  artist_handle: string | null;
+  score: number;
+  rationale: string;
+  metrics: {
+    item_count: number;
+    total_installs: number;
+    distinct_bungalows: number;
+    commissioned_items: number;
+    approved_commissions: number;
+    recent_items: number;
+    recent_installs: number;
+  };
+  feature_item: {
+    item_id: number;
+    ipfs_uri: string;
+    total_minted: string;
+    price_usdc: string;
+    commission_id: number | null;
+    listed_at_unix: number;
+  };
+}
+
+export interface AppBodegaState {
+  me: OnchainMeResponse | null;
+  items: OnchainBodegaItem[];
+  highlighted_artists: AppBodegaArtistHighlight[];
+  updated_at_unix: number;
+}
+
+export interface AppBungalowState {
+  me: OnchainMeResponse | null;
+  page: OnchainBungalowPage;
+  heat_leaderboard: Array<{
+    wallet: string;
+    handle: string | null;
+    heat_score: string;
+    island_heat: string | null;
+    avatar_url: string | null;
+  }>;
+  bond_holders: Array<{
+    profile_id: number;
+    handle: string | null;
+    heat_score: string;
+    main_wallet: string | null;
+  }>;
+  recent_txs: AppStateRecentTx[];
+  stats: {
+    asset_count: number;
+    install_count: number;
+    active_commission_count: number;
+  };
+}
+
+export interface AppCommissionsState {
+  me: OnchainMeResponse | null;
+  items: OnchainCommissionListItem[];
+  scope: string;
+  viewer_profile_id: number | null;
+}
+
+export interface AppCommissionDetailState {
+  me: OnchainMeResponse | null;
   commission: Record<string, unknown>;
   applications: Array<Record<string, unknown>>;
   viewer: Record<string, unknown>;
